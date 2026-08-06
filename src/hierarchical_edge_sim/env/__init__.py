@@ -9,12 +9,14 @@ from .config import (
     RawConfig,
     ServerSpec,
     SimConfig,
+    VicinitySpec,
     WorldSpec,
     load_yaml,
     to_world_spec,
 )
 from .validate import ConfigError, ValidationError, validate, validate_or_raise
-from .models import App, Cluster, Container, ContainerTickRecord, Microservice, Server
+from .models import App, Cluster, Container, ContainerTickRecord, Microservice, Server, Vicinity
+from .root import RootOrchestrator
 from .world import World, build_world, place_container, server_free_cpu_cores, server_free_ram_mb
 from .traces import TraceStore, load_traces
 from .usage import apply_tick, serving_capacity
@@ -32,6 +34,7 @@ __all__ = [
     "RawConfig",
     "ServerSpec",
     "SimConfig",
+    "VicinitySpec",
     "WorldSpec",
     "load_yaml",
     "to_world_spec",
@@ -44,7 +47,9 @@ __all__ = [
     "Microservice",
     "Server",
     "Cluster",
+    "Vicinity",
     "App",
+    "RootOrchestrator",
     "World",
     "build_world",
     "place_container",

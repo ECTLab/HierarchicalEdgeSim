@@ -10,7 +10,8 @@ from pathlib import Path
 from .config import MicroserviceSpec, WorldSpec, load_yaml
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
-from .models import App, Cluster, Container, Microservice, Server
+from .models import App, Cluster, Container, Microservice, Server, Vicinity
+from .root import RootOrchestrator
 from .traces import TraceStore, load_traces
 from .validate import validate_or_raise
 from .world import World, build_world, server_free_cpu_cores, server_free_ram_mb
@@ -34,6 +35,10 @@ class Env:
         world = build_world(spec)
         traces = load_traces(spec)
         return cls(world=world, traces=traces, world_spec=spec, state=EngineState())
+
+    @property
+    def root(self) -> RootOrchestrator | None:
+        return self.world.root
 
     def run(self, max_ticks: int | None = None, now_utc: datetime | None = None) -> Path:
         """Run engine then write outputs. max_ticks supports test/dev partial runs."""
@@ -98,6 +103,33 @@ class Env:
 
     def get_server_free(self, server_id: str) -> tuple[float, float]:
         return server_free_cpu_cores(self.world, server_id), server_free_ram_mb(self.world, server_id)
+
+    # Hierarchy read APIs (require topology.vicinities)
+    def list_vicinities(self) -> list[str]:
+        return self._require_root().list_vicinities()
+
+    def get_vicinity(self, vicinity_id: str) -> Vicinity:
+        return self._require_root().get_vicinity(vicinity_id)
+
+    def vicinity_of(self, cluster_id: str) -> str:
+        return self._require_root().vicinity_of(cluster_id)
+
+    def leader_of(self, vicinity_id: str) -> str:
+        return self._require_root().leader_of(vicinity_id)
+
+    def is_leader(self, cluster_id: str) -> bool:
+        return self._require_root().is_leader(cluster_id)
+
+    def list_vicinity_members(self, vicinity_id: str) -> list[str]:
+        return self._require_root().list_vicinity_members(vicinity_id)
+
+    def _require_root(self) -> RootOrchestrator:
+        if self.world.root is None:
+            raise RuntimeError(
+                "hierarchy APIs require topology.vicinities in the config "
+                "(World.root is None)"
+            )
+        return self.world.root
 
     # Write APIs (Part A stubs only)
     def spawn(self, *args, **kwargs):

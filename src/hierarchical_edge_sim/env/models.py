@@ -61,6 +61,16 @@ class Server:
 class Cluster:
     id: str
     server_ids: list[str] = field(default_factory=list)
+    # Derived mirrors from RootOrchestrator (None when hierarchy is not configured).
+    vicinity_id: str | None = None
+    is_vicinity_leader: bool = False
+
+
+@dataclass(slots=True)
+class Vicinity:
+    id: str
+    member_cluster_ids: list[str]
+    leader_cluster_id: str
 
 
 @dataclass(slots=True)

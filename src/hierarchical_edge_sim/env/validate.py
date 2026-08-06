@@ -192,6 +192,7 @@ def validate(config: RawConfig) -> list[ValidationError]:
             )
 
     _validate_traces(config, ms_trace_files, errors)
+    _validate_vicinities(config, seen_cluster_ids, errors)
     return errors
 
 
@@ -209,6 +210,74 @@ def _validate_sim(config: RawConfig, errors: list[ValidationError]) -> None:
         errors.append(ValidationError(path="sim.results_dir", message="must be a non-empty string"))
     if not isinstance(config.sim.seed, int):
         errors.append(ValidationError(path="sim.seed", message="must be int"))
+
+
+def _validate_vicinities(
+    config: RawConfig,
+    known_cluster_ids: set[str],
+    errors: list[ValidationError],
+) -> None:
+    """Validate topology.vicinities when present; no-op if the block is absent."""
+    if not config.vicinities:
+        return
+
+    seen_vicinity_ids: set[str] = set()
+    assigned: dict[str, str] = {}  # cluster_id -> vicinity_id
+
+    for vidx, vicinity in enumerate(config.vicinities):
+        vpath = f"topology.vicinities[{vidx}]"
+        if vicinity.id in seen_vicinity_ids:
+            errors.append(
+                ValidationError(path=f"{vpath}.id", message=f"duplicate vicinity id '{vicinity.id}'")
+            )
+        seen_vicinity_ids.add(vicinity.id)
+
+        if not vicinity.members:
+            errors.append(ValidationError(path=f"{vpath}.members", message="must contain at least one member"))
+
+        seen_members_local: set[str] = set()
+        for midx, member in enumerate(vicinity.members):
+            mpath = f"{vpath}.members[{midx}]"
+            if member in seen_members_local:
+                errors.append(ValidationError(path=mpath, message=f"duplicate member '{member}' in vicinity"))
+            seen_members_local.add(member)
+            if member not in known_cluster_ids:
+                errors.append(ValidationError(path=mpath, message=f"unknown cluster id '{member}'"))
+            if member in assigned:
+                errors.append(
+                    ValidationError(
+                        path=mpath,
+                        message=f"cluster '{member}' appears in more than one vicinity "
+                        f"('{assigned[member]}' and '{vicinity.id}')",
+                    )
+                )
+            else:
+                assigned[member] = vicinity.id
+
+        if vicinity.leader not in vicinity.members:
+            errors.append(
+                ValidationError(
+                    path=f"{vpath}.leader",
+                    message=f"leader '{vicinity.leader}' must be listed in members",
+                )
+            )
+        elif vicinity.leader not in known_cluster_ids:
+            errors.append(
+                ValidationError(
+                    path=f"{vpath}.leader",
+                    message=f"unknown cluster id '{vicinity.leader}'",
+                )
+            )
+
+    # Covering: every known cluster must appear in exactly one vicinity.
+    missing = sorted(known_cluster_ids - set(assigned.keys()))
+    for cluster_id in missing:
+        errors.append(
+            ValidationError(
+                path="topology.vicinities",
+                message=f"cluster '{cluster_id}' is not assigned to any vicinity",
+            )
+        )
 
 
 def _validate_ids_and_counts(config: RawConfig, errors: list[ValidationError]) -> None:

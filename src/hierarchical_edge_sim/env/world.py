@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .config import AppSpec, ClusterSpec, ContainerSpec, MicroserviceSpec, WorldSpec
-from .models import App, Cluster, Container, Microservice, Server
+from .config import AppSpec, ClusterSpec, ContainerSpec, MicroserviceSpec, VicinitySpec, WorldSpec
+from .models import App, Cluster, Container, Microservice, Server, Vicinity
+from .root import RootOrchestrator
 
 
 @dataclass(slots=True)
@@ -15,6 +16,7 @@ class World:
     servers: dict[str, Server] = field(default_factory=dict)
     microservices: dict[str, Microservice] = field(default_factory=dict)
     containers: dict[str, Container] = field(default_factory=dict)
+    root: RootOrchestrator | None = None
 
 
 def build_world(spec: WorldSpec) -> World:
@@ -27,7 +29,31 @@ def build_world(spec: WorldSpec) -> World:
     for app_spec in spec.apps:
         _register_app(world, app_spec)
 
+    world.root = _build_root(spec.vicinities) if spec.vicinities else None
+    if world.root is not None:
+        _apply_vicinity_mirrors(world)
+
     return world
+
+
+def _build_root(vicinity_specs: list[VicinitySpec]) -> RootOrchestrator:
+    vicinities = [
+        Vicinity(
+            id=vspec.id,
+            member_cluster_ids=list(vspec.members),
+            leader_cluster_id=vspec.leader,
+        )
+        for vspec in vicinity_specs
+    ]
+    return RootOrchestrator.from_vicinities(vicinities)
+
+
+def _apply_vicinity_mirrors(world: World) -> None:
+    assert world.root is not None
+    for cluster in world.clusters.values():
+        vicinity_id = world.root.vicinity_of(cluster.id)
+        cluster.vicinity_id = vicinity_id
+        cluster.is_vicinity_leader = world.root.is_leader(cluster.id)
 
 
 def place_container(

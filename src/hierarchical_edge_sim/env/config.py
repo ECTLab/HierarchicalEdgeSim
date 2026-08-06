@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,13 @@ class ServerSpec:
 class ClusterSpec:
     id: str
     servers: list[ServerSpec]
+
+
+@dataclass(frozen=True, slots=True)
+class VicinitySpec:
+    id: str
+    members: list[str]
+    leader: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +73,7 @@ class RawConfig:
     topology: list[ClusterSpec]
     apps: list[AppSpec]
     source_path: Path
+    vicinities: list[VicinitySpec] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +83,7 @@ class WorldSpec:
     clusters: list[ClusterSpec]
     apps: list[AppSpec]
     source_path: Path
+    vicinities: list[VicinitySpec] = field(default_factory=list)
 
 
 def load_yaml(path: str | Path) -> RawConfig:
@@ -100,6 +109,13 @@ def load_yaml(path: str | Path) -> RawConfig:
     clusters_raw = _as_list(_require(topology_data, "clusters", "topology"), "topology.clusters")
     clusters = [_parse_cluster(item, f"topology.clusters[{idx}]") for idx, item in enumerate(clusters_raw)]
 
+    vicinities: list[VicinitySpec] = []
+    if "vicinities" in topology_data:
+        vicinities_raw = _as_list(topology_data["vicinities"], "topology.vicinities")
+        vicinities = [
+            _parse_vicinity(item, f"topology.vicinities[{idx}]") for idx, item in enumerate(vicinities_raw)
+        ]
+
     apps_raw = _as_list(_require(root, "apps", "root"), "apps")
     apps = [_parse_app(item, f"apps[{idx}]") for idx, item in enumerate(apps_raw)]
 
@@ -110,6 +126,7 @@ def load_yaml(path: str | Path) -> RawConfig:
         topology=clusters,
         apps=apps,
         source_path=config_path,
+        vicinities=vicinities,
     )
 
 
@@ -151,6 +168,7 @@ def to_world_spec(config: RawConfig) -> WorldSpec:
         clusters=config.topology,
         apps=config.apps,
         source_path=config.source_path,
+        vicinities=list(config.vicinities),
     )
 
 
@@ -161,6 +179,17 @@ def _parse_cluster(data: Any, path: str) -> ClusterSpec:
     return ClusterSpec(
         id=_to_str(_require(obj, "id", path), f"{path}.id"),
         servers=servers,
+    )
+
+
+def _parse_vicinity(data: Any, path: str) -> VicinitySpec:
+    obj = _as_mapping(data, path=path)
+    members_raw = _as_list(_require(obj, "members", path), f"{path}.members")
+    members = [_to_str(item, f"{path}.members[{idx}]") for idx, item in enumerate(members_raw)]
+    return VicinitySpec(
+        id=_to_str(_require(obj, "id", path), f"{path}.id"),
+        members=members,
+        leader=_to_str(_require(obj, "leader", path), f"{path}.leader"),
     )
 
 

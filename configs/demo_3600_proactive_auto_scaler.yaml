@@ -1,0 +1,51 @@
+# 1-hour (3600 ticks @ tick_sec=1) smooth hill load + proactive_auto_scaler Step 1.
+# Trace: api_3600_smooth_hill.csv — sin-shaped rise then fall (40 → 300 → 40).
+# With ttw_ticks=60 → 60 TTWs; feature_window=10 → forecasts from TTW 10 onward.
+
+sim:
+  tick_sec: 1.0
+  results_dir: results/proactive_3600/
+  seed: 42
+
+traces_dir: traces/demo/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w2
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: api_3600_smooth_hill.csv
+        containers:
+          - id: c-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 1.0
+            ram_alloc_mb: 512
+          - id: c-api-2
+            server_id: c1-w2
+            cpu_alloc_cores: 2.0
+            ram_alloc_mb: 1024
+
+autoscaler:
+  enabled: true
+  name: proactive_auto_scaler
+  params:
+    ttw_ticks: 60
+    feature_window: 10
+    horizon_H: 3
+    predictor: average

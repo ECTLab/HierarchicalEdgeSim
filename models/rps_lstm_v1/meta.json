@@ -1,0 +1,28 @@
+{
+  "feature_window": 10,
+  "hidden_size": 16,
+  "input_size": 1,
+  "output_size": 1,
+  "units": "request_count_per_minute",
+  "normalization": "minmax_0_1",
+  "feature_range": [
+    0,
+    1
+  ],
+  "scaler_data_min": 273.0,
+  "scaler_data_max": 1865.0,
+  "train_csv": "wc_day6_1_bursts.csv",
+  "train_size_sequences": 1000,
+  "epochs": 150,
+  "lr": 0.005,
+  "loss": "asymmetric_mse",
+  "under_predict_penalty": 5.0,
+  "metrics": {
+    "mae": 139.90817260742188,
+    "rmse": 173.1472571433056,
+    "mape_pct": 15.029089152812958,
+    "under_provision_pct": 23.72093023255814,
+    "over_provision_pct": 76.27906976744187,
+    "max_missed_spike": 506.899658203125
+  }
+}

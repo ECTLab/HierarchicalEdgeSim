@@ -55,6 +55,26 @@ python3.14 -m venv .venv
 # Compare dropped_requests in the two run dirs; reactive writes actions.csv
 ```
 
+### B4) Proactive RPS forecast log (no actions)
+
+**300-tick phased** (few TTWs if `ttw_ticks` is large — may not fill `feature_window`):
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_proactive_auto_scaler.yaml
+```
+
+**1-hour smooth hill** (3600 ticks, `ttw_ticks=60`, `feature_window=10` — forecasts after TTW 10):
+
+```bash
+# average baseline
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_auto_scaler.yaml
+# LSTM (MinMaxScaler + torch checkpoint under models/rps_lstm_v1/)
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_lstm.yaml
+# writes results/proactive_3600_lstm/<run_id>/rps_forecast.csv
+.venv/bin/python examples/plot_rps_forecast.py results/proactive_3600_lstm/<run_id>
+# plots under <run_dir>/analysis/rps_forecast/
+```
+
 ### C) Two clusters, one app per cluster (this guide's focus)
 
 ```bash

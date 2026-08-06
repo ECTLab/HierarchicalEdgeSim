@@ -2,4 +2,5 @@
 
 SUPPORTED_AUTOSCALERS: list[str] = [
     "reactive_vertical",
+    "proactive_auto_scaler",
 ]

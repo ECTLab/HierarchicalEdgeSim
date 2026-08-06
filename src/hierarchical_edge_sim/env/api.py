@@ -127,6 +127,7 @@ class Env:
             self._run_partial(max_ticks=max_ticks, autoscaler=autoscaler)
 
         run_id = make_run_id(self.world_spec.sim.seed, now_utc=now_utc)
+        rps_log = getattr(autoscaler, "rps_forecast_log", None) if autoscaler is not None else None
         return write_run_outputs(
             world=self.world,
             world_spec=self.world_spec,
@@ -134,6 +135,7 @@ class Env:
             run_id=run_id,
             action_log=self.action_log,
             autoscaler_meta=self.autoscaler_meta,
+            rps_forecast_log=rps_log,
         )
 
     def _run_partial(self, max_ticks: int, autoscaler: Any | None = None) -> None:
@@ -458,7 +460,11 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     }
     params = getattr(autoscaler, "params", None)
     if params is not None:
-        if hasattr(params, "__dict__"):
+        from dataclasses import asdict, is_dataclass
+
+        if is_dataclass(params):
+            meta["params"] = asdict(params)
+        elif hasattr(params, "__dict__"):
             meta["params"] = {
                 k: v for k, v in vars(params).items() if not k.startswith("_")
             }

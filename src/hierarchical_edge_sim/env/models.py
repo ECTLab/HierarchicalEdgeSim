@@ -27,7 +27,16 @@ class Container:
     microservice_id: str
     cpu_alloc_cores: float
     ram_alloc_mb: float
+    # Snapshot of alloc at world build (survives later resize for meta/logs).
+    initial_cpu_alloc_cores: float | None = None
+    initial_ram_alloc_mb: float | None = None
     history: list[ContainerTickRecord] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.initial_cpu_alloc_cores is None:
+            self.initial_cpu_alloc_cores = self.cpu_alloc_cores
+        if self.initial_ram_alloc_mb is None:
+            self.initial_ram_alloc_mb = self.ram_alloc_mb
 
     def append_history(self, record: ContainerTickRecord) -> None:
         """Append a single tick record to in-memory history."""

@@ -28,6 +28,8 @@ def write_run_outputs(
     world_spec: WorldSpec,
     traces: TraceStore,
     run_id: str,
+    action_log: list | None = None,
+    autoscaler_meta: dict | None = None,
 ) -> Path:
     """Write run_meta + per-container metadata/log CSVs.
 
@@ -38,7 +40,14 @@ def write_run_outputs(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     ms_specs = _microservice_spec_index(world_spec)
-    _write_run_meta(run_dir=run_dir, world_spec=world_spec, traces=traces, run_id=run_id)
+    _write_run_meta(
+        run_dir=run_dir,
+        world_spec=world_spec,
+        traces=traces,
+        run_id=run_id,
+        autoscaler_meta=autoscaler_meta,
+    )
+    _write_actions_csv(run_dir=run_dir, action_log=action_log or [])
 
     for container in world.containers.values():
         ms = world.microservices[container.microservice_id]
@@ -52,12 +61,20 @@ def write_run_outputs(
     return run_dir
 
 
-def _write_run_meta(*, run_dir: Path, world_spec: WorldSpec, traces: TraceStore, run_id: str) -> None:
+def _write_run_meta(
+    *,
+    run_dir: Path,
+    world_spec: WorldSpec,
+    traces: TraceStore,
+    run_id: str,
+    autoscaler_meta: dict | None = None,
+) -> None:
     payload = {
         "run_id": run_id,
         "seed": world_spec.sim.seed,
         "N": traces.horizon,
         "source_path": str(world_spec.source_path),
+        "autoscaler": autoscaler_meta,
         "config": {
             "sim": asdict(world_spec.sim),
             "traces_dir": world_spec.traces_dir,
@@ -67,6 +84,43 @@ def _write_run_meta(*, run_dir: Path, world_spec: WorldSpec, traces: TraceStore,
     }
     with (run_dir / "run_meta.yaml").open("w", encoding="utf-8") as f:
         yaml.safe_dump(payload, f, sort_keys=False)
+
+
+def _write_actions_csv(*, run_dir: Path, action_log: list) -> None:
+    path = run_dir / "actions.csv"
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "tau",
+                "autoscaler_name",
+                "ms_id",
+                "action_type",
+                "container_id",
+                "reason",
+                "cpu_old",
+                "cpu_new",
+                "ram_old",
+                "ram_new",
+                "result_code",
+            ]
+        )
+        for row in action_log:
+            writer.writerow(
+                [
+                    row.tau,
+                    row.autoscaler_name,
+                    row.ms_id,
+                    row.action_type,
+                    row.container_id,
+                    row.reason,
+                    row.cpu_old if row.cpu_old is not None else "",
+                    row.cpu_new if row.cpu_new is not None else "",
+                    row.ram_old if row.ram_old is not None else "",
+                    row.ram_new if row.ram_new is not None else "",
+                    row.result_code,
+                ]
+            )
 
 
 def _write_container_meta(
@@ -88,8 +142,10 @@ def _write_container_meta(
         "ram_max_mb": spec.ram_max_mb,
         "cpu_per_request_cores": spec.cpu_per_request_cores,
         "ram_per_request_mb": spec.ram_per_request_mb,
-        "initial_cpu_alloc_cores": container.cpu_alloc_cores,
-        "initial_ram_alloc_mb": container.ram_alloc_mb,
+        "initial_cpu_alloc_cores": container.initial_cpu_alloc_cores,
+        "initial_ram_alloc_mb": container.initial_ram_alloc_mb,
+        "final_cpu_alloc_cores": container.cpu_alloc_cores,
+        "final_ram_alloc_mb": container.ram_alloc_mb,
     }
     path = container_dir / f"{container.id}.meta.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

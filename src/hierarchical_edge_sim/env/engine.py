@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .config import MicroserviceSpec, WorldSpec
@@ -16,8 +17,19 @@ class EngineState:
     current_tau: int = 0
 
 
-def run_ticks(world: World, traces: TraceStore, world_spec: WorldSpec, state: EngineState | None = None) -> int:
+def run_ticks(
+    world: World,
+    traces: TraceStore,
+    world_spec: WorldSpec,
+    state: EngineState | None = None,
+    *,
+    on_after_tick: Callable[[int], None] | None = None,
+) -> int:
     """Run the full tick horizon and update container histories.
+
+    Args:
+        on_after_tick: Optional callback invoked after each tick's physics with
+            ``tau`` already reflected in ``state.current_tau``.
 
     Returns:
         int: Number of ticks executed.
@@ -31,6 +43,8 @@ def run_ticks(world: World, traces: TraceStore, world_spec: WorldSpec, state: En
     for tau in range(1, horizon + 1):
         tick(world=world, traces=traces, ms_specs=ms_specs, tau=tau)
         state.current_tau = tau
+        if on_after_tick is not None:
+            on_after_tick(tau)
 
     return horizon
 

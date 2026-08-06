@@ -23,7 +23,7 @@ from .usage import apply_tick, serving_capacity
 from .routing import distribute
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
-from .api import Env, RejectReason
+from .api import Env, NeedHorizontalAction, RejectReason, ResizeAction, ResizeResult, ResizeResultCode
 
 __all__ = [
     "EPS",
@@ -67,4 +67,8 @@ __all__ = [
     "write_run_outputs",
     "Env",
     "RejectReason",
+    "ResizeResultCode",
+    "ResizeResult",
+    "ResizeAction",
+    "NeedHorizontalAction",
 ]

@@ -42,11 +42,9 @@ def test_list_containers_includes_c_api_1(tiny_config_path):
     assert env.list_clusters() == ["c1"]
 
 
-def test_spawn_not_implemented_part_a(tiny_config_path):
+def test_spawn_terminate_not_implemented_part_a(tiny_config_path):
     env = Env.from_config(tiny_config_path)
     with pytest.raises(NotImplementedError):
         env.spawn(ms_id="api")
-    with pytest.raises(NotImplementedError):
-        env.resize(container_id="c-api-1")
     with pytest.raises(NotImplementedError):
         env.terminate(container_id="c-api-1")

@@ -71,6 +71,8 @@ def place_container(
         microservice_id=microservice.id,
         cpu_alloc_cores=spec.cpu_alloc_cores,
         ram_alloc_mb=spec.ram_alloc_mb,
+        initial_cpu_alloc_cores=spec.cpu_alloc_cores,
+        initial_ram_alloc_mb=spec.ram_alloc_mb,
     )
     world.containers[container.id] = container
     server.container_ids.append(container.id)

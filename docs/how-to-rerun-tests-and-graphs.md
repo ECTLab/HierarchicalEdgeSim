@@ -41,6 +41,20 @@ python3.14 -m venv .venv
 .venv/bin/python examples/run_env_only.py configs/demo_60_two_containers.yaml
 ```
 
+### B2) Same world with reactive vertical autoscaler (60-tick smoke)
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_two_containers_reactive.yaml
+```
+
+### B3) Long phased scenario (300 ticks) — static vs reactive
+
+```bash
+.venv/bin/python examples/run_env_only.py configs/demo_300_two_containers.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_two_containers_reactive.yaml
+# Compare dropped_requests in the two run dirs; reactive writes actions.csv
+```
+
 ### C) Two clusters, one app per cluster (this guide's focus)
 
 ```bash

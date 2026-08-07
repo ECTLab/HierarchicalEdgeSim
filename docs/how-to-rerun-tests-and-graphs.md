@@ -15,7 +15,11 @@ cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
 python3.14 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/pip install matplotlib
+# optional — required for predictor: lstm demos / LSTM unit tests:
+# .venv/bin/pip install -e ".[lstm]"
 ```
+
+Proactive LSTM + FIFA day‑80 walkthrough: [how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md).
 
 ---
 
@@ -57,22 +61,30 @@ python3.14 -m venv .venv
 
 ### B4) Proactive RPS forecast log (no actions)
 
+Full LSTM / FIFA day‑80 / model-install guide:  
+**[how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md)**
+
 **300-tick phased** (few TTWs if `ttw_ticks` is large — may not fill `feature_window`):
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_300_proactive_auto_scaler.yaml
 ```
 
-**1-hour smooth hill** (3600 ticks, `ttw_ticks=60`, `feature_window=10` — forecasts after TTW 10):
+**1-hour smooth hill** (`ttw_ticks=60`, `feature_window=10` — forecasts after TTW 10):
 
 ```bash
 # average baseline
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_auto_scaler.yaml
-# LSTM (MinMaxScaler + torch checkpoint under models/rps_lstm_v1/)
+# LSTM (needs models/rps_lstm_v1/ + pip install -e ".[lstm]")
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_lstm.yaml
-# writes results/proactive_3600_lstm/<run_id>/rps_forecast.csv
 .venv/bin/python examples/plot_rps_forecast.py results/proactive_3600_lstm/<run_id>
-# plots under <run_dir>/analysis/rps_forecast/
+```
+
+**FIFA day 80 (1 Hz, first 1 hour / 3600 ticks)** — trace `traces/demo/api_wc_day80_1s.csv`:
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_wc_day80_proactive_lstm.yaml
+.venv/bin/python examples/plot_rps_forecast.py results/proactive_wc_day80_lstm/<run_id>
 ```
 
 ### C) Two clusters, one app per cluster (this guide's focus)

@@ -82,7 +82,7 @@ These are the only env changes required so **any** autoscaler can perform vertic
 | Addition | Module | Behavior |
 |---|---|---|
 | **`Env.resize(...)`** | `env/api.py` (+ helpers) | Set new alloc for a container; clamp to MS `min`/`max`; reject if server free capacity exceeded; return success/reject (do not crash the run) |
-| **After-tick call** | `env/engine.py`, `Env.run` / `_run_partial` | After tick τ physics + histories are complete: if an autoscaler object was provided, call it |
+| **After-tick call** | `env/engine.py`, `Env.run` | After tick τ physics + histories are complete: if an autoscaler object was provided, call it |
 | **`apply_actions(list)`** | `env/api.py` | Sort + dispatch one-by-one; sequential packing (§8.3) |
 | **`ResizeResult` / reject codes** | `env/api.py` | e.g. `OK`, `ABOVE_MS_MAX`, `SERVER_CPU_EXCEEDED`, `NO_CHANGE`, … |
 | **Action log + meta** | `env/metrics_log.py` | Buffer during run; flush `actions.csv`; record scaler in `run_meta`; fix initial/final alloc in container meta (§8.7) |

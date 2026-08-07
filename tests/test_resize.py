@@ -79,7 +79,7 @@ def test_meta_initial_alloc_survives_resize(tiny_config_path, tmp_path):
     assert env.get_container("c-api-1").cpu_alloc_cores == 2.0
     assert env.get_container("c-api-1").initial_cpu_alloc_cores == 1.0
 
-    run_dir = env.run(max_ticks=1, now_utc=datetime(2026, 1, 1, tzinfo=UTC))
+    run_dir = env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC))
     meta_path = run_dir / "apps" / "demo_app" / "api" / "c-api-1.meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     assert meta["initial_cpu_alloc_cores"] == 1.0

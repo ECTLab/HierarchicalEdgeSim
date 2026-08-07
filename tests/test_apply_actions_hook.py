@@ -104,8 +104,8 @@ def test_hook_none_matches_part_a(tiny_config_path, tmp_path):
     env_b.world_spec = replace(
         env_b.world_spec, sim=replace(env_b.world_spec.sim, results_dir=str(tmp_path / "b"))
     )
-    env_a.run(max_ticks=5, now_utc=datetime(2026, 1, 1, tzinfo=UTC))
-    env_b.run(max_ticks=5, now_utc=datetime(2026, 1, 2, tzinfo=UTC), autoscaler=None)
+    env_a.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC))
+    env_b.run(now_utc=datetime(2026, 1, 2, tzinfo=UTC), autoscaler=None)
     hist_a = [r.lambda_dropped for r in env_a.get_container("c-api-1").history]
     hist_b = [r.lambda_dropped for r in env_b.get_container("c-api-1").history]
     assert hist_a == hist_b
@@ -117,8 +117,8 @@ def test_hook_called_once_per_tick(tiny_config_path, tmp_path):
         env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "results"))
     )
     fake = FakeScaler()
-    env.run(max_ticks=4, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
-    assert fake.calls == [1, 2, 3, 4]
+    env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
+    assert fake.calls == list(range(1, env.traces.horizon + 1))
 
 
 def test_hook_sees_correct_tau(tiny_config_path, tmp_path):
@@ -127,8 +127,8 @@ def test_hook_sees_correct_tau(tiny_config_path, tmp_path):
         env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "results"))
     )
     fake = FakeScaler()
-    env.run(max_ticks=3, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
-    assert fake.seen_times == [1, 2, 3]
+    env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
+    assert fake.seen_times == list(range(1, env.traces.horizon + 1))
 
 
 def test_apply_actions_sequential_packing(tmp_path):
@@ -169,7 +169,7 @@ def test_resize_effective_next_tick(tiny_config_path, tmp_path):
         1,
         [ResizeAction(type="resize", ms_id="api", container_id="c-api-1", cpu_alloc_cores=2.0, reason="up")],
     )
-    env.run(max_ticks=2, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
+    env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
     assert env.get_container("c-api-1").history_at(1).cpu_alloc_cores == 1.0
     assert env.get_container("c-api-1").history_at(2).cpu_alloc_cores == 2.0
 
@@ -184,9 +184,11 @@ def test_on_actions_applied_called_with_results(tiny_config_path, tmp_path):
         1,
         [ResizeAction(type="resize", ms_id="api", container_id="c-api-1", cpu_alloc_cores=1.5, reason="up")],
     )
-    env.run(max_ticks=1, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
-    assert len(fake.applied) == 1
+    env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
+    # Action was only set for tau=1; every other tick applies an empty batch.
+    assert len(fake.applied) == env.traces.horizon
     assert fake.applied[0][0].code == ResizeResultCode.OK
+    assert all(applied == [] for applied in fake.applied[1:])
 
 
 def test_actions_csv_written(tiny_config_path, tmp_path):
@@ -199,7 +201,7 @@ def test_actions_csv_written(tiny_config_path, tmp_path):
         1,
         [ResizeAction(type="resize", ms_id="api", container_id="c-api-1", cpu_alloc_cores=1.5, reason="up")],
     )
-    run_dir = env.run(max_ticks=1, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
+    run_dir = env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
     rows = list(csv.DictReader((run_dir / "actions.csv").open(encoding="utf-8")))
     assert len(rows) == 1
     assert rows[0]["action_type"] == "resize"
@@ -211,7 +213,7 @@ def test_actions_csv_header_only_when_empty(tiny_config_path, tmp_path):
     env.world_spec = replace(
         env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "results"))
     )
-    run_dir = env.run(max_ticks=2, now_utc=datetime(2026, 1, 1, tzinfo=UTC))
+    run_dir = env.run(now_utc=datetime(2026, 1, 1, tzinfo=UTC))
     path = run_dir / "actions.csv"
     assert path.is_file()
     rows = list(csv.DictReader(path.open(encoding="utf-8")))

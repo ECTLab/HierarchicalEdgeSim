@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import EPS, MicroserviceSpec, WorldSpec, load_yaml
-from .engine import EngineState, run_ticks, tick
+from .engine import EngineState, run_ticks
 from .metrics_log import make_run_id, write_run_outputs
 from .models import App, Cluster, Container, Microservice, Server, Vicinity
 from .root import RootOrchestrator
@@ -106,25 +106,21 @@ class Env:
 
     def run(
         self,
-        max_ticks: int | None = None,
         now_utc: datetime | None = None,
         autoscaler: Any | None = None,
     ) -> Path:
-        """Run engine then write outputs. max_ticks supports test/dev partial runs."""
+        """Run the full tick horizon (length of the loaded traces) then write outputs."""
         if autoscaler is not None:
             self.autoscaler_meta = _autoscaler_meta(autoscaler)
-        if max_ticks is None:
-            run_ticks(
-                world=self.world,
-                traces=self.traces,
-                world_spec=self.world_spec,
-                state=self.state,
-                on_after_tick=(
-                    (lambda tau: _invoke_autoscaler(self, autoscaler, tau)) if autoscaler is not None else None
-                ),
-            )
-        else:
-            self._run_partial(max_ticks=max_ticks, autoscaler=autoscaler)
+        run_ticks(
+            world=self.world,
+            traces=self.traces,
+            world_spec=self.world_spec,
+            state=self.state,
+            on_after_tick=(
+                (lambda tau: _invoke_autoscaler(self, autoscaler, tau)) if autoscaler is not None else None
+            ),
+        )
 
         run_id = make_run_id(self.world_spec.sim.seed, now_utc=now_utc)
         rps_log = getattr(autoscaler, "rps_forecast_log", None) if autoscaler is not None else None
@@ -137,17 +133,6 @@ class Env:
             autoscaler_meta=self.autoscaler_meta,
             rps_forecast_log=rps_log,
         )
-
-    def _run_partial(self, max_ticks: int, autoscaler: Any | None = None) -> None:
-        if max_ticks < 0:
-            raise ValueError("max_ticks must be >= 0")
-        ms_specs = _microservice_spec_index(self.world_spec)
-        horizon = self.traces.horizon
-        target = min(max_ticks, horizon)
-        for tau in range(1, target + 1):
-            tick(world=self.world, traces=self.traces, ms_specs=ms_specs, tau=tau)
-            self.state.current_tau = tau
-            _invoke_autoscaler(self, autoscaler, tau)
 
     # Read APIs
     def get_time(self) -> int:

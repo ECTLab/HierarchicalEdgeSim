@@ -26,11 +26,11 @@ apps: []
         Env.from_config(bad)
 
 
-def test_get_time_after_partial_run(tiny_config_path):
+def test_get_time_after_full_run(tiny_config_path):
     env = Env.from_config(tiny_config_path)
     assert env.get_time() == 0
-    env.run(max_ticks=3)
-    assert env.get_time() == 3
+    env.run()
+    assert env.get_time() == env.traces.horizon
 
 
 def test_list_containers_includes_c_api_1(tiny_config_path):

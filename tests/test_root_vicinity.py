@@ -110,8 +110,8 @@ def test_valid_vicinities_build_root_and_mirrors(tmp_path):
 def test_run_with_vicinities_does_not_touch_root(tmp_path):
     path = _write_config(tmp_path, _two_cluster_dict())
     env = Env.from_config(path)
-    run_dir = env.run(max_ticks=3)
-    assert env.get_time() == 3
+    run_dir = env.run()
+    assert env.get_time() == env.traces.horizon
     assert run_dir.exists()
     assert env.root is not None
 

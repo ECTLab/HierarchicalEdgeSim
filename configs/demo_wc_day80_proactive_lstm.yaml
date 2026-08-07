@@ -55,7 +55,6 @@ autoscaler:
     ttw_ticks: 60
     feature_window: 10
     horizon_H: 3
-    predictor: lstm
     model_path: models/rps_lstm_v1/lstm_edge_weights.pth
     scaler_path: models/rps_lstm_v1/traffic_scaler.pkl
     meta_path: models/rps_lstm_v1/meta.json

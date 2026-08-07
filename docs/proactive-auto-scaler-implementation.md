@@ -1,6 +1,12 @@
 # Implementation Guide — `proactive_auto_scaler`
 
-**Status:** Step 1 complete (average + `rps_forecast.csv`). **Next: Step 2 — LSTM one-step predictor** from sibling repo `microservice-workload-predictor/`.  
+**Status:** Steps 1 and 2 complete and since simplified: the `average` predictor and
+`max_ticks` partial-run support (both used only as Step‑1 scaffolding) were removed
+once the LSTM predictor was wired up end-to-end. `proactive_auto_scaler` now always
+uses the one-step LSTM predictor (`predictors/lstm_torch.py`); see
+[how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md) for current
+usage. The Step 1/Step 2 plan below is kept as historical design record — the
+`predictor: average | lstm` param and `average.py` file it references no longer exist.  
 **Design background:** [rps-forecast-predict-and-decide.md](./rps-forecast-predict-and-decide.md)  
 **This file is the build plan.** Prefer this over the design doc when implementing.
 

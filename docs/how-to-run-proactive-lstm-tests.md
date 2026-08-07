@@ -16,11 +16,10 @@ Related:
 cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
 python3.14 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/pip install -e ".[lstm]"    # torch, sklearn, joblib, numpy
+.venv/bin/pip install -e ".[lstm]"    # torch, sklearn, joblib, numpy — required, the
+                                        # proactive_auto_scaler only has one predictor (LSTM)
 .venv/bin/pip install matplotlib      # for plot scripts
 ```
-
-Average predictor demos work **without** `[lstm]`. LSTM demos need the optional extra.
 
 ---
 
@@ -30,11 +29,12 @@ Average predictor demos work **without** `[lstm]`. LSTM demos need the optional 
 # full suite
 .venv/bin/pytest tests/ -q
 
-# proactive autoscaler only (average + LSTM gated on torch/artifacts)
+# proactive autoscaler only (policy-logic tests use a plain test-double predictor;
+# the two LSTM-specific tests below are gated on torch + trained artifacts)
 .venv/bin/pytest tests/test_proactive_auto_scaler.py -v
 ```
 
-LSTM tests skip cleanly if weights under `models/rps_lstm_v1/` are missing or torch is not installed.
+The dedicated LSTM tests (`test_lstm_predict_next_minmax_roundtrip`, `test_policy_lstm_writes_forecast_rows`) skip cleanly if weights under `models/rps_lstm_v1/` are missing or torch is not installed.
 
 ---
 
@@ -57,12 +57,14 @@ Configs typically set explicit relative paths (cwd = HierarchicalEdgeSim when us
 autoscaler:
   name: proactive_auto_scaler
   params:
-    predictor: lstm
     feature_window: 10          # must match meta.json
     model_path: models/rps_lstm_v1/lstm_edge_weights.pth
     scaler_path: models/rps_lstm_v1/traffic_scaler.pkl
     meta_path: models/rps_lstm_v1/meta.json
 ```
+
+`model_path`/`scaler_path`/`meta_path` are optional — omit them to use the default bundle
+under `models/rps_lstm_v1/`.
 
 **Normalization:** same as training — history stays in real units; `MinMaxScaler.transform` → LSTM → `inverse_transform`. HierarchicalEdgeSim does **not** import `predictor_module.py`; it vendors the same pattern in `lstm_torch.py`.
 
@@ -101,12 +103,11 @@ Checklist after install:
 
 ## 5) Demo traces and configs
 
-| Config | Trace | Length | Predictor | Notes |
-| --- | --- | --- | --- | --- |
-| `configs/demo_3600_proactive_auto_scaler.yaml` | `api_3600_smooth_hill.csv` | 3600 ticks | `average` | Baseline lag on hill |
-| `configs/demo_3600_proactive_lstm.yaml` | same hill | 3600 | `lstm` | Needs model bundle |
-| `configs/demo_wc_day80_proactive_lstm.yaml` | `api_wc_day80_1s.csv` | **3600** ticks (first 1 h @ 1 Hz) | `lstm` | Prefix of FIFA day 80 1 s bursts |
-| `configs/demo_300_proactive_auto_scaler.yaml` | phased 300 | 300 | `average` | Few TTWs if `ttw_ticks` large |
+| Config | Trace | Length | Notes |
+| --- | --- | --- | --- |
+| `configs/demo_3600_proactive_lstm.yaml` | `api_3600_smooth_hill.csv` | 3600 ticks | Needs model bundle |
+| `configs/demo_wc_day80_proactive_lstm.yaml` | `api_wc_day80_1s.csv` | **3600** ticks (first 1 h @ 1 Hz) | Prefix of FIFA day 80 1 s bursts |
+| `configs/demo_300_proactive_auto_scaler.yaml` | phased 300 | 300 | Few TTWs if `ttw_ticks` large |
 
 ### 5.1 FIFA day‑80 1 Hz trace
 
@@ -151,14 +152,6 @@ Always from HierarchicalEdgeSim root:
 cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
 ```
 
-### Average baseline (1‑hour hill)
-
-```bash
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_auto_scaler.yaml
-# → results/proactive_3600/<run_id>/
-.venv/bin/python examples/plot_rps_forecast.py results/proactive_3600/<run_id>
-```
-
 ### LSTM on hill
 
 ```bash
@@ -189,10 +182,10 @@ cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
 
 1. **Plot:** open `analysis/rps_forecast/api_rps_forecast.png`.
 2. **Join in CSV:** for each forecast row (`lead=h`), find observation with same `ms_id` and `ttw == target_ttw`; error = `r_hat - r_t`.
-3. **Metrics:** MAE / floored MAPE by `lead`; compare **lstm** vs **average** on the **same** trace.
+3. **Metrics:** MAE / floored MAPE by `lead`.
 4. **Sanity:** forecasts start only after `feature_window` TTWs; history never stores `r_hat`.
 
-If LSTM looks worse than average on an OOD scale (e.g. old day‑6 scaler on hill RPS), reinstall a checkpoint trained on a matching series (§4) and re-run.
+If forecasts look off-scale (e.g. old day‑6 scaler on hill RPS), reinstall a checkpoint trained on a matching series (§4) and re-run.
 
 ---
 

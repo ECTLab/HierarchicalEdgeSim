@@ -1,7 +1,8 @@
-"""Proactive autoscaler — Step 1: TTW RPS + average forecast log (no actions)."""
+"""Proactive autoscaler: TTW RPS forecast + decide + vertical allocate."""
 
 from .params import ProactiveAutoScalerParams, validate_params
-from .policy import ProactiveAutoScaler, RpsForecastLogRow, build
+from .policy import ProactiveAutoScaler, build
+from .sensing import RpsForecastLogRow
 
 __all__ = [
     "ProactiveAutoScaler",

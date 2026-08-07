@@ -196,7 +196,7 @@ The autoscaler package (Step 3) doesn't exist yet, but `apply_actions` needs *so
 ### Build
 
 1. `Env.apply_actions(actions) -> list[ResizeResult]` — sort by `(type, ms_id, container_id)`; dispatch `resize`; **update free capacity after each success**.
-2. Thread optional `autoscaler` through `run_ticks` / `Env.run` / `_run_partial`: after physics for τ, **advance `state.current_tau = τ` first**, then if an autoscaler is present → `on_tick_end` → `apply_actions`. (Ordering matters: `env.get_time()` and `history_at(τ)` inside the hook must already reflect τ, not τ-1.)
+2. Thread optional `autoscaler` through `run_ticks` / `Env.run`: after physics for τ, **advance `state.current_tau = τ` first**, then if an autoscaler is present → `on_tick_end` → `apply_actions`. (Ordering matters: `env.get_time()` and `history_at(τ)` inside the hook must already reflect τ, not τ-1.) `Env.run` always runs the full tick horizon — the earlier `_run_partial`/`max_ticks` partial-run helper was removed once tests no longer needed it.
 3. Right after `apply_actions` returns its results, call `autoscaler.on_actions_applied(results)` if the object defines that method (duck-typed here; formalized as an optional protocol method in Step 3). This is the hook Step 4's cooldown-on-success logic depends on.
 4. In-memory action log buffer; flush `actions.csv` in `write_run_outputs`.
 5. Record autoscaler info in `run_meta.yaml` when provided (may be `null` for Part A).
@@ -208,7 +208,7 @@ Add `tests/test_apply_actions.py`, `tests/test_tick_hook.py`. Use a **dedicated 
 
 | Test | Expect |
 |---|---|
-| `test_hook_none_matches_part_a` | `run(max_ticks=N)` without scaler ≡ prior golden behavior |
+| `test_hook_none_matches_part_a` | `run()` without scaler ≡ prior golden behavior |
 | `test_hook_called_once_per_tick` | Fake scaler called N times with τ=1..N |
 | `test_hook_sees_correct_tau` | Inside the fake scaler's `on_tick_end`, `env.get_time() == τ` and `history_at(τ)` exists (catches the `state.current_tau` ordering bug) |
 | `test_apply_actions_sequential_packing` | Shared-server fixture; two resizes same server in one batch; second sees reduced free (not a stale snapshot) |
@@ -342,7 +342,7 @@ Add `tests/test_reactive_vertical.py`. Toy params OK: `x_up_streak=2`, `y_down_s
 
 1. Fixture: 1 MS, 1–2 containers, short trace with ≥X drop ticks then ≥Y idle ticks (`tests/data/` or tmp_path).
 2. Second fixture variant: 2 containers **on the same server** with a tight `cpu_cap_cores`, so an UP decision can legitimately hit `SERVER_CPU_EXCEEDED` end-to-end (unit-level packing tests in Step 2 use a synthetic fixture; this is the first place a real scaler decision produces a real reject).
-3. Run via `Env.run(max_ticks=…, autoscaler=…)`. Pass an explicit `now_utc` (see `tests/test_determinism.py` for the existing pattern) when comparing two runs — `run_id` has 1-second granularity (`{seed}_{utc_timestamp}`), so two fast back-to-back runs with the same seed can otherwise collide on the same `run_id`/directory.
+3. Run via `Env.run(autoscaler=…)`. Pass an explicit `now_utc` (see `tests/test_determinism.py` for the existing pattern) when comparing two runs — `run_id` has 1-second granularity (`{seed}_{utc_timestamp}`), so two fast back-to-back runs with the same seed can otherwise collide on the same `run_id`/directory.
 
 ### Tests
 

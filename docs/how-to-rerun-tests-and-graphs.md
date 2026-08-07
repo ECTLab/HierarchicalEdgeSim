@@ -73,9 +73,7 @@ Full LSTM / FIFA day‑80 / model-install guide:
 **1-hour smooth hill** (`ttw_ticks=60`, `feature_window=10` — forecasts after TTW 10):
 
 ```bash
-# average baseline
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_auto_scaler.yaml
-# LSTM (needs models/rps_lstm_v1/ + pip install -e ".[lstm]")
+# LSTM one-step predictor (needs models/rps_lstm_v1/ + pip install -e ".[lstm]")
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_lstm.yaml
 .venv/bin/python examples/plot_rps_forecast.py results/proactive_3600_lstm/<run_id>
 ```

@@ -1,408 +1,737 @@
-# Plan: Proactive Decide + Apply (simple v1, reuse-first)
+# Plan: Proactive Decide + Apply (v1, no reactive dependency)
 
-**Audience:** onboarding / implementation planning  
-**Constraint:** do **not** add files or logic that duplicate what already exists; do **not** modify `autoscaler/reactive_vertical/`  
-**Scope:** proactive scale decisions + apply; reactive warm-up by **calling** existing reactive code; no confidence / κ  
-**Out of scope:** MAPE/κ, BEV/BEH, spawn/terminate, predictor quality, moving helpers into `common/`  
+**Audience:** implementation kickoff  
+**Status:** ready to code — decisions below are locked unless called out as open  
+**Constraint:** scalers must stay **siblings** — neither imports the other’s package; shared vertical packing/snapshot live in `autoscaler/common/`  
+**Scope:** (1) lift shared allocate primitives into `common/`, (2) proactive decide + allocate/apply for `proactive_auto_scaler`  
+**Out of scope:** reactive policy algorithm (streaks/intent), MAPE/κ, BEV/BEH, spawn/terminate, predictor quality
 
-**Decide formulas:** [rps-forecast-predict-and-decide.md](./rps-forecast-predict-and-decide.md) §4.1–4.4 (**ignore** §4.5 confidence)  
-**Forecast already done:** [proactive-auto-scaler-implementation.md](./proactive-auto-scaler-implementation.md) Steps 1–2
+**Decide formulas:** [rps-forecast-predict-and-decide.md](./rps-forecast-predict-and-decide.md) §4.1–4.4 and §4.6 (**ignore** §4.5 confidence / reactive mode entirely)  
+**Forecast already done:** [proactive-auto-scaler-implementation.md](./proactive-auto-scaler-implementation.md) Steps 1–2  
+**Build steps (modular):** [proactive-decide-and-apply-implementation-steps.md](./proactive-decide-and-apply-implementation-steps.md)  
+**Structure guidance (optional):** [autoscaler-structure-naming-modularity-review.md](./autoscaler-structure-naming-modularity-review.md) §3 — sensing / decide / allocate split
 
 ---
 
 ## 0. One-sentence goal
 
-When YAML selects `proactive_auto_scaler`, keep sensing/forecast as today; while RPS history is short, **delegate scaling to the existing** `ReactiveVerticalAutoscaler`; once history is full, run **new** proactive decide math and turn residuals into actions by **reusing** existing `distribute_up` / `distribute_down`. Pure reactive runs stay `autoscaler.name: reactive_vertical` (already works). Env apply path stays unchanged.
+When YAML selects `proactive_auto_scaler`, keep today’s sensing/forecast; while RPS history is short emit **no** scale actions; once history is full, on each TTW close run PredictAndDecide (§4.1–4.4), pack residuals via **shared** `common.distribute`, and let `env.apply_actions` apply them. Proactive never imports `reactive_vertical`; reactive never imports `proactive_auto_scaler`.
 
 ---
 
-## 1. Codebase scan — reuse inventory
+## 1. Locked design choices (v1)
 
-### 1.1 Reuse as-is (do not reinvent)
+| Topic | Lock |
+| --- | --- |
+| Scaler independence | **No cross-imports** between `reactive_vertical/` and `proactive_auto_scaler/`. Shared code → `autoscaler/common/` only. |
+| Reactive policy | **Not used** by proactive. No embed, no warm-up handoff, no κ fallback, no nested `params.reactive`. |
+| Pre-ready MS | If `not hist.is_full()` → sense/history only; **return no actions** for that MS. |
+| Ready gate | **Per-MS** `hist.is_full()` (`len >= feature_window`). |
+| Decision cadence | Proactive decide + allocate **only on TTW close**. Mid-TTW: accumulate `lambda_in` only. |
+| Default `ttw_ticks` | **60** — one TTW = 60 simulator ticks (RPS sample + at most one decide per closed TTW). |
+| Default `feature_window` | **10** — need 10 real TTW RPS samples before `hist.is_full()` / forecast / proactive decide. |
+| Confidence / κ | Out of scope. |
+| Sustained | Compute in `decide.py` (for later BEV/BEH); **allocate ignores it in v1**. |
+| Packing | `common/distribute.py` — **paired** CPU+RAM grants when RAM is modeled (§2.4). |
+| Snapshot | `common/snapshot.py` (`MsSnapshot`, `snapshot_ms`). `room_up_* = min(MS_max−alloc, server_free)` — **edge-server status enters here**. |
+| Server capacity | Considered at snapshot + `Env.resize`; **not** inside decide. See §2. |
+| Reactive as baseline | **No.** Shared code may live in `common/`; proactive policy/packing rules are chosen for the proposed method, not to match reactive. |
+| Action types | Existing env types via `common/actions.py`; pass **reason string into** `distribute_*` (no post-hoc `replace` hack). |
+| Env apply path | Unchanged (`apply_actions` sequential packing is the hard gate). |
+| Cooldown | Proactive: TTW-based `next_allowed_ttw[ms] = t + C + 1` after **successful resize** (§2.7). `need_horizontal` alone does not arm. |
 
-| Capability | Where | How we use it |
+**Explicit divergence from design doc:** §2 cold-start / §4.5 say “stay reactive until ready.” v1 **holds** until history is full, then is always proactive.
+
+---
+
+## 2. Vertical scaling mechanics (read before coding allocate)
+
+This section locks **how** a scale decision becomes container alloc changes. It matches what `Env.resize` / today’s reactive distribute already do. Proactive only changes **how δ is chosen** (PredictAndDecide); packing and apply stay the same substrate.
+
+### 2.1 End-to-end pipeline (one MS, one decision tick/TTW)
+
+```text
+┌─────────────────────┐
+│  DECIDE (policy)    │  MS-wide demand → signed δ_cpu, δ_ram
+│  proactive: r★, θ   │  Does NOT look at per-server free capacity
+│  reactive: deficit  │
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│  SNAPSHOT (common)  │  Per replica: alloc, q, drop, slack,
+│  snapshot_ms(...)   │  room_up = min(MS_max−alloc, server_free),
+│                     │  room_down = alloc−MS_min
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│  DISTRIBUTE (common)│  Pack |δ| onto replicas by score;
+│  distribute_up/down │  never give more than that replica’s room_*;
+│                     │  leftover Up → NeedHorizontalAction (log only)
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│  ENV APPLY          │  apply_actions → resize one-by-one;
+│  Env.resize         │  hard-reject if MS bounds or server caps violated
+└─────────────────────┘
+```
+
+**Layers of responsibility:**
+
+| Layer | Asks | Sees edge-server free? |
 | --- | --- | --- |
-| Tick → `on_tick_end` → `apply_actions` → `on_actions_applied` | `env/api.py` (`_invoke_autoscaler`, `Env.run`) | Unchanged applicator |
-| `ResizeAction`, `NeedHorizontalAction`, results | `env/api.py`; re-export `autoscaler/common/actions.py` | Import; **no new action types** |
-| Name-based scaler selection | `common/load.py`, `common/supported.py`, `common/params_base.py` | `reactive_vertical` vs `proactive_auto_scaler` already selects the circuit |
-| Reactive decide + cooldown + streaks | `reactive_vertical/policy.py` (`ReactiveVerticalAutoscaler`, `build`) | Embed instance; call `on_tick_end` / `on_actions_applied` for warm-up |
-| Vertical packing of MS deltas onto containers | `reactive_vertical/distribute.py` (`ReplicaView`, `distribute_up`, `distribute_down`) | Import for proactive allocate; **do not copy** |
-| TTW RPS, history, forecast, predictors, `rps_forecast.csv` | `proactive_auto_scaler/{ttw_rps,history,forecast,predictors,policy}` | Keep; only extend `policy.py` wiring |
-| Forecast CSV flush pattern | `env` / `metrics_log` via `scaler.rps_forecast_log` | Same pattern if we add an optional decision buffer later |
+| Decide | “How much more/less capacity does MS *m* want?” | **No** — fleet demand / util only |
+| Snapshot + distribute | “Which replicas can absorb that δ, and by how much?” | **Yes** — baked into `room_up_*` |
+| `Env.resize` | “Is this absolute alloc legal right now?” | **Yes** — final authority |
 
-### 1.2 Must stay untouched
+### 2.2 Yes — edge-server resource status is considered
 
-- Entire tree `autoscaler/reactive_vertical/` (no allowlist param, no reason-string edits, no move of `distribute_*` into `common/`).
-- Env apply/hook contracts (covered by `tests/test_apply_actions_hook.py`).
-
-### 1.3 Truly missing (only these are new)
-
-| Gap | Why it cannot be reused |
-| --- | --- |
-| Forecast → Up/Down/None + demand residuals | No util/θ/`r★` decide anywhere today |
-| Warm-up handoff inside proactive | Proactive always `return []`; never embeds reactive |
-| Decide/cooldown YAML knobs on proactive params | `validate_params` is forecast-only and **rejects** unknown keys |
-
-### 1.4 What an earlier draft of this plan would have wasted
-
-| Rejected idea | Why redundant / wrong |
-| --- | --- |
-| New `hybrid_warmup_scaler.py` | Env already loads one object by `autoscaler.name`. Embed reactive inside existing `ProactiveAutoScaler` (`policy.py`). |
-| New top-level `scaling_mode` **in addition to** `name` | Pure reactive is already `name: reactive_vertical`. Proactive+warmup is `name: proactive_auto_scaler`. A second switch duplicates selection. |
-| New action dataclasses | Use `common.actions` / env types |
-| New `distribute_*` fork / greedy reimplementation | Import `reactive_vertical.distribute` |
-| Reimplement reactive policy for warm-up | Call `ReactiveVerticalAutoscaler.on_tick_end` |
-| Rebuild TTW/history/forecast/predictors | Already in `proactive_auto_scaler/` |
-| `confidence.py` / κ / MAPE | Out of scope |
-| Separate `decision_log.py` module | Optional list attribute on the scaler (same style as `rps_forecast_log`); flush helper can live next to existing forecast CSV writer — no new package file required for v1 |
-
----
-
-## 2. Working circuit (selection without a second mode flag)
-
-Use the **existing** YAML selector:
-
-```yaml
-autoscaler:
-  name: reactive_vertical      # pure reactive — today's path; proactive not constructed
-  # ...
-```
-
-```yaml
-autoscaler:
-  name: proactive_auto_scaler  # proactive run: reactive warm-up → proactive steady state
-  params:
-    feature_window: 30         # warm-up length = history fullness
-    # ... forecast + NEW decide knobs ...
-    reactive:                  # optional nested dict → reactive_vertical.build(...)
-      # same keys as a reactive_vertical params block; defaults if omitted
-```
-
-| `autoscaler.name` | Circuit |
-| --- | --- |
-| `reactive_vertical` | Only reactive (unchanged). Proactive code not in the loop. |
-| `proactive_auto_scaler` | Sense/forecast always; **warm-up:** reactive actions for MS with `not hist.is_full()`; **steady:** proactive decide + reuse `distribute_*` for MS with full history. |
-
-If you prefer the word `scaling_mode` in docs/UI, treat it as an **alias of `name`**, not a second config key (`reactive` ↔ `reactive_vertical`, `proactive` ↔ `proactive_auto_scaler`). Do not implement two knobs.
-
----
-
-## 3. Warm-up → steady handoff
+For every container \(c\) on server \(s\):
 
 ```text
-hist.is_full()  # len >= feature_window  (already on RpsHistory)
+server_free_cpu(s) = s.cpu_cap_cores − Σ alloc_cpu of containers on s
+server_free_ram(s)  = s.ram_cap_mb   − Σ alloc_ram of containers on s
+
+room_up_cpu(c)  = min( spec.cpu_max_cores − c.cpu_alloc , server_free_cpu(s) )
+room_up_ram(c)  = min( spec.ram_max_mb    − c.ram_alloc , server_free_ram(s) )
+room_down_cpu(c)= max(0, c.cpu_alloc − spec.cpu_min_cores)
+room_down_ram(c)= max(0, c.ram_alloc − spec.ram_min_mb)
 ```
 
-- **Before full (per MS):** scaling actions from embedded `ReactiveVerticalAutoscaler` only.
-- **After full (per MS):** scaling actions from proactive decide + `distribute_*` only; filter out any reactive actions for that `ms_id`.
-- **No κ:** never fall back to reactive after that MS is ready.
-- **Recommendation:** per-MS gate (A can be proactive while B still warms).
+Implementation today: `Env.get_server_free(server_id)` → (`server_free_cpu_cores`, `server_free_ram_mb`) in `env/world.py`. Snapshot must call this (or equivalent) when building each `ReplicaView`.
 
-### Calling reactive without editing it
+**Up is dual-bounded:** a replica cannot grow past its MS max **or** past what its host still has free (after other containers’ current allocs).
 
-`on_tick_end` has no MS allowlist. v1 approach (plan lock):
+**Down does not need server free:** shrinking only releases capacity back to the server; `room_down` is MS-min bounded only.
 
-```text
-raw = self._reactive.on_tick_end(env, tau)
-keep = [a for a in raw if not self._histories[a.ms_id].is_full()]
-# append proactive actions for ready MS (TTW close only)
-```
+**Other containers on the same server matter:** free capacity is whatever is left after *all* co-located containers (any MS). Growing one replica can starve another on the same host until the next snapshot.
 
-Forward `on_actions_applied` to reactive so its existing cooldown/streaks still update for warm-up ticks. Separately arm proactive TTW cooldown only for MS that emitted proactive resizes.
+### 2.3 What decide ignores vs what allocate enforces
+
+| Quantity | Decide (proactive) | Allocate / resize |
+| --- | --- | --- |
+| `r_t`, `r_hat`, θ, `A_m`, ρ | Used | Not re-decided |
+| Per-server free / `room_up` | **Ignored** | **Enforced** |
+| MS min/max | Not needed for δ sign/magnitude | Enforced via room + `Env.resize` |
+| Which replica grows | N/A | Grow score (drop, util, room) |
+| Horizontal spawn | Out of scope | `NeedHorizontalAction` logged only |
+
+So a large proactive Up residual is correct even if hosts are full: distribute grants what fits; remainder becomes `need_horizontal` for later BEV/BEH. Do **not** shrink δ in decide based on Σ `room_up` (that would hide unmet demand).
+
+### 2.4 Distribute behavior (shared, both scalers)
+
+**Up (`distribute_up`):**
+
+1. Rank replicas by grow score (see open question on score inputs in the steps doc). Tie-break: lower `container_id`.
+2. Walk rank order; for each replica apply the **paired** grant rule below; never exceed that replica’s `room_*`.
+3. Emit absolute-target `ResizeAction` (`new_alloc = old + give`).
+4. If leftover δ > EPS → append `NeedHorizontalAction` with residual cores/MB (no spawn in v1).
+
+**Down (`distribute_down`):**
+
+1. Rank by shrink score. Tie-break: lower `container_id`.
+2. Skip replicas that are still “busy” if that gate is enabled (`slack` / `drop` — see open questions).
+3. Take a **paired** shrink (both dims when RAM is modeled); never below MS min.
+4. Consolidate-vs-spread shrink policy is an open product choice (steps doc).
+
+**CPU/RAM pairing (modeling lock):** a request consumes **both** `cpu_per_request_cores` and `ram_per_request_mb`. Vertical scale keeps μ coherent:
+
+- When both residuals are nonzero and both dims have room → move **both**.
+- When both residuals are nonzero but one dim is **at its bound** (MS min/max or no server free) → allow the other dim alone (otherwise Down would get stuck at `ram_min`).
+- When only one residual is nonzero → move that dim only.
+- When `ram_per_request_mb ≤ ε` → CPU-only vertical.
+- Unmet Up demand after packing → `need_horizontal`.
+
+This is a **proposed-method** lock for `common/distribute`, not “whatever reactive did historically.”
+
+**`env` argument:** packing uses **precomputed** `ReplicaView.room_*`; it does not re-query free capacity mid-loop. Snapshot freshness is the planner’s view for that tick.
+
+### 2.5 Env apply — hard gate + sequential packing
+
+`Env.apply_actions` (unchanged):
+
+1. Sort actions by `(type, ms_id, container_id)` for determinism.
+2. `need_horizontal` → log only (`result_code=LOGGED`); not a mutation; **does not** appear in resize `results` list.
+3. At most one resize per `container_id` per batch (`DUPLICATE_IN_BATCH` otherwise).
+4. Each resize calls `Env.resize`, which rejects with:
+   - `BELOW_MS_MIN` / `ABOVE_MS_MAX`
+   - `SERVER_CPU_EXCEEDED` / `SERVER_RAM_EXCEEDED` (live caps vs other containers’ **current** allocs)
+   - `NO_CHANGE` / `UNKNOWN_CONTAINER`
+5. **Sequential packing:** after a successful resize, that container’s new alloc is live, so the next resize on the **same server** sees reduced free capacity. This is the second defense if the planner’s snapshot was stale across siblings.
+
+### 2.6 Same-server siblings — planner free accounting
+
+Within one `distribute_up` call, two replicas on the **same** server can each see the **same** snapshotted `server_free` in their `room_up`, so naive packing can over-propose.
+
+**Not inherited from reactive.** Choose explicitly (see steps doc open questions): either (a) decrement a per-server remaining-free map while packing, or (b) keep snapshot rooms and rely on `Env.resize` rejects. Until decided, implementers must not assume either.
+
+### 2.7 Cooldown vs success vs partial apply
+
+Proactive (and reactive today) arm cooldown when **`any(result.ok)`** for the pending MS set after `apply_actions`.
+
+| Outcome | Cooldown? | Notes |
+| --- | --- | --- |
+| ≥1 resize `ok` | **Yes** | Even if another resize for same MS was rejected |
+| All resizes rejected | **No** | Can retry next eligible TTW |
+| Only `need_horizontal` (no resize) | **No** | Nothing in `results` with `ok`; do not arm |
+| Decide NONE / empty allocate | **No** | No pending MS |
+
+**Lock:** only add `ms_id` to `_pending_proactive_ttw` when at least one **resize** action was emitted for that MS (same spirit as reactive). `need_horizontal` alone must not arm cooldown.
+
+### 2.8 Absolute targets, not deltas, on the wire
+
+`ResizeAction` carries **absolute** `cpu_alloc_cores` / `ram_alloc_mb`. Decide/allocate think in residuals; distribute converts to absolute targets from the snapshot’s current alloc. `Env.resize` never adds a delta itself.
+
+### 2.9 Single-replica vs multi-replica MS
+
+| Topology | Behavior |
+| --- | --- |
+| One container | All of δ that fits `room_*` goes there; leftover → `need_horizontal` |
+| Many containers, possibly different servers | Hot/high-room replicas preferred; free hosts absorb more Up |
+| Zero containers | No `ReplicaView`s → distribute returns `[]`; decide may still compute positive δ but allocate is a no-op until spawn exists (out of scope) |
+
+### 2.10 What proactive implementers must not reinvent
+
+- Do not re-check server caps inside `decide.py`.
+- Do not call `Env.resize` from the scaler — return actions; env applies.
+- Do not implement spawn when `need_horizontal` fires.
+- Do not bypass `room_up = min(MS_max−alloc, server_free)` in snapshot — that *is* how server status enters scaling.
 
 ---
 
-## 4. Target loop (proactive name)
+## 3. Why `common/` must grow (coupling we refuse)
+
+Without a shared layer, proactive allocate would need either:
+
+| Bad option | Why it fails independence |
+| --- | --- |
+| `from ...reactive_vertical.distribute import ...` | Proactive depends on reactive package internals / naming |
+| Copy `distribute_*` + `_aggregate_ms` into proactive | Divergent packing bugs; two sources of truth |
+| Type allocate params as `ReactiveVerticalParams` | Proactive YAML/params coupled to reactive’s full knob set (streaks, `alpha_*`, …) |
+
+So v1 **does** move the vertical-packing substrate into `common/`, and allows a **thin reactive rewire** (import path + typed snapshot) with **no behavior change**.
+
+---
+
+## 4. Target `common/` surface
+
+`common/` already has: `actions.py`, `load.py`, `params_base.py`, `supported.py`.
+
+### 4.1 Add — shared vertical allocate substrate
+
+```text
+autoscaler/common/
+  actions.py          # exists — re-export ResizeAction / NeedHorizontalAction / …
+  snapshot.py         # NEW
+  distribute.py       # NEW (moved + generalized from reactive_vertical/distribute.py)
+  distribute_params.py  # NEW (or fold into distribute.py — one module max if small)
+```
+
+#### `snapshot.py` — env → typed MS view
+
+| Symbol | Role |
+| --- | --- |
+| `ReplicaView` | Per-container packing inputs (today in reactive `distribute.py`) |
+| `MsSnapshot` | Typed fleet aggregate (replaces reactive `_aggregate_ms` `dict`) |
+| `snapshot_ms(env, ms_id, tau) -> MsSnapshot` | Single env reader both scalers call |
+
+`MsSnapshot` fields (locked shape; names may be spelled out as below):
+
+| Field | Meaning |
+| --- | --- |
+| `ms_id`, `spec` | identity + `MicroserviceSpec` |
+| `replicas: list[ReplicaView]` | sorted by `container_id` |
+| `offered_total`, `served_total`, `dropped_total` | sum `lambda_in` / `served` / `dropped` this tick |
+| `util_ratio`, `slack_ratio` | MS-level q / slack (reactive intent uses these) |
+| `A_cpu`, `A_ram` | sum of replica allocs |
+| `rho_cpu`, `rho_ram` | from spec (`cpu_per_request_cores`, `ram_per_request_mb`) |
+| `tick_sec` | from `env.world_spec.sim.tick_sec` |
+| `u_meas` | max container util in [0,1] (proactive Up safety) |
+| `room_up_cpu/ram`, `room_down_cpu/ram` | fleet room totals (reactive intent clamps) |
+
+Replica field sources (must match today’s reactive helper — **server free is required**):
+
+| `ReplicaView` field | Source |
+| --- | --- |
+| `cpu_alloc` / `ram_alloc` | container alloc |
+| `drop` | `history_at(tau).lambda_dropped` |
+| `q` | max finite `q_cpu`/`q_ram` clamped to [0,1]; NaN/Inf → 1 |
+| `slack` | `1 - q` |
+| `room_up_cpu/ram` | `min(spec.max − alloc, env.get_server_free(host))` — **§2.2** |
+| `room_down_cpu/ram` | `max(0, alloc − spec.min)` |
+
+Snapshot tests for PR1 should include: container near MS max → `room_up` limited by MS; container with headroom but full host → `room_up ≈ 0` from server; after a successful shrink elsewhere on host → next snapshot shows more free.
+
+#### `distribute.py` — packing only (no policy)
+
+| Symbol | Role |
+| --- | --- |
+| `distribute_up(...)` | Rank hot-first; emit resizes + optional `NeedHorizontalAction` |
+| `distribute_down(...)` | Rank cold-first; emit resizes |
+
+**API change vs today (small, intentional):**
+
+```text
+distribute_up(..., params: DistributeParams, reason: str, ...)
+distribute_down(..., params: DistributeParams, reason: str, ...)
+```
+
+- Reactive calls with `reason="reactive_up"` / `"reactive_down"`.
+- Proactive calls with `reason="proactive_up"` / `"proactive_down"`.
+- Removes `dataclasses.replace` reason remapping and keeps hardcoded `"reactive_*"` out of `common/`.
+
+Still take non-negative delta magnitudes (callers convert signed residuals).
+
+#### `DistributeParams` — packing knobs only
+
+| Knob | Used by |
+| --- | --- |
+| `grow_weights` | `distribute_up` |
+| `shrink_weights` | `distribute_down` |
+| `eps_drop` | down eligibility |
+| `theta_free` | down eligibility |
+| `prefer_consolidate_down` | down loop |
+
+`validate_distribute_params(raw: dict) -> DistributeParams` rejects unknown keys.
+
+**Not in `DistributeParams`:** streaks, `cooldown_ticks`, `alpha_*`, `delta_*_min`, `up_mode`, `theta_high`, … — those stay on `ReactiveVerticalParams` only.
+
+### 4.2 Do **not** put in `common/`
+
+| Keep in scaler package | Why |
+| --- | --- |
+| Reactive streaks / intent / tick cooldown / `up_mode` sizing | Reactive-only policy |
+| Proactive TTW RPS, history, forecast, predictors | Proactive-only sensing |
+| Proactive `decide.py` (θ, `r★`, sustained) | Proactive-only math |
+| Proactive TTW `next_allowed_ttw` cooldown | Different time base than reactive |
+| Env `apply_actions` | Already env-owned; scalers only emit actions |
+
+### 4.3 Dependency rule (checkable)
+
+```text
+env/  ◄──  autoscaler/common/  ◄──  reactive_vertical/
+                           ▲
+                           └──  proactive_auto_scaler/
+
+FORBIDDEN:
+  proactive_auto_scaler  →  reactive_vertical
+  reactive_vertical      →  proactive_auto_scaler
+  env                    →  autoscaler/*
+```
+
+Both strategy packages may import `common` and `env`. `common` may import `env` (types + read APIs for snapshot) but **never** a strategy package.
+
+---
+
+## 5. Reactive rewire (allowed, behavior-preserving)
+
+Earlier drafts said “zero edits to `reactive_vertical/`.” That blocked independence. **Revised lock:**
+
+| Allowed reactive edit | Not allowed |
+| --- | --- |
+| Delete local `distribute.py`; import from `common.distribute` | Change streak/intent formulas |
+| Replace `_aggregate_ms` body with `snapshot_ms` + field reads | Change default numeric behavior |
+| Pass `DistributeParams` + `reason="reactive_*"` into distribute | Add proactive imports |
+| Keep flat YAML: `grow_weights` etc. still top-level reactive params; `validate_params` builds/embeds `DistributeParams` | Force users to nest `distribute:` under reactive (optional later) |
+
+Existing reactive tests must stay green without assertion changes (except import paths if any test imported `reactive_vertical.distribute` directly — today they go through policy).
+
+`reactive_vertical/distribute.py` becomes either **removed** or a **one-line re-export shim** from `common` for one release; prefer **remove + fix imports** to avoid two paths.
+
+---
+
+## 6. Target proactive loop
 
 ```text
 each tick τ:
-  # existing sensing (refactor body of today's on_tick_end into a helper)
-  accumulate λ_in; on TTW close: append r_t, forecast+log if hist full
+  sense_tick(env, τ)                    # accumulate λ_in into per-MS TTW totals
 
-  if scaling via proactive_auto_scaler:
-    actions = []
+  if not is_ttw_close(τ, ttw_ticks):
+      return []
 
-    # warm-up: reuse reactive as-is
-    if any MS not hist.is_full():
-      actions += filter(reactive.on_tick_end(env, τ), ms still warming)
+  t = ttw_index(τ, ttw_ticks)
+  actions = []
 
-    # steady: only on TTW close, only for MS with hist.is_full()
-    if is_ttw_close:
-      for ms ready:
-        if cooldown: continue
-        (Δ, δ_cpu, δ_ram, ...) = predict_and_decide(r_t, r_hat, ...)   # NEW math
-        if Δ in {Up, Down}:
-          actions += allocate_via_existing_distribute(...)              # REUSE distribute
+  for each ms_id:
+      r_t = close_ttw_rps(...)          # append history; rps_forecast_log lead=0
+      if not hist.is_full():
+          continue                      # HOLD
 
-    return actions   # env.apply_actions already applies
+      r_hat[1..H] = forecast_horizon(...)
+      log forecast leads
+
+      if t < next_allowed_ttw[ms]:
+          continue
+
+      snap = snapshot_ms(env, ms, τ)    # common
+      decision = predict_and_decide(r_t, r_hat, snap.A_*, snap.rho_*, snap.tick_sec,
+                                    snap.u_meas, θ_*, sustained_tau)
+
+      if decision.direction is NONE:
+          continue
+
+      ms_actions = allocate_vertical(   # proactive glue: abs(δ) + common.distribute
+          env, snap, τ, decision, distribute_params, reasons=proactive_*
+      )
+      if any resize in ms_actions:
+          pending_proactive_ttw[ms] = t
+      actions.extend(ms_actions)
+
+  return actions
 
 on_actions_applied(results):
-  reactive.on_actions_applied(results)           # reuse
-  arm proactive next_allowed_ttw for pending MS  # small new state on proactive scaler
+  if any result.ok:
+      for ms, t in pending_proactive_ttw.items():
+          next_allowed_ttw[ms] = t + cooldown_C + 1
+  pending.clear()
 ```
 
 ---
 
-## 5. Minimal file touch list
+## 7. Decide math (pure — `proactive_auto_scaler/decide.py`)
+
+Implement design-doc §4.1–4.4 only. No `Env`, no actions, no `common.distribute`. **No server-free inputs** (see plan §2.3).
+
+### 7.1 Inputs / outputs
 
 ```text
-autoscaler/proactive_auto_scaler/
-  policy.py      # CHANGE — embed reactive; handoff; call decide + distribute
-  params.py      # CHANGE — theta_*, sustained_tau, cooldown_C; optional nested reactive dict
-  decide.py      # NEW — only place for PredictAndDecide math (no env packing)
-  # optional thin allocate helper: either allocate.py OR private funcs in policy.py
-  #     → build ReplicaView list + call distribute_up/down + remap reason via dataclasses.replace
-  # unchanged: ttw_rps, history, forecast, predictors/*
-  # NO: hybrid_warmup_scaler.py, confidence.py, decision_log.py, new action types
+in:
+  r_t, r_hat[1..H]
+  A_cpu, A_ram, rho_cpu, rho_ram, tick_sec, u_meas
+  theta_up, theta_down, theta_target, sustained_tau, eps
 
-autoscaler/reactive_vertical/   # ZERO edits
-autoscaler/common/load.py       # likely ZERO edits if proactive.build() embeds reactive
-env/                            # ZERO edits for apply path; optional later: decisions.csv writer only
+out:
+  direction: UP | DOWN | NONE
+  delta_cpu, delta_ram   # signed
+  sustained: bool
+```
+
+### 7.2 Utilization bridge (sim units lock)
+
+`cpu_per_request_cores` = cores per request **per tick** (`env/usage.py`). Full-util throughput in **req/s**:
+
+```text
+C_full_cpu = (A_cpu / max(rho_cpu, eps)) / tick_sec
+u_hat[h] / u_rps from r_hat[h] / r_t over C_full_*
+u_obs = max(u_rps, u_meas)
+```
+
+Mirror RAM when `rho_ram > eps`.
+
+### 7.3 Direction / sustained / residuals
+
+- **UP** if `u_obs ≥ θ_up` or `max(u_hat) ≥ θ_up`
+- **DOWN** if `u_obs ≤ θ_down` and `max(u_hat) ≤ θ_down`
+- **NONE** otherwise
+- Sustained (UP only): count of `u_hat[h] ≥ θ_up` ≥ `sustained_tau`
+- `r_star = max(r_t, max(r_hat))`
+- `A_req_cpu = rho_cpu * r_star * tick_sec / theta_target` → `delta = A_req - A` (clamp by direction)
+
+Unit-test the bridge with a known `(A, ρ, tick_sec, r★, θ)` tuple.
+
+```python
+class Direction(str, Enum): ...
+@dataclass(frozen=True, slots=True)
+class DecideResult:
+    direction: Direction
+    delta_cpu: float
+    delta_ram: float
+    sustained: bool
+
+def predict_and_decide(...) -> DecideResult: ...
+```
+
+---
+
+## 8. Proactive allocate glue (`proactive_auto_scaler/allocate.py`)
+
+Thin only — full mechanics in §2:
+
+1. Take `MsSnapshot` (already includes per-replica `room_up_*` with **server free**) + signed `DecideResult`.
+2. UP → pass positive deltas; DOWN → `abs(delta_*)`.
+3. Call `common.distribute_up/down` with `DistributeParams` and `reason="proactive_*"`.
+4. Do not re-snapshot; do not call `Env.resize`; do not filter δ by Σ `room_up` (unmet demand → `need_horizontal`).
+
+No second snapshot implementation. No reactive imports.
+
+---
+
+## 9. Minimal file touch list
+
+```text
+autoscaler/common/
+  snapshot.py           # NEW — ReplicaView, MsSnapshot, snapshot_ms
+  distribute.py         # NEW — distribute_up/down (moved from reactive)
+  distribute_params.py  # NEW — DistributeParams + validate (or merged into distribute.py)
+
+autoscaler/reactive_vertical/
+  distribute.py         # DELETE (or temporary re-export shim)
+  policy.py             # CHANGE — import common.snapshot + common.distribute; pass reasons
+  params.py             # CHANGE — build/embed DistributeParams from existing flat keys
+
+autoscaler/proactive_auto_scaler/
+  policy.py             # CHANGE — thin orchestration
+  params.py             # CHANGE — theta_*, sustained_tau, cooldown_C; optional distribute nest
+  sensing.py            # NEW — extract today’s on_tick_end body
+  decide.py             # NEW — PredictAndDecide pure math
+  allocate.py           # NEW — signed δ → common.distribute
+  # unchanged: ttw_rps, history, forecast, predictors/*
+
+env/                    # ZERO edits for apply path
 ```
 
 | Artifact | Role |
 | --- | --- |
-| `decide.py` | **Only new policy math** — direction, residuals, sustained |
-| `policy.py` | Orchestration + handoff (extends existing class) |
-| `params.py` | Extend existing dataclass/validator |
-| Allocate glue | Prefer **functions in `policy.py`** or one small `allocate.py` that **only** (1) builds `ReplicaView`s from env, (2) calls `distribute_up`/`distribute_down`, (3) remaps `reason` to `proactive_up`/`proactive_down` via `dataclasses.replace` — because distribute hardcodes `reactive_*` reasons and we will not edit reactive |
+| `common/snapshot.py` | Shared env read; one MS view for both strategies |
+| `common/distribute*.py` | Shared vertical packing |
+| `proactive/.../sensing.py` | TTW sense + forecast log |
+| `proactive/.../decide.py` | Proactive-only math |
+| `proactive/.../allocate.py` | Proactive-only glue to common distribute |
+| `proactive/.../policy.py` | Orchestrator + TTW cooldown |
 
-### Unavoidable small overlap (acknowledged)
+**Proactive dependency direction:**
 
-`_aggregate_ms` in reactive `policy.py` is **private**. We will not edit reactive to export it. Allocate glue needs a short local snapshot that fills `ReplicaView` (cpu/ram alloc, room up/down, drop, q, slack) — same *data*, not a second distribute algorithm. Do not copy streak/intent/cooldown logic.
+```text
+ttw_rps / history / forecast / predictors / decide  →  pure
+sensing / allocate                                  →  Env + common
+policy                                              →  orchestrates only
+```
 
 ---
 
-## 6. Sample shapes (reuse-aware)
+## 10. Sample shapes
 
-### 6.1 Embed reactive in existing builder
-
-```python
-# proactive_auto_scaler/policy.py — conceptual build()
-from hierarchical_edge_sim.autoscaler.reactive_vertical import build as build_reactive
-
-def build(params: dict, decision_every_k_ticks: int = 1) -> ProactiveAutoScaler:
-    validated = validate_params(params)  # pops/validates nested "reactive" if present
-    reactive = build_reactive(
-        validated.reactive_params_dict,  # {} → reactive defaults
-        decision_every_k_ticks=decision_every_k_ticks,
-    )
-    return ProactiveAutoScaler(
-        params=validated,
-        _predictor=_make_predictor(validated),
-        _reactive=reactive,
-    )
-```
-
-`common/load.py` can stay as today: it already calls `proactive_auto_scaler.build(...)`.
-
-### 6.2 Decide (new — no equivalent in repo)
+### 10.1 Proactive params
 
 ```python
-# decide.py — pure functions; no ResizeAction, no distribute
-class Direction(str, Enum):
-    UP = "up"
-    DOWN = "down"
-    NONE = "none"
-
-def predict_and_decide(*, r_t, r_hat, A_cpu, A_ram, rho_cpu, rho_ram, u_meas,
-                       theta_up, theta_down, theta_target, sustained_tau):
-    # util bridge + Δ from u_obs / max û  (design §4.2)
-    # r_star = max(r_t, max(r_hat))       (design §4.4)
-    # δ = A_req - A ; clamp by direction
-    # sustained from count of û_h >= theta_up
-    ...
+@dataclass(frozen=True, slots=True)
+class ProactiveAutoScalerParams:
+    ttw_ticks: int = 60
+    feature_window: int = 10
+    horizon_H: int = 3
+    model_path: str | None = None
+    scaler_path: str | None = None
+    meta_path: str | None = None
+    theta_up: float = 0.80
+    theta_down: float = 0.30
+    theta_target: float = 0.60
+    sustained_tau: int = 2
+    cooldown_C: int = 3
+    distribute: DistributeParams = field(default_factory=DistributeParams)
 ```
 
-### 6.3 Allocate via existing distribute (no fork)
+Validate: `theta_up > theta_target > theta_down` in `(0, 1]`; `sustained_tau >= 1`; `cooldown_C >= 0`; `ttw_ticks >= 1`; `feature_window >= 1`; nest `distribute:` via `validate_distribute_params`.
+
+**Default intuition:** with `tick_sec = 1`, `ttw_ticks = 60` → one RPS sample / decide opportunity per simulated minute; `feature_window = 10` → ~10 minutes of TTW history before proactive scaling starts (hold until then).
+
+### 10.2 Reactive params (compatibility)
+
+Keep **flat** YAML keys (`grow_weights`, …) on reactive configs. Internally:
 
 ```python
-# policy.py or allocate.py — glue only
-from dataclasses import replace
-from hierarchical_edge_sim.autoscaler.reactive_vertical.distribute import (
-    ReplicaView,
-    distribute_up,
-    distribute_down,
-)
-
-def allocate_vertical(env, *, ms_id, tau, direction, delta_cpu, delta_ram, reactive_params):
-    replicas = _snapshot_replica_views(env, ms_id, tau)  # fills ReplicaView; local helper
-    spec = env.get_ms_spec(ms_id)
-    if direction is Direction.UP:
-        actions = distribute_up(
-            env=env, ms_id=ms_id, spec=spec, params=reactive_params,
-            replicas=replicas, delta_cpu=delta_cpu, delta_ram=delta_ram, tau=tau,
-        )
-        reason = "proactive_up"
-    else:
-        actions = distribute_down(...)
-        reason = "proactive_down"
-    # distribute hardcodes reactive_* reasons; remap without editing reactive:
-    return [
-        replace(a, reason=reason) if getattr(a, "type", "") == "resize" else a
-        for a in actions
-    ]
+# conceptual
+distribute = validate_distribute_params({
+    "grow_weights": ..., "shrink_weights": ..., "eps_drop": ...,
+    "theta_free": ..., "prefer_consolidate_down": ...,
+})
+# reactive-only fields remain on ReactiveVerticalParams
 ```
 
-`NeedHorizontalAction` from leftover Up residual stays as emitted by `distribute_up` (already correct type).
-
-### 6.4 `on_tick_end` sketch
+### 10.3 `on_tick_end` sketch (proactive)
 
 ```python
 def on_tick_end(self, env: Env, tau: int) -> list[Any]:
-    self._sense_and_forecast(env, tau)  # today's body; still returns early mid-TTW for forecast side
+    closed = self._sensing.on_tick(env, tau)
+    if not closed:
+        return []
 
     actions: list[Any] = []
+    self._pending_proactive_ttw.clear()
 
-    if self._any_warming():
-        raw = self._reactive.on_tick_end(env, tau)
-        actions.extend(a for a in raw if not self._histories[a.ms_id].is_full())
+    for rec in closed:
+        if not rec.history_full or rec.r_hat is None:
+            continue
+        if self._in_cooldown(rec.ms_id, rec.ttw_t):
+            continue
 
-    if not is_ttw_close(tau, self.params.ttw_ticks):
-        return actions  # proactive steady-state only decides on TTW close
+        snap = snapshot_ms(env, rec.ms_id, tau)
+        d = predict_and_decide(
+            r_t=rec.r_t, r_hat=rec.r_hat,
+            A_cpu=snap.A_cpu, A_ram=snap.A_ram,
+            rho_cpu=snap.rho_cpu, rho_ram=snap.rho_ram,
+            tick_sec=snap.tick_sec, u_meas=snap.u_meas,
+            theta_up=self.params.theta_up, ...
+        )
+        if d.direction is Direction.NONE:
+            continue
 
-    for ms_id in env.list_microservices():
-        if not self._histories[ms_id].is_full():
-            continue
-        if self._in_proactive_cooldown(ms_id, tau):
-            continue
-        # r_t / r_hat from sensing; capacity from env
-        d = predict_and_decide(...)
-        if d.delta is Direction.NONE:
-            continue
-        ms_actions = allocate_vertical(...)
+        ms_actions = allocate_vertical(
+            env, snap=snap, tau=tau, decision=d,
+            params=self.params.distribute,
+        )
         if any(getattr(a, "type", "") == "resize" for a in ms_actions):
-            self._pending_proactive_ms.add(ms_id)
+            self._pending_proactive_ttw[rec.ms_id] = rec.ttw_t
         actions.extend(ms_actions)
     return actions
 ```
 
+### 10.4 `on_actions_applied`
+
+```python
+def on_actions_applied(self, results: list[Any]) -> None:
+    if any(getattr(r, "ok", False) for r in results):
+        for ms_id, t in self._pending_proactive_ttw.items():
+            self._next_allowed_ttw[ms_id] = t + self.params.cooldown_C + 1
+    self._pending_proactive_ttw.clear()
+```
+
 ---
 
-## 7. YAML (extend proactive params only)
+## 11. YAML (proactive)
 
 ```yaml
 autoscaler:
   name: proactive_auto_scaler
-  decision_every_k_ticks: 1    # still applies to embedded reactive warm-up
+  decision_every_k_ticks: 1
   params:
-    # existing (unchanged meaning)
-    ttw_ticks: 1
-    feature_window: 30
+    ttw_ticks: 60          # default; override only if demos need a shorter loop
+    feature_window: 10     # default; W real TTW samples before decide
     horizon_H: 3
-    predictor: average
 
-    # NEW decide / cooldown (proactive steady state)
     theta_up: 0.80
     theta_down: 0.30
     theta_target: 0.60
     sustained_tau: 2
     cooldown_C: 3
 
-    # optional: params forwarded to reactive_vertical.build (warm-up + distribute weights)
-    reactive: {}
+    distribute: {}   # optional DistributeParams overrides
 ```
 
-Pure reactive demos keep:
+**Absent:** `kappa_*`, `mape_*`, `rps_floor`, `reactive:`, second `scaling_mode`.
 
-```yaml
-autoscaler:
-  name: reactive_vertical
-  params: { ... }
-```
-
-**Absent:** `kappa_*`, `mape_*`, `rps_floor`, separate `scaling_mode`, new scaler name in `SUPPORTED_AUTOSCALERS` (unless you explicitly want an alias — default: **no**).
+**Demo note:** short smoke configs (e.g. 300-tick worlds) may override `ttw_ticks` / `feature_window` downward so warm-up and ≥1 decide fit in the horizon; production-like defaults remain **60 / 10**. Update `configs/demo_*_proactive*.yaml` in the last slice.
 
 ---
 
-## 8. Logging
+## 12. Logging
 
-- Keep `rps_forecast.csv` as today.
-- Keep `actions.csv` via env; distinguish phases by remapped `reason` (`reactive_*` vs `proactive_*`).
-- Optional v1: `decision_log: list[...]` on the scaler (like `rps_forecast_log`). CSV flush only if useful; **do not** invent a parallel logging framework.
+- Keep `rps_forecast.csv`.
+- `actions.csv` reasons: `proactive_up` / `proactive_down` (reactive unchanged).
+- Optional: `decision_log` list on proactive scaler; no new logging framework.
 
 ---
 
-## 9. Build order (still reuse-first)
+## 13. Build order
 
-### Slice A — Handoff only (no proactive actions yet)
+### Slice 0 — Lift shared substrate into `common/`
 
-1. `ProactiveAutoScaler` embeds `ReactiveVerticalAutoscaler` via `build_reactive`.
-2. After sensing, if any MS warming → call reactive, filter by `is_full()`.
-3. Ready MS still get `[]` from proactive branch.
-4. Tests: before window full, capacity can change via reactive reasons; after full, reactive actions for that MS stop. **No reactive package edits.**
+1. Add `common/snapshot.py`, `common/distribute.py` (+ `DistributeParams`) with **paired CPU/RAM** grant rule (§2.4).
+2. Rewire `reactive_vertical` to import from `common/`; remove local `distribute.py`.
+3. Reactive tests: update any that assumed one-sided CPU/RAM growth; streak/intent behavior otherwise unchanged.
+4. Snapshot tests: MS-max vs server-full `room_up`; down room ignores server free; paired skip when only one dim has room.
 
-### Slice B — `decide.py` unit tests only
+### Slice 1 — Extract proactive sensing (behavior-preserving)
 
-Pure math; no env.
+1. Move today’s `on_tick_end` body into `sensing.py`.
+2. Policy still returns `[]`.
+3. Forecast tests stay green.
 
-### Slice C — Wire allocate via `distribute_*` + cooldown
+### Slice 2 — `decide.py` + unit tests (no env)
 
-1. Replica snapshot helper + call distribute + `replace` reasons.
-2. TTW cooldown on proactive success.
-3. Fixture: post-warmup resize changes alloc on τ+1.
+- Direction / residuals / sustained / util-bridge unit cases (see prior list).
 
-### Slice D — Demo YAML knobs + optional decision buffer
+### Slice 3 — Proactive allocate + wire + cooldown
 
-Update a proactive demo config with θ / `cooldown_C` / optional `reactive: {}`.
+1. `allocate.py` → `common.distribute` with proactive reasons.
+2. Extend proactive `params.py` (θ, `cooldown_C`, optional `distribute:`).
+3. **Default change (locked):** `ttw_ticks=60`, `feature_window=10` (today’s code still defaults to 1 / 30 — update validator + any tests that assumed the old defaults).
+4. Policy orchestration + TTW cooldown.
+5. Integration: post-`feature_window` rising load → `proactive_*` actions + capacity change (use a short-horizon fixture that overrides TTW/W if needed).
+6. Assert proactive package does not import `reactive_vertical` (small import-linter or grep test).
+
+### Slice 4 — Demo YAML (+ optional decision buffer)
 
 ### Explicitly do not do
 
 | Do not | Reason |
 | --- | --- |
-| Edit `reactive_vertical/` | User lock |
-| Add `hybrid_warmup_scaler.py` | Redundant with `policy.py` embed |
-| Add second mode flag beside `name` | Selection already exists |
-| Fork `distribute_up`/`down` | Import instead |
-| Add κ / confidence | Scope |
-| New action types | Use `common.actions` |
+| `proactive` → `reactive_vertical` imports | Independence lock |
+| Embed / call `ReactiveVerticalAutoscaler` | Out of scope |
+| Duplicate `distribute_*` or snapshot inside proactive | Belongs in `common/` |
+| Fork packing algorithm “for proactive” | One shared implementaton |
+| Clamp decide δ by Σ `room_up` / server free | Hides unmet demand; allocate + `need_horizontal` handle it (§2.3) |
+| Call `Env.resize` from the scaler | Env apply path only |
+| Implement spawn on `need_horizontal` | Out of scope |
+| κ / confidence / reactive fallback | Scope |
+| New action types | Use `common.actions` / env |
+| Use `sustained` in allocate | Deferred to BEV/BEH |
+| Change reactive streak/intent math while lifting | Behavior-preserving rewire only |
+| Fix same-server snapshot over-grant in v1 without asking | Open — see §17 |
 
 ---
 
-## 10. Picture
+## 14. Picture
 
 ```text
-autoscaler.name
-     │
-     ├─ reactive_vertical ──► ReactiveVerticalAutoscaler ──► env.apply_actions
-     │         (package untouched; also used as library from proactive)
-     │
-     └─ proactive_auto_scaler ──► ProactiveAutoScaler (extended policy.py)
-              │
-              ├─ reuse: ttw / history / forecast / rps_forecast.csv
-              ├─ warm-up: call embedded ReactiveVerticalAutoscaler, filter by is_full()
-              └─ steady: decide.py (new) → distribute_up/down (reuse) → apply_actions
+                    autoscaler/common/
+                 ┌──── snapshot_ms ────┐  ← room_up includes server free
+                 │  distribute_up/down │  ← clamps grants to room_*
+                 │  DistributeParams   │
+                 │  actions (re-export)│
+                 └─────────┬───────────┘
+            ┌──────────────┼──────────────┐
+            ▼                             ▼
+ reactive_vertical/              proactive_auto_scaler/
+  policy (streaks/intent)         sensing → decide → allocate
+  params (reactive + packing)     decide: demand only (no servers)
+        │                         allocate: common.distribute
+        └──────────► env.apply_actions / Env.resize ◄┘
+                     (hard gate: MS bounds + live server caps)
+
+(no arrows between the two strategy packages)
 ```
 
 ---
 
-## 11. Acceptance
+## 15. Acceptance
 
-1. `name: reactive_vertical` — unchanged behavior; no proactive construction required.
-2. `name: proactive_auto_scaler` — early actions use reactive path (existing reasons); after `feature_window` TTWs per MS, new actions use `proactive_*` reasons from decide+distribute.
-3. No files under `reactive_vertical/` modified.
-4. No duplicate distribute/action/forecast modules added.
-5. No κ/confidence code.
-6. Post-warmup rising load → successful resizes in `actions.csv`; next-tick capacity changes.
-7. Existing forecast tests updated only where they assert “always `[]` / unknown `cooldown_C`” — those expectations intentionally change.
+1. **Import graph:** `proactive_auto_scaler` does not import `reactive_vertical` (and vice versa). Both may import `common`.
+2. Reactive demos/tests: same scaling behavior as before the lift (reasons still `reactive_*`).
+3. Proactive: before `feature_window` TTWs → no scale actions; after full → TTW-close decisions; resize reasons `proactive_*`.
+4. Shared packing/snapshot live only under `common/` (one implementation).
+5. **Server-aware Up:** snapshot `room_up` respects `get_server_free`; a full host yields `room_up ≈ 0` even if below MS max; unmet δ → `need_horizontal` logged, not a crash.
+6. **Env hard gate:** illegal alloc still rejected by `Env.resize` (`SERVER_*_EXCEEDED` / `ABOVE_MS_MAX`); scaler does not call `resize` directly.
+7. No κ/confidence code; no `ReactiveVerticalAutoscaler` on the proactive path.
+8. Post-ready rising load → resizes in `actions.csv` + next-tick capacity change.
+9. Cooldown: after ≥1 successful resize, skip `cooldown_C` TTWs; `need_horizontal`-only does not arm; sensing/forecast continue.
+10. Forecast tests updated only where “always `[]`” / “unknown `cooldown_C`” expectations intentionally change.
 
 ---
 
-## 12. PR boundaries
+## 16. PR boundaries
 
 | PR | Contents |
 | --- | --- |
-| **PR1** | Slice A — embed reactive + filter handoff |
-| **PR2** | Slices B+C — `decide.py` + distribute glue + cooldown |
-| **PR3** | Slice D — demo YAML (+ optional decision log flush) |
+| **PR1** | Slice 0 — `common` snapshot + distribute; reactive rewire; **snapshot tests for server free / MS max room** |
+| **PR2** | Slice 1 — proactive sensing extraction |
+| **PR3** | Slice 2 — `decide.py` + pure tests |
+| **PR4** | Slice 3 — allocate + policy wire + cooldown + independence test |
+| **PR5** | Slice 4 — demo YAML (+ optional decision log) |
 
 ---
 
-## 13. Remaining choices (narrow)
+## 17. Open items — locked for first implementation round
 
-1. **Allocate glue location:** private helpers in `policy.py` vs one small `allocate.py` (either is fine; prefer **one file max**, no third logging module).
-2. **Nested `params.reactive`:** empty dict → reactive defaults; enough for warm-up and for `distribute_*` weights.
-3. **Cadence:** after warm-up, proactive decisions only on TTW close; mid-TTW ticks may still run reactive only for MS still warming.
-4. **Per-MS vs global flip:** prefer **per-MS**.
+| Topic | Lock |
+| --- | --- |
+| CPU/RAM pairing | Both dims move together when RAM modeled |
+| Same-server Up | Decrement per-server free while packing |
+| Apply vs score order | Accept env sort by `container_id` |
+| Unmet Down | Silent drop |
+| Down shape | Consolidate (`prefer_consolidate_down=True`) |
+| `u_meas` | max over containers of `max(q_cpu, q_ram)` |
+| Ranking | Up: drop, util, paired room; Down: slack, no-drop, paired room; skip busy |
+| Cooldown | `any(result.ok)` |
+| Multi-MS same host | No fairness |
+| Defaults | `ttw_ticks=60`, `feature_window=10` |
 
-Nothing else should expand the file count or reimplement existing behavior.
+Final demo target: **one container**, FIFA day80 **1-hour** trace, observe proactive up and down.

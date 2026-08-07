@@ -1,0 +1,55 @@
+# FIFA day 80 (1 Hz) + proactive decide/apply — single container, first 1 hour.
+# Trace: traces/demo/api_wc_day80_1s.csv
+# Start under-provisioned so warm-up then scale-up; later quieter minutes can scale-down.
+#
+# tick_sec=1, ttw_ticks=60 → one RPS sample / decide per simulated minute.
+# feature_window=10 → first decide after 10 minutes of history.
+
+sim:
+  tick_sec: 1.0
+  results_dir: results/proactive_wc_day80_1h_onec/
+  seed: 42
+
+traces_dir: traces/demo/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: api_wc_day80_1s.csv
+        containers:
+          - id: c-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 0.5
+            ram_alloc_mb: 256
+
+autoscaler:
+  enabled: true
+  name: proactive_auto_scaler
+  params:
+    ttw_ticks: 60
+    feature_window: 10
+    horizon_H: 3
+    theta_up: 0.70
+    theta_down: 0.45
+    theta_target: 0.50
+    sustained_tau: 2
+    cooldown_C: 1
+    model_path: models/rps_lstm_v1/lstm_edge_weights.pth
+    scaler_path: models/rps_lstm_v1/traffic_scaler.pkl
+    meta_path: models/rps_lstm_v1/meta.json
+    distribute: {}

@@ -39,6 +39,8 @@ def predict_and_decide(
     theta_down: float,
     theta_target: float,
     sustained_tau: int,
+    cpu_min_cores: float = 0.0,
+    ram_min_mb: float = 0.0,
     eps: float = EPS,
 ) -> DecideResult:
     if tick_sec <= 0:
@@ -76,10 +78,16 @@ def predict_and_decide(
         sustained = sum(1 for u in u_hats if u >= theta_up) >= sustained_tau
 
     r_star = r_t if not hats else max(r_t, max(hats))
-    a_req_cpu = (rho_cpu * r_star * tick_sec) / theta_target
+    # Deployment floor (cpu_min_cores/ram_min_mb) does not buy throughput (env/usage.py
+    # serves only from headroom = alloc - min), so the required *total* allocation to
+    # reach theta_target utilization must add the floor back on top of the headroom
+    # needed to serve r_star. Omitting it here compares a headroom-only figure against
+    # the full current allocation A, which is a silent under-ask whenever the floor is
+    # not negligible (e.g. RAM) and can permanently stall scale-up (delta clamped to 0).
+    a_req_cpu = cpu_min_cores + (rho_cpu * r_star * tick_sec) / theta_target
     delta_cpu = a_req_cpu - A_cpu
     if ram_mode:
-        a_req_ram = (rho_ram * r_star * tick_sec) / theta_target
+        a_req_ram = ram_min_mb + (rho_ram * r_star * tick_sec) / theta_target
         delta_ram = a_req_ram - A_ram
     else:
         delta_ram = 0.0

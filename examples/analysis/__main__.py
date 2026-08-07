@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Analyze a simulation run directory. Writes per-application plots under "
-            "<run_dir>/analysis/<app_id>/."
+            "<run_dir>/analysis/<app_id>/ (requests, CPU/RAM, and scaling_decisions)."
         )
     )
     parser.add_argument(

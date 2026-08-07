@@ -10,11 +10,12 @@ from .io import (
     find_container_logs,
     list_microservice_trace_refs,
     load_run_meta,
+    read_actions,
     read_container_log,
     read_trace,
     resolve_trace_path,
 )
-from .plots import plot_combined_requests, plot_cpu, plot_ram
+from .plots import plot_combined_requests, plot_cpu, plot_ram, plot_scaling_decisions
 
 
 @dataclass(slots=True)
@@ -55,6 +56,9 @@ def analyze_run(
         raise FileNotFoundError(f"no container log CSV found under {run_dir}/apps/")
 
     containers = [read_container_log(path) for path in logs]
+    actions = read_actions(run_dir)
+    rps_by_ms = _load_rps_observations(run_dir)
+    ttw_ticks = _ttw_ticks_from_meta(meta)
     by_app = group_containers_by_app(containers)
     if apps_filter is not None:
         missing = apps_filter - set(by_app)
@@ -125,6 +129,27 @@ def analyze_run(
                 title=f"{app_id}/{ms_id}: Trace vs Logs",
             )
 
+            # Scaling decisions (CPU/RAM alloc + up/down markers; RPS if forecast log exists)
+            rps_obs = rps_by_ms.get(ms_id)
+            if rps_obs and ttw_ticks and ttw_ticks > 1:
+                # Map TTW index -> tick at TTW close for alignment with container logs
+                rps_aligned = [(ttw * ttw_ticks, rps) for ttw, rps in rps_obs]
+            else:
+                rps_aligned = rps_obs
+            scale_name = (
+                "scaling_decisions.png"
+                if len(by_ms) == 1
+                else f"scaling_decisions_{ms_id}.png"
+            )
+            plot_scaling_decisions(
+                containers=ms_containers,
+                actions=actions,
+                out_path=app_out / scale_name,
+                title=f"{app_id}/{ms_id}",
+                ttw_ticks=ttw_ticks,
+                rps_obs=rps_aligned,
+            )
+
         for c in app_containers:
             plot_cpu(c, app_out / f"{c.container_id}_cpu.png")
             plot_ram(c, app_out / f"{c.container_id}_ram.png")
@@ -143,3 +168,29 @@ def analyze_run(
         )
 
     return summaries
+
+
+def _ttw_ticks_from_meta(meta: dict) -> int | None:
+    params = (meta.get("autoscaler") or {}).get("params") or {}
+    if "ttw_ticks" in params:
+        return int(params["ttw_ticks"])
+    return None
+
+
+def _load_rps_observations(run_dir: Path) -> dict[str, list[tuple[int, float]]]:
+    """Return ms_id -> [(ttw, r_t), ...] from rps_forecast.csv lead=0 rows."""
+    path = run_dir / "rps_forecast.csv"
+    if not path.is_file():
+        return {}
+    import csv
+
+    by_ms: dict[str, list[tuple[int, float]]] = {}
+    with path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            if int(row["lead"]) != 0:
+                continue
+            r_t = row.get("r_t") or ""
+            if r_t == "":
+                continue
+            by_ms.setdefault(row["ms_id"], []).append((int(row["ttw"]), float(r_t)))
+    return by_ms

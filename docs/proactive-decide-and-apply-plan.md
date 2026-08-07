@@ -398,6 +398,7 @@ in:
   r_t, r_hat[1..H]
   A_cpu, A_ram, rho_cpu, rho_ram, tick_sec, u_meas
   theta_up, theta_down, theta_target, sustained_tau, eps
+  cpu_min_cores, ram_min_mb   # deployment floor; see §7.3
 
 out:
   direction: UP | DOWN | NONE
@@ -424,7 +425,14 @@ Mirror RAM when `rho_ram > eps`.
 - **NONE** otherwise
 - Sustained (UP only): count of `u_hat[h] ≥ θ_up` ≥ `sustained_tau`
 - `r_star = max(r_t, max(r_hat))`
-- `A_req_cpu = rho_cpu * r_star * tick_sec / theta_target` → `delta = A_req - A` (clamp by direction)
+- `A_req_cpu = cpu_min_cores + rho_cpu * r_star * tick_sec / theta_target` → `delta = A_req - A` (clamp by direction)
+- Mirror for RAM: `A_req_ram = ram_min_mb + rho_ram * r_star * tick_sec / theta_target` when `rho_ram > eps`.
+- The deployment floor must be added back here because `env/usage.py` only serves from
+  headroom (`alloc − min`, §4 of the implementation plan) — the floor itself buys zero
+  throughput. Comparing a headroom-only requirement directly against the current total
+  allocation `A` (which already includes the floor) silently under-asks whenever the
+  floor is non-negligible relative to the throughput term (RAM's `ram_min_mb` in
+  particular), which can clamp `delta_ram` to 0 forever and stall serving.
 
 Unit-test the bridge with a known `(A, ρ, tick_sec, r★, θ)` tuple.
 

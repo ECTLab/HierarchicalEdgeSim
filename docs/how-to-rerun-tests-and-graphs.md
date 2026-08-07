@@ -2,9 +2,12 @@
 
 This guide shows how to:
 
-1. run the test suite
-2. run demo simulations (1 container, 2 containers, 2 clusters / 2 apps)
-3. generate per-application analysis plots
+1. set up the venv and run the test suite
+2. run demo simulations (env-only, reactive, **proactive decide+apply**)
+3. analyze a result folder (requests, CPU/RAM, **scaling decisions**)
+
+Proactive LSTM install / day‑80 trace notes: [how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md).  
+Decide+apply build plan: [proactive-decide-and-apply-plan.md](./proactive-decide-and-apply-plan.md).
 
 ---
 
@@ -13,147 +16,170 @@ This guide shows how to:
 ```bash
 cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
 python3.14 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev,lstm]"   # lstm required for proactive_auto_scaler
 .venv/bin/pip install matplotlib
-# optional — required for predictor: lstm demos / LSTM unit tests:
-# .venv/bin/pip install -e ".[lstm]"
 ```
 
-Proactive LSTM + FIFA day‑80 walkthrough: [how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md).
+Ensure the model bundle exists (or copy trained artifacts — see the LSTM guide):
+
+```text
+models/rps_lstm_v1/
+  lstm_edge_weights.pth
+  traffic_scaler.pkl
+  meta.json                 # feature_window must match YAML (default 10)
+```
+
+If Matplotlib complains about a cache dir:
+
+```bash
+export MPLCONFIGDIR=/tmp/mpl
+```
 
 ---
 
 ## 2) Run tests
 
 ```bash
-.venv/bin/pytest tests/ -v
+# full suite
+.venv/bin/pytest tests/ -q
+
+# proactive + shared packing (decide / allocate / common distribute)
+.venv/bin/pytest tests/test_proactive_decide.py \
+                 tests/test_proactive_allocate.py \
+                 tests/test_proactive_auto_scaler.py \
+                 tests/test_common_distribute.py \
+                 tests/test_reactive_vertical.py -q
 ```
 
 ---
 
 ## 3) Demo scenarios
 
-### A) Single container
+Each run command prints a path like `results/.../<run_id>`. Use that path for analysis.
+
+### A) Env only (no autoscaler)
 
 ```bash
 .venv/bin/python examples/run_env_only.py configs/demo_60.yaml
-```
-
-### B) Two containers, one app (heterogeneous routing)
-
-```bash
 .venv/bin/python examples/run_env_only.py configs/demo_60_two_containers.yaml
-```
-
-### B2) Same world with reactive vertical autoscaler (60-tick smoke)
-
-```bash
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_two_containers_reactive.yaml
-```
-
-### B3) Long phased scenario (300 ticks) — static vs reactive
-
-```bash
-.venv/bin/python examples/run_env_only.py configs/demo_300_two_containers.yaml
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_two_containers_reactive.yaml
-# Compare dropped_requests in the two run dirs; reactive writes actions.csv
-```
-
-### B4) Proactive RPS forecast log (no actions)
-
-Full LSTM / FIFA day‑80 / model-install guide:  
-**[how-to-run-proactive-lstm-tests.md](./how-to-run-proactive-lstm-tests.md)**
-
-**300-tick phased** (few TTWs if `ttw_ticks` is large — may not fill `feature_window`):
-
-```bash
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_proactive_auto_scaler.yaml
-```
-
-**1-hour smooth hill** (`ttw_ticks=60`, `feature_window=10` — forecasts after TTW 10):
-
-```bash
-# LSTM one-step predictor (needs models/rps_lstm_v1/ + pip install -e ".[lstm]")
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_3600_proactive_lstm.yaml
-.venv/bin/python examples/plot_rps_forecast.py results/proactive_3600_lstm/<run_id>
-```
-
-**FIFA day 80 (1 Hz, first 1 hour / 3600 ticks)** — trace `traces/demo/api_wc_day80_1s.csv`:
-
-```bash
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_wc_day80_proactive_lstm.yaml
-.venv/bin/python examples/plot_rps_forecast.py results/proactive_wc_day80_lstm/<run_id>
-```
-
-### C) Two clusters, one app per cluster (this guide's focus)
-
-```bash
 .venv/bin/python examples/run_env_only.py configs/demo_60_two_clusters.yaml
 ```
 
-Topology:
+### B) Reactive vertical (optional baseline demos)
 
-| Cluster | Servers | App | MS | Container |
-|---|---|---|---|---|
-| `c1` | 2 (`c1-w1`, `c1-w2`) | `web_app` | `api` | `c-web-api-1` on `c1-w1` |
-| `c2` | 1 (`c2-w1`) | `media_app` | `ingest` | `c-media-ingest-1` on `c2-w1` |
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_two_containers_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_two_containers_reactive.yaml
+```
 
-Traces (both N=60):
+### C) Proactive decide + apply (primary)
 
-- `traces/demo/api_60.csv`
-- `traces/demo/ingest_60.csv`
+Defaults: `ttw_ticks=60`, `feature_window=10` → first scale opportunity after **10 TTWs** (e.g. τ=600 when `tick_sec=1`). Until then the container sits at its deployment floor (often zero headroom → drops are expected).
 
-Each command prints `<RUN_DIR>`, e.g. `results/42_YYYYMMDDTHHMMSSZ`.
+**Recommended — FIFA day 80, 1 hour, one container (up + down):**
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_wc_day80_proactive_1h_onec.yaml
+# → results/proactive_wc_day80_1h_onec/<run_id>/
+```
+
+**Other proactive configs:**
+
+| Config | Results dir prefix | Notes |
+| --- | --- | --- |
+| `configs/demo_3600_proactive_lstm.yaml` | `results/proactive_3600_lstm/` | Smooth hill, 3600 ticks |
+| `configs/demo_wc_day80_proactive_lstm.yaml` | `results/proactive_wc_day80_lstm/` | Day 80, two containers |
+| `configs/demo_300_proactive_auto_scaler.yaml` | (see YAML `results_dir`) | Short; override TTW/W if needed |
 
 ---
 
-## 4) Analysis helper (modular)
+## 4) Analyze a result folder
 
-Code lives under `examples/analysis/`:
-
-```text
-examples/analysis/
-  io.py          # read traces / logs / run_meta
-  aggregate.py   # sum + group by app/ms
-  plots.py       # request / CPU / RAM figures
-  report.py      # analyze_run(run_dir) orchestration
-  __main__.py    # CLI entry
-```
-
-Thin wrapper (preferred):
+**Preferred script** (requests + CPU/RAM + scaling decisions):
 
 ```bash
 .venv/bin/python examples/compare_trace_vs_log.py <RUN_DIR>
 ```
 
-Optional: analyze only one app
+Same entry via the package:
 
 ```bash
-.venv/bin/python examples/compare_trace_vs_log.py <RUN_DIR> --app web_app
+.venv/bin/python -m analysis <RUN_DIR>
+# from examples/:  python -m analysis <RUN_DIR>
 ```
 
-### Output layout (per application)
+Optional RPS forecast figure (needs `rps_forecast.csv`):
+
+```bash
+.venv/bin/python examples/plot_rps_forecast.py <RUN_DIR>
+```
+
+Filter to one app:
+
+```bash
+.venv/bin/python examples/compare_trace_vs_log.py <RUN_DIR> --app demo_app
+```
+
+### End-to-end day‑80 example
+
+```bash
+cd /Users/ahmad/research/ehsan_moradi/HierarchicalEdgeSim
+export MPLCONFIGDIR=/tmp/mpl
+
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_wc_day80_proactive_1h_onec.yaml
+# copy the printed path, e.g. results/proactive_wc_day80_1h_onec/42_YYYYMMDDTHHMMSSZ
+
+RUN_DIR=results/proactive_wc_day80_1h_onec/<run_id>
+.venv/bin/python examples/compare_trace_vs_log.py "$RUN_DIR"
+.venv/bin/python examples/plot_rps_forecast.py "$RUN_DIR"
+open "$RUN_DIR/analysis/demo_app/scaling_decisions.png"   # macOS
+```
+
+### Output layout
 
 ```text
-<RUN_DIR>/analysis/
-  web_app/
-    trace_vs_log_requests.png
-    c-web-api-1_cpu.png
-    c-web-api-1_ram.png
-  media_app/
-    trace_vs_log_requests.png
-    c-media-ingest-1_cpu.png
-    c-media-ingest-1_ram.png
+<RUN_DIR>/
+  actions.csv                 # resize / need_horizontal (proactive_up / proactive_down)
+  rps_forecast.csv            # lead=0 observations + lead=1..H forecasts
+  run_meta.yaml
+  apps/<app>/<ms>/<cid>.log.csv
+  analysis/
+    <app>/
+      scaling_decisions.png   # RPS (if present) + CPU/RAM alloc/used + ▲ up / ▼ down
+      trace_vs_log_requests.png
+      <cid>_cpu.png
+      <cid>_ram.png
+    rps_forecast/             # from plot_rps_forecast.py
+      <ms>_rps_forecast.png
 ```
 
-For each app the requests plot checks:
+### What to look for (healthy proactive run)
 
-- MS trace == sum(incoming) over that app's containers for that MS
-- per container: incoming == served + dropped
+| Plot | Healthy signal |
+| --- | --- |
+| `scaling_decisions.png` | After warm-up: CPU **and** RAM alloc step with ▲/▼; **used** tracks load (not stuck at min) |
+| `trace_vs_log_requests.png` | After first scale-up: `sum served` follows incoming; early ticks may drop while at floor |
+| `*_cpu.png` / `*_ram.png` | Capacity ≠ usage when load is present; both series move after scale events |
+| `actions.csv` | `proactive_up` / `proactive_down` with `result_code=OK` |
+
+**Note:** Serving uses only headroom above `cpu_min` / `ram_min`. Decide sizes `A_req = min + ρ·r★·tick_sec/θ` so RAM/CPU floors are not omitted (otherwise RAM never grows and μ stays 0).
+
+Code layout:
+
+```text
+examples/analysis/
+  io.py          # traces, container logs, actions.csv, run_meta
+  aggregate.py   # sum + group by app/ms
+  plots.py       # requests / CPU / RAM / scaling_decisions
+  report.py      # analyze_run(run_dir)
+  __main__.py    # CLI
+examples/compare_trace_vs_log.py   # thin wrapper → analyze_run
+examples/plot_rps_forecast.py      # optional forecast-only figure
+```
 
 ---
 
-## 5) One-command two-cluster flow
+## 5) One-command two-cluster flow (env-only)
 
 ```bash
 .venv/bin/pytest tests/ -q && \

@@ -32,6 +32,52 @@ class MicroserviceTraceRef:
     trace_file: str
 
 
+@dataclass(slots=True)
+class ActionEvent:
+    tau: int
+    ms_id: str
+    container_id: str
+    action_type: str
+    reason: str
+    result_code: str
+    cpu_old: float | None
+    cpu_new: float | None
+    ram_old: float | None
+    ram_new: float | None
+
+
+def _optional_float(val: str | None) -> float | None:
+    if val is None or val == "":
+        return None
+    return float(val)
+
+
+def read_actions(run_dir: Path) -> list[ActionEvent]:
+    """Load ``actions.csv`` if present; return [] when missing or header-only."""
+    path = run_dir / "actions.csv"
+    if not path.is_file():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    events: list[ActionEvent] = []
+    for r in rows:
+        events.append(
+            ActionEvent(
+                tau=int(r["tau"]),
+                ms_id=r.get("ms_id", ""),
+                container_id=r.get("container_id", "") or "",
+                action_type=r.get("action_type", ""),
+                reason=r.get("reason", ""),
+                result_code=r.get("result_code", ""),
+                cpu_old=_optional_float(r.get("cpu_old")),
+                cpu_new=_optional_float(r.get("cpu_new")),
+                ram_old=_optional_float(r.get("ram_old")),
+                ram_new=_optional_float(r.get("ram_new")),
+            )
+        )
+    return events
+
+
 def read_trace(path: Path) -> tuple[list[int], list[float]]:
     with path.open("r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))

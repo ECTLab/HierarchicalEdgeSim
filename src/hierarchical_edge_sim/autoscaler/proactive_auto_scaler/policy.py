@@ -63,6 +63,8 @@ class ProactiveAutoScaler:
                 theta_down=self.params.theta_down,
                 theta_target=self.params.theta_target,
                 sustained_tau=self.params.sustained_tau,
+                cpu_min_cores=snap.spec.cpu_min_cores,
+                ram_min_mb=snap.spec.ram_min_mb,
             )
             if decision.direction is Direction.NONE:
                 continue

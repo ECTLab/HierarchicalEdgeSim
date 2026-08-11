@@ -8,3 +8,5 @@ dist/
 build/
 results/
 .venv/
+.mplconfig/
+proposed_method_complete.tex

@@ -1,4 +1,4 @@
-"""Per-MS reactive local ladder: BEV then in-cluster BEH then vicinity help."""
+"""Per-MS reactive ladder: BEV then BEH then vicinity help then BEG."""
 
 from __future__ import annotations
 
@@ -15,9 +15,11 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
 from hierarchical_edge_sim.env.api import Env, ResizeResult
 from hierarchical_edge_sim.env.config import EPS
 
+from .beg import leftover_to_global_help, schedule_beg
 from .beh import beh_down, beh_up, home_cluster_id
+from .help import HelpRequest
 from .params import ReactiveLocalParams, validate_params
-from .vicinity import HelpRequest, leftover_to_help_action, schedule_vicinity_help
+from .vicinity import leftover_to_help_action, schedule_vicinity_help
 
 
 @dataclass(slots=True)
@@ -89,7 +91,11 @@ class ReactiveLocalAutoscaler:
                     env, help_q, pending=actions, tau=tau
                 )
                 actions.extend(vspawns)
-                actions.extend(leftover_to_help_action(u) for u in unresolved)
+                gspawns, still = schedule_beg(
+                    env, unresolved, pending=actions, tau=tau
+                )
+                actions.extend(gspawns)
+                actions.extend(leftover_to_global_help(u) for u in still)
             else:
                 actions.extend(leftover_to_help_action(u) for u in help_q)
 

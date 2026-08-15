@@ -3,6 +3,7 @@
 from hierarchical_edge_sim.env.api import (
     NeedHorizontalAction,
     NeedVicinityHelpAction,
+    NeedGlobalHelpAction,
     ResizeAction,
     ResizeResult,
     ResizeResultCode,
@@ -17,6 +18,7 @@ from hierarchical_edge_sim.env.api import (
 __all__ = [
     "NeedHorizontalAction",
     "NeedVicinityHelpAction",
+    "NeedGlobalHelpAction",
     "ResizeAction",
     "ResizeResult",
     "ResizeResultCode",

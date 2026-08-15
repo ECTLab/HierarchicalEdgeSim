@@ -31,8 +31,9 @@ _APPLY_RANK: dict[str, int] = {
     "terminate": 0,
     "need_horizontal": 1,
     "need_vicinity_help": 2,
-    "resize": 3,
-    "spawn": 4,
+    "need_global_help": 3,
+    "resize": 4,
+    "spawn": 5,
 }
 
 
@@ -162,11 +163,25 @@ class NeedHorizontalAction:
 
 @dataclass(frozen=True, slots=True)
 class NeedVicinityHelpAction:
-    """Leftover after local (and, when a vicinity exists, after leader placement). Log-only until S5."""
+    """Leftover after local BEV/BEH when there is no vicinity root (S2). Log-only."""
 
     type: str  # "need_vicinity_help"
     ms_id: str
     reason: str = "need_vicinity_help"
+    tau: int | None = None
+    residual_cpu_cores: float | None = None
+    residual_ram_mb: float | None = None
+    cluster_id: str = ""
+    container_id: str = ""  # unused; kept for uniform logging
+
+
+@dataclass(frozen=True, slots=True)
+class NeedGlobalHelpAction:
+    """Leftover after BEG exhausted candidates. Paper LogUnmetDemand; log-only."""
+
+    type: str  # "need_global_help"
+    ms_id: str
+    reason: str = "need_global_help"
     tau: int | None = None
     residual_cpu_cores: float | None = None
     residual_ram_mb: float | None = None
@@ -806,7 +821,7 @@ class Env:
 
         for action in ordered:
             action_type = getattr(action, "type", "")
-            if action_type in ("need_horizontal", "need_vicinity_help"):
+            if action_type in ("need_horizontal", "need_vicinity_help", "need_global_help"):
                 self.action_log.append(
                     ActionLogRow(
                         tau=log_tau,

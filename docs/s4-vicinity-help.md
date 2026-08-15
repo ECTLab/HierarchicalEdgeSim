@@ -35,7 +35,7 @@ Why keep the named leader at all? So later stages (heartbeat timeout → skip vi
 3. Snapshot free CPU/RAM on all member servers; subtract this tick’s pending resize/spawn/terminate so two requests cannot over-commit the same worker.
 4. For each request, spawn at MS minima on **non-home** members only (home already tried BEH). Member order is YAML `members:`; within a cluster, servers by free CPU then id.
 5. Each spawn is `reason="vicinity_spawn"`, `loan_tier="vicinity"`, `actor_cluster_id=home`. `apply_actions` grants the loan on the neighbor worker (and drops it if spawn fails).
-6. If residual remains, emit log-only `NeedVicinityHelpAction` (S5 BEG consumes this).
+6. If residual remains, S5 BEG consumes it (`NeedGlobalHelpAction` if BEG also fails).
 
 Borrowed replicas live in the same `World` the app owner already reads (routing, metrics, later terminate). No mirror/status RPC.
 
@@ -60,7 +60,7 @@ Every decision tick, after every MS has walked local up (or down):
 2. Leftover `(remain_cpu, remain_ram)` becomes a `HelpRequest` (FCFS `seq` = `list_microservices()` order).
 3. If `World.root` is `None` (no `topology.vicinities`): same as S2 — log-only `NeedVicinityHelpAction`.
 4. If a vicinity exists: run the leader round above (`schedule_vicinity_help`).
-5. Still leftover after that round → log-only `NeedVicinityHelpAction` (S5 BEG will consume this).
+5. Still leftover after that round → **S5 BEG** (see [s5-global-help.md](./s5-global-help.md)); if BEG also fails, log-only `NeedGlobalHelpAction`.
 6. **Down:** terminate **borrowed** replicas before local extras (never the last replica). Full global→vicinity→local order is S6.
 
 ---
@@ -84,8 +84,8 @@ Scaler name stays `reactive_local` (roadmap: grow this plugin rather than a sibl
 `tests/test_vicinity_help.py`:
 
 - Home saturated, neighbor free → spawn on neighbor + vicinity loan
-- Two MS, one neighbor slot → FCFS first `ms_id` wins; second stays `need_vicinity_help`
-- Vicinity also full → `need_vicinity_help` logged, no loan
+- Two MS, one neighbor slot → FCFS first `ms_id` wins; second escalates (S5: `need_global_help` when no outside cluster)
+- Vicinity also full and no outside cluster → `need_global_help` logged, no loan
 - Scale-down prefers the borrowed replica and drops the loan
 - Failed foreign spawn with `loan_tier` does not leave a loan
 - Scripted `apply_actions` grant path
@@ -107,7 +107,7 @@ python3 examples/run_with_autoscaler.py configs/demo_60_vicinity_help.yaml
 
 ## Out of scope (later stages)
 
-BEG / global loans (S5). Reclaim order global→vicinity→local and cascade-home (S6). Distance ranking and Reserve inside the vicinity.
+Reclaim order global→vicinity→local and cascade-home (S6). Distance ranking and Reserve inside the vicinity.
 
 ---
 

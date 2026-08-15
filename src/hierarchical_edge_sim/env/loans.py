@@ -1,4 +1,4 @@
-"""Loan registry helpers (paper L_j). S4 grants vicinity loans on remote spawn."""
+"""Loan registry helpers (paper L_j). Vicinity and global grants on remote spawn."""
 
 from __future__ import annotations
 

@@ -10,6 +10,7 @@ import yaml
 from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
 from hierarchical_edge_sim.env.api import (
     Env,
+    NeedGlobalHelpAction,
     NeedVicinityHelpAction,
     SpawnAction,
     SpawnResultCode,
@@ -203,6 +204,7 @@ def test_home_saturated_spawns_on_neighbor_with_vicinity_loan(tmp_path):
     assert spawn.actor_cluster_id == "c1"
     assert spawn.cpu_alloc_cores == 0.5
     assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
+    assert not any(isinstance(a, NeedGlobalHelpAction) for a in actions)
 
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert results[0].ok
@@ -219,29 +221,31 @@ def test_fcfs_one_neighbor_slot_second_ms_still_needs_help(tmp_path):
     _push_drops(env, 1, "ingest")
     actions = scaler.on_tick_end(env, 1)
     spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
-    helps = [a for a in actions if isinstance(a, NeedVicinityHelpAction)]
+    helps = [a for a in actions if isinstance(a, NeedGlobalHelpAction)]
     assert len(spawns) == 1
     assert spawns[0].ms_id == "api"
     assert spawns[0].server_id == "c2-w1"
     assert len(helps) == 1
     assert helps[0].ms_id == "ingest"
+    assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
     env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert has_loan(env.get_server("c2-w1"), "c1", "api")
     assert not has_loan(env.get_server("c2-w1"), "c1", "ingest")
 
 
-def test_vicinity_full_logs_need_vicinity_help(tmp_path):
+def test_vicinity_full_logs_need_global_help(tmp_path):
     env = _write_vicinity_world(tmp_path, c2_cpu=0.4, c2_ram=256.0)
     scaler = _up_scaler()
     _push_drops(env, 1)
     actions = scaler.on_tick_end(env, 1)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)
-    helps = [a for a in actions if isinstance(a, NeedVicinityHelpAction)]
+    assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
+    helps = [a for a in actions if isinstance(a, NeedGlobalHelpAction)]
     assert len(helps) == 1
     assert helps[0].cluster_id == "c1"
     env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert any(
-        row.action_type == "need_vicinity_help" and row.result_code == "LOGGED"
+        row.action_type == "need_global_help" and row.result_code == "LOGGED"
         for row in env.action_log
     )
     assert env.get_server("c2-w1").loans == []

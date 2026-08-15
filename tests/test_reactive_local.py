@@ -18,6 +18,7 @@ from hierarchical_edge_sim.env.models import ContainerTickRecord
 def test_params_defaults_and_unknown_key():
     p = validate_params({})
     assert p.sustained_up_streak == 6
+    assert p.cascade_home is True
     with pytest.raises(ValueError, match="unknown reactive_local"):
         validate_params({"not_a_param": 1})
 

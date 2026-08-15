@@ -61,7 +61,7 @@ Every decision tick, after every MS has walked local up (or down):
 3. If `World.root` is `None` (no `topology.vicinities`): same as S2 — log-only `NeedVicinityHelpAction`.
 4. If a vicinity exists: run the leader round above (`schedule_vicinity_help`).
 5. Still leftover after that round → **S5 BEG** (see [s5-global-help.md](./s5-global-help.md)); if BEG also fails, log-only `NeedGlobalHelpAction`.
-6. **Down:** terminate **borrowed** replicas before local extras (never the last replica). Full global→vicinity→local order is S6.
+6. **Down:** terminate global loans, then vicinity, then local extras (never the last). Optional cascade-home is S6.
 
 ---
 
@@ -107,7 +107,7 @@ python3 examples/run_with_autoscaler.py configs/demo_60_vicinity_help.yaml
 
 ## Out of scope (later stages)
 
-Reclaim order global→vicinity→local and cascade-home (S6). Distance ranking and Reserve inside the vicinity.
+Reclaim order global→vicinity→local and cascade-home are **S6** — see [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md). Distance ranking and Reserve inside the vicinity.
 
 ---
 

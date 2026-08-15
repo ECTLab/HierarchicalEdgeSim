@@ -17,6 +17,7 @@ from hierarchical_edge_sim.env.config import EPS
 
 from .beg import leftover_to_global_help, schedule_beg
 from .beh import beh_down, beh_up, home_cluster_id
+from .cascade import check_cascading_migration
 from .help import HelpRequest
 from .params import ReactiveLocalParams, validate_params
 from .vicinity import leftover_to_help_action, schedule_vicinity_help
@@ -211,18 +212,34 @@ def _ladder_down(
     remain_cpu = max(0.0, delta_cpu - granted_cpu)
     remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
     skip_ids = {a.container_id for a in bev}
+    owner = home_cluster_id(env, ms_id)
     terms = beh_down(
         env=env,
         replicas=replicas,
         ms_id=ms_id,
-        owner_cluster_id=home_cluster_id(env, ms_id),
+        owner_cluster_id=owner,
         remain_cpu=remain_cpu,
         remain_ram=remain_ram,
         ram_modeled=ram_modeled,
         skip_ids=skip_ids,
         tau=tau,
     )
-    return [*bev, *terms]
+    actions: list[Any] = [*bev, *terms]
+    if params.cascade_home:
+        freed_cpu, freed_ram = _freed_local(env, replicas, actions, owner)
+        actions.extend(
+            check_cascading_migration(
+                env,
+                ms_id=ms_id,
+                owner_cluster_id=owner,
+                spec=spec,
+                freed_cpu=freed_cpu,
+                freed_ram=freed_ram,
+                pending=actions,
+                tau=tau,
+            )
+        )
+    return actions
 
 
 def _up_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
@@ -261,6 +278,34 @@ def _granted_down(replicas: list[ReplicaView], actions: list) -> tuple[float, fl
             cpu += max(0.0, view.cpu_alloc - float(action.cpu_alloc_cores))
         if action.ram_alloc_mb is not None:
             ram += max(0.0, view.ram_alloc - float(action.ram_alloc_mb))
+    return cpu, ram
+
+
+def _freed_local(
+    env: Env,
+    replicas: list[ReplicaView],
+    actions: list,
+    owner_cluster_id: str,
+) -> tuple[float, float]:
+    """Local CPU/RAM released this tick by BEV shrink or local terminate (not loans)."""
+    by_id = {r.container_id: r for r in replicas}
+    cpu = ram = 0.0
+    for action in actions:
+        view = by_id.get(getattr(action, "container_id", ""), None)
+        if view is None:
+            continue
+        sid = view.server_id or env.get_container(view.container_id).server_id
+        if env.get_server(sid).cluster_id != owner_cluster_id:
+            continue
+        kind = getattr(action, "type", "")
+        if kind == "resize":
+            if action.cpu_alloc_cores is not None:
+                cpu += max(0.0, view.cpu_alloc - float(action.cpu_alloc_cores))
+            if action.ram_alloc_mb is not None:
+                ram += max(0.0, view.ram_alloc - float(action.ram_alloc_mb))
+        elif kind == "terminate":
+            cpu += view.cpu_alloc
+            ram += view.ram_alloc
     return cpu, ram
 
 

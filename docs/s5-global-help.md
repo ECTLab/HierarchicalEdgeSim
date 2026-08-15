@@ -70,7 +70,7 @@ python3 examples/run_with_autoscaler.py configs/demo_60_global_help.yaml
 
 ## Out of scope (later stages)
 
-S6 reclaim order global→vicinity→local and cascade-home. Paper load–distance score. Proactive residual (S7).
+S6 reclaim order and cascade-home are **done** — see [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md). Paper load–distance score. Proactive residual (S7).
 
 ---
 

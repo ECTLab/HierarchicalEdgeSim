@@ -26,6 +26,8 @@ class ReactiveLocalParams:
     # Prolonged surge: skip BEV and go straight to BEH (paper Alg. BEV).
     # Default above x_up_streak so the first UP still tries vertical packing.
     sustained_up_streak: int = 6
+    # After a down tick frees local minima, pull at most one borrowed replica home.
+    cascade_home: bool = True
 
 
 def _parse_grow_weights(val: Any) -> tuple[float, float, float]:
@@ -70,6 +72,7 @@ def validate_params(raw: dict[str, Any]) -> ReactiveLocalParams:
         grow_weights=grow,
         shrink_weights=shrink,
         sustained_up_streak=int(data.pop("sustained_up_streak", 6)),
+        cascade_home=bool(data.pop("cascade_home", True)),
     )
     if data:
         raise ValueError(f"unknown reactive_local params: {sorted(data)}")

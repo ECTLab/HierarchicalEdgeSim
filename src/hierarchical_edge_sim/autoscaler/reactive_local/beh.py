@@ -7,6 +7,8 @@ import math
 from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
+from hierarchical_edge_sim.env.loans import get_loan
+from hierarchical_edge_sim.env.models import LoanTier
 
 
 def home_cluster_id(env: Env, ms_id: str) -> str:
@@ -115,16 +117,11 @@ def beh_down(
     skip_ids: set[str],
     tau: int,
 ) -> list[TerminateAction]:
-    """Terminate borrowed replicas first, then coldest local (never the last).
-
-    Full global→vicinity→local order is S6; S4 only prefers any remote loan over local.
-    """
+    """Terminate global loans, then vicinity loans, then coldest local (never the last)."""
     live = [r for r in replicas if r.container_id not in skip_ids]
 
-    def _key(r: ReplicaView) -> tuple[int, float, float, str]:
-        sid = r.server_id or env.get_container(r.container_id).server_id
-        remote = 0 if env.get_server(sid).cluster_id != owner_cluster_id else 1
-        return (remote, r.q, -r.slack, r.container_id)
+    def _key(r: ReplicaView) -> tuple[int, int, float, float, str]:
+        return (*_reclaim_key(env, r, owner_cluster_id, ms_id), r.q, -r.slack, r.container_id)
 
     ranked = sorted(live, key=_key)
     actions: list[TerminateAction] = []
@@ -146,6 +143,21 @@ def beh_down(
         remain_cpu = max(0.0, remain_cpu - r.cpu_alloc)
         remain_ram = max(0.0, remain_ram - r.ram_alloc)
     return actions
+
+
+def _reclaim_key(
+    env: Env, replica: ReplicaView, owner_cluster_id: str, ms_id: str
+) -> tuple[int, int]:
+    """(tier, ts): global=0, vicinity=1, local=2; older loan ts first."""
+    sid = replica.server_id or env.get_container(replica.container_id).server_id
+    server = env.get_server(sid)
+    if server.cluster_id == owner_cluster_id:
+        return (2, 0)
+    loan = get_loan(server, owner_cluster_id, ms_id)
+    if loan is not None and loan.tier == LoanTier.VICINITY:
+        return (1, loan.ts)
+    ts = loan.ts if loan is not None else 0
+    return (0, ts)
 
 
 def _subtract_pending_resizes(

@@ -60,9 +60,9 @@ python3 -m pytest tests/ -q
 
 ---
 
-## Out of scope (S4)
+## Out of scope (later stages)
 
-Vicinity leader grants, auto `add_loan` on remote spawn, Reserve/safe ceilings.
+Vicinity leader grants are **S4** — see [s4-vicinity-help.md](./s4-vicinity-help.md). Reserve/safe ceilings still later.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Per-MS reactive local ladder: BEV then in-cluster BEH."""
+"""Per-MS reactive local ladder: BEV then in-cluster BEH then vicinity help."""
 
 from __future__ import annotations
 
@@ -12,11 +12,12 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
     leftover_from_need_horizontal,
     strip_need_horizontal,
 )
-from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction, ResizeResult
+from hierarchical_edge_sim.env.api import Env, ResizeResult
 from hierarchical_edge_sim.env.config import EPS
 
 from .beh import beh_down, beh_up, home_cluster_id
 from .params import ReactiveLocalParams, validate_params
+from .vicinity import HelpRequest, leftover_to_help_action, schedule_vicinity_help
 
 
 @dataclass(slots=True)
@@ -36,6 +37,8 @@ class ReactiveLocalAutoscaler:
 
     def on_tick_end(self, env: Env, tau: int) -> list[Any]:
         actions: list[Any] = []
+        help_q: list[HelpRequest] = []
+        seq = 0
         self._pending_ms.clear()
         for ms_id in env.list_microservices():
             st = self._state.setdefault(ms_id, _MsState())
@@ -69,15 +72,32 @@ class ReactiveLocalAutoscaler:
                 continue
 
             if st.u_streak >= self.params.x_up_streak:
-                ms_actions = _ladder_up(env, ms_id, tau, obs, self.params, st)
+                ms_actions, leftover = _ladder_up(env, ms_id, tau, obs, self.params, st)
+                actions.extend(ms_actions)
+                if leftover is not None:
+                    leftover.seq = seq
+                    help_q.append(leftover)
+                    seq += 1
             elif st.d_streak >= self.params.y_down_streak:
-                ms_actions = _ladder_down(env, ms_id, tau, obs, self.params)
+                actions.extend(_ladder_down(env, ms_id, tau, obs, self.params))
             else:
                 continue
 
-            if any(getattr(a, "type", "") in {"resize", "spawn", "terminate"} for a in ms_actions):
-                self._pending_ms.add(ms_id)
-            actions.extend(ms_actions)
+        if help_q:
+            if env.root is not None:
+                vspawns, unresolved = schedule_vicinity_help(
+                    env, help_q, pending=actions, tau=tau
+                )
+                actions.extend(vspawns)
+                actions.extend(leftover_to_help_action(u) for u in unresolved)
+            else:
+                actions.extend(leftover_to_help_action(u) for u in help_q)
+
+        self._pending_ms = {
+            getattr(a, "ms_id", "")
+            for a in actions
+            if getattr(a, "type", "") in {"resize", "spawn", "terminate"} and getattr(a, "ms_id", "")
+        }
         return actions
 
     def on_actions_applied(self, results: list[ResizeResult]) -> None:
@@ -104,7 +124,7 @@ def _ladder_up(
     obs: dict,
     params: ReactiveLocalParams,
     st: _MsState,
-) -> list[Any]:
+) -> tuple[list[Any], HelpRequest | None]:
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     need_cpu, need_ram = _up_delta(obs, params)
@@ -141,19 +161,19 @@ def _ladder_up(
         pending_resize=actions,
     )
     actions.extend(spawns)
+    leftover: HelpRequest | None = None
     if remain_cpu > EPS or remain_ram > EPS:
-        actions.append(
-            NeedVicinityHelpAction(
-                type="need_vicinity_help",
-                ms_id=ms_id,
-                reason="need_vicinity_help",
-                tau=tau,
-                residual_cpu_cores=remain_cpu,
-                residual_ram_mb=remain_ram,
-                cluster_id=cluster_id,
-            )
+        leftover = HelpRequest(
+            seq=0,
+            tau=tau,
+            ms_id=ms_id,
+            home_cluster_id=cluster_id,
+            remain_cpu=remain_cpu,
+            remain_ram=remain_ram,
+            cpu_min=spec.cpu_min_cores,
+            ram_min=spec.ram_min_mb,
         )
-    return actions
+    return actions, leftover
 
 
 def _ladder_down(
@@ -186,8 +206,10 @@ def _ladder_down(
     remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
     skip_ids = {a.container_id for a in bev}
     terms = beh_down(
+        env=env,
         replicas=replicas,
         ms_id=ms_id,
+        owner_cluster_id=home_cluster_id(env, ms_id),
         remain_cpu=remain_cpu,
         remain_ram=remain_ram,
         ram_modeled=ram_modeled,

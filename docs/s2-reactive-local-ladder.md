@@ -27,7 +27,7 @@ Every decision tick, per microservice:
 
 **Sustained lock:** `sustained_up_streak` defaults to **6** vs `x_up_streak` **3**, so the first UP still tries vertical packing. Set `sustained_up_streak <= x_up_streak` to skip BEV on the first UP (tests do this).
 
-**Home cluster (until S3 ownership):** cluster of the first live replica (sorted container id). BEH only places on that cluster’s servers.
+**Home cluster:** `env.get_app_owner_cluster_id(ms_id)` (S3 stamp). BEH only places on that cluster’s servers. Leftover after BEH is queued for S4 vicinity help when `topology.vicinities` exists; otherwise it stays a log-only `NeedVicinityHelpAction`.
 
 ---
 

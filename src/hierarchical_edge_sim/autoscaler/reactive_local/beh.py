@@ -10,7 +10,7 @@ from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 
 
 def home_cluster_id(env: Env, ms_id: str) -> str:
-    """App-owning cluster (paper stamp). BEH stays inside this cluster until S4."""
+    """App-owning cluster (paper stamp). BEH stays inside this cluster; S4 places leftovers."""
     return env.get_app_owner_cluster_id(ms_id)
 
 
@@ -105,17 +105,28 @@ def beh_up(
 
 def beh_down(
     *,
+    env: Env,
     replicas: list[ReplicaView],
     ms_id: str,
+    owner_cluster_id: str,
     remain_cpu: float,
     remain_ram: float,
     ram_modeled: bool,
     skip_ids: set[str],
     tau: int,
 ) -> list[TerminateAction]:
-    """Terminate coldest local replicas (never the last) until residual is absorbed."""
+    """Terminate borrowed replicas first, then coldest local (never the last).
+
+    Full global→vicinity→local order is S6; S4 only prefers any remote loan over local.
+    """
     live = [r for r in replicas if r.container_id not in skip_ids]
-    ranked = sorted(live, key=lambda r: (r.q, -r.slack, r.container_id))
+
+    def _key(r: ReplicaView) -> tuple[int, float, float, str]:
+        sid = r.server_id or env.get_container(r.container_id).server_id
+        remote = 0 if env.get_server(sid).cluster_id != owner_cluster_id else 1
+        return (remote, r.q, -r.slack, r.container_id)
+
+    ranked = sorted(live, key=_key)
     actions: list[TerminateAction] = []
     n_live = len(replicas)
     for r in ranked:

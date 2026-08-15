@@ -1,4 +1,4 @@
-"""Loan registry helpers (paper L_j). Empty until S4 grants; S3 tests the API."""
+"""Loan registry helpers (paper L_j). S4 grants vicinity loans on remote spawn."""
 
 from __future__ import annotations
 

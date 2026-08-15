@@ -10,9 +10,9 @@ from typing import Any
 
 from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml
 from .engine import EngineState, run_ticks, tick
-from .loans import count_ms_on_server, drop_loan, has_loan
+from .loans import add_loan, count_ms_on_server, drop_loan, has_loan
 from .metrics_log import make_run_id, write_run_outputs
-from .models import App, Cluster, Container, Microservice, Server, Vicinity
+from .models import App, Cluster, Container, LoanTier, Microservice, Server, Vicinity
 from .root import RootOrchestrator
 from .traces import TraceStore, load_traces
 from .validate import validate_or_raise
@@ -132,6 +132,7 @@ class SpawnAction:
     reason: str = ""
     tau: int | None = None
     actor_cluster_id: str = ""
+    loan_tier: str = ""  # "vicinity" | "global"; S4 grant for foreign spawn
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +162,7 @@ class NeedHorizontalAction:
 
 @dataclass(frozen=True, slots=True)
 class NeedVicinityHelpAction:
-    """Signal that the local cluster cannot cover remaining scale-up demand (S2 log-only)."""
+    """Leftover after local (and, when a vicinity exists, after leader placement). Log-only until S5."""
 
     type: str  # "need_vicinity_help"
     ms_id: str
@@ -342,14 +343,15 @@ class Env:
         cpu_alloc_cores: float | None = None,
         ram_alloc_mb: float | None = None,
         tau: int | None = None,
+        loan_tier: str = "",
     ) -> ResizeResult | SpawnResult | TerminateResult:
         """Single writer for a worker: only the worker-owner or a loaned borrower may mutate.
 
         Direct ``resize`` / ``spawn`` / ``terminate`` remain the physical ops; this is the
-        authorized path (paper RequestWorkerOwnerScale). S4 will grant loans; S3 rejects
-        foreign actors without a registry entry.
+        authorized path (paper RequestWorkerOwnerScale). Foreign actors without a loan are
+        rejected. Passing ``loan_tier`` (``vicinity`` / ``global``) grants a fresh loan and
+        then spawns; a failed spawn rolls the grant back.
         """
-        _ = tau
         if act == "resize":
             return self._owner_resize(
                 actor_cluster_id=actor_cluster_id,
@@ -365,6 +367,8 @@ class Env:
                 cpu_alloc_cores=cpu_alloc_cores,
                 ram_alloc_mb=ram_alloc_mb,
                 container_id=container_id,
+                loan_tier=loan_tier,
+                tau=tau,
             )
         if act == "terminate":
             return self._owner_terminate(
@@ -422,6 +426,8 @@ class Env:
         cpu_alloc_cores: float | None,
         ram_alloc_mb: float | None,
         container_id: str,
+        loan_tier: str = "",
+        tau: int | None = None,
     ) -> SpawnResult:
         if server_id not in self.world.servers:
             return SpawnResult(
@@ -433,23 +439,37 @@ class Env:
                 cpu_alloc_cores=0.0,
                 ram_alloc_mb=0.0,
             )
+        granted_new_loan = False
         if not self._authorized_for_server(actor_cluster_id, server_id, ms_id):
-            return SpawnResult(
-                ok=False,
-                code=SpawnResultCode.NOT_AUTHORIZED,
-                container_id=container_id or "",
+            tier = _parse_loan_tier(loan_tier)
+            if tier is None:
+                return SpawnResult(
+                    ok=False,
+                    code=SpawnResultCode.NOT_AUTHORIZED,
+                    container_id=container_id or "",
+                    ms_id=ms_id,
+                    server_id=server_id,
+                    cpu_alloc_cores=0.0,
+                    ram_alloc_mb=0.0,
+                )
+            add_loan(
+                self.world.servers[server_id],
+                borrower_cluster_id=actor_cluster_id,
                 ms_id=ms_id,
-                server_id=server_id,
-                cpu_alloc_cores=0.0,
-                ram_alloc_mb=0.0,
+                tier=tier,
+                ts=int(tau or self.state.current_tau or 0),
             )
-        return self.spawn(
+            granted_new_loan = True
+        result = self.spawn(
             ms_id=ms_id,
             server_id=server_id,
             cpu_alloc_cores=cpu_alloc_cores,
             ram_alloc_mb=ram_alloc_mb,
             container_id=container_id or None,
         )
+        if not result.ok and granted_new_loan:
+            drop_loan(self.world.servers[server_id], actor_cluster_id, ms_id)
+        return result
 
     def _owner_terminate(
         self,
@@ -927,6 +947,7 @@ class Env:
                     ram_alloc_mb=action.ram_alloc_mb,
                     container_id=requested_id,
                     tau=log_tau,
+                    loan_tier=getattr(action, "loan_tier", "") or "",
                 )
                 if requested_id:
                     seen_spawn_ids.add(requested_id)
@@ -1037,6 +1058,15 @@ class Env:
                 result_code=result.code.value,
             )
         )
+
+
+def _parse_loan_tier(raw: str) -> LoanTier | None:
+    if not raw:
+        return None
+    try:
+        return LoanTier(raw)
+    except ValueError:
+        return None
 
 
 def _invoke_autoscaler(env: Env, autoscaler: Any | None, tau: int) -> None:

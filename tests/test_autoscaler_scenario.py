@@ -47,10 +47,11 @@ def test_demo_config_loads_scaler(project_root: Path):
     for name in (
         "demo_300_two_containers_reactive.yaml",
         "demo_60_two_containers_reactive.yaml",
+        "demo_60_reactive_local.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
-        assert scaler.name == "reactive_vertical"
+        assert scaler.name in {"reactive_vertical", "reactive_local"}
 
 
 def test_integration_up_then_alloc_rises(tmp_path, project_root: Path):

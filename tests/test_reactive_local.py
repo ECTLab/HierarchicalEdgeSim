@@ -1,0 +1,237 @@
+"""S2: reactive_local BEV → in-cluster BEH."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from hierarchical_edge_sim.autoscaler.common.load import load_autoscaler_from_yaml
+from hierarchical_edge_sim.autoscaler.reactive_local.params import validate_params
+from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
+from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
+from hierarchical_edge_sim.env.models import ContainerTickRecord
+
+
+def test_params_defaults_and_unknown_key():
+    p = validate_params({})
+    assert p.sustained_up_streak == 6
+    with pytest.raises(ValueError, match="unknown reactive_local"):
+        validate_params({"not_a_param": 1})
+
+
+def _write_world(
+    tmp_path: Path,
+    *,
+    w1_cpu: float = 8.0,
+    w2_cpu: float = 8.0,
+    cpu_max: float = 4.0,
+    cpu_alloc: float = 1.0,
+    ram_alloc: float = 512.0,
+    ram_max: float = 2048.0,
+    two_replicas: bool = False,
+) -> Env:
+    containers: list[dict[str, Any]] = [
+        {
+            "id": "c-api-1",
+            "server_id": "c1-w1",
+            "cpu_alloc_cores": cpu_alloc,
+            "ram_alloc_mb": ram_alloc,
+        }
+    ]
+    if two_replicas:
+        containers.append(
+            {
+                "id": "c-api-2",
+                "server_id": "c1-w2",
+                "cpu_alloc_cores": cpu_alloc,
+                "ram_alloc_mb": ram_alloc,
+            }
+        )
+    cfg: dict[str, Any] = {
+        "sim": {"tick_sec": 1.0, "results_dir": str(tmp_path / "results"), "seed": 1},
+        "traces_dir": "traces/demo/",
+        "topology": {
+            "clusters": [
+                {
+                    "id": "c1",
+                    "servers": [
+                        {"id": "c1-w1", "cpu_cap_cores": w1_cpu, "ram_cap_mb": 4096},
+                        {"id": "c1-w2", "cpu_cap_cores": w2_cpu, "ram_cap_mb": 4096},
+                    ],
+                }
+            ]
+        },
+        "apps": [
+            {
+                "id": "demo_app",
+                "microservices": [
+                    {
+                        "id": "api",
+                        "cpu_min_cores": 0.5,
+                        "cpu_max_cores": cpu_max,
+                        "ram_min_mb": 256,
+                        "ram_max_mb": ram_max,
+                        "cpu_per_request_cores": 0.01,
+                        "ram_per_request_mb": 0.5,
+                        "trace_file": "api.csv",
+                        "containers": containers,
+                    }
+                ],
+            }
+        ],
+    }
+    tdir = tmp_path / "traces" / "demo"
+    tdir.mkdir(parents=True)
+    rows = ["time_unit,requests"] + [f"{i},50" for i in range(1, 11)]
+    (tdir / "api.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    path = tmp_path / "cfg.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return Env.from_config(path)
+
+
+def _push_drops(env: Env, tau: int, *, drop: float = 40.0, q: float = 1.0) -> None:
+    for cid in env.get_microservice("api").container_ids:
+        c = env.get_container(cid)
+        served = 10.0
+        c.append_history(
+            ContainerTickRecord(
+                tau=tau,
+                lambda_in=served + drop,
+                lambda_served=served,
+                lambda_dropped=drop,
+                cpu_usage_cores=c.cpu_alloc_cores,
+                ram_usage_mb=c.ram_alloc_mb,
+                cpu_alloc_cores=c.cpu_alloc_cores,
+                ram_alloc_mb=c.ram_alloc_mb,
+                q_cpu=q,
+                q_ram=q,
+            )
+        )
+    env.state.current_tau = tau
+
+
+def _push_slack(env: Env, tau: int) -> None:
+    for cid in env.get_microservice("api").container_ids:
+        c = env.get_container(cid)
+        c.append_history(
+            ContainerTickRecord(
+                tau=tau,
+                lambda_in=1.0,
+                lambda_served=1.0,
+                lambda_dropped=0.0,
+                cpu_usage_cores=c.cpu_alloc_cores * 0.1,
+                ram_usage_mb=c.ram_alloc_mb * 0.1,
+                cpu_alloc_cores=c.cpu_alloc_cores,
+                ram_alloc_mb=c.ram_alloc_mb,
+                q_cpu=0.1,
+                q_ram=0.1,
+            )
+        )
+    env.state.current_tau = tau
+
+
+def test_ms_max_spawns_on_same_worker_when_server_has_room(tmp_path):
+    env = _write_world(
+        tmp_path, cpu_max=1.0, cpu_alloc=1.0, ram_alloc=2048.0, ram_max=2048.0, w1_cpu=8.0, w2_cpu=8.0
+    )
+    scaler = build(
+        {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 99}
+    )
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
+    assert spawns
+    assert spawns[0].server_id == "c1-w1"
+    assert spawns[0].cpu_alloc_cores == 0.5
+    assert not any(getattr(a, "type", "") == "resize" for a in actions)
+
+
+def test_worker_full_spawns_on_sibling(tmp_path):
+    env = _write_world(
+        tmp_path, cpu_max=1.0, cpu_alloc=1.0, ram_alloc=2048.0, ram_max=2048.0, w1_cpu=1.0, w2_cpu=8.0
+    )
+    scaler = build(
+        {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 99}
+    )
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
+    assert len(spawns) == 1
+    assert spawns[0].server_id == "c1-w2"
+
+
+def test_cluster_full_logs_need_vicinity_help(tmp_path):
+    env = _write_world(
+        tmp_path, cpu_max=1.0, cpu_alloc=1.0, ram_alloc=2048.0, ram_max=2048.0, w1_cpu=1.0, w2_cpu=0.4
+    )
+    scaler = build(
+        {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 99}
+    )
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
+    helps = [a for a in actions if isinstance(a, NeedVicinityHelpAction)]
+    assert len(helps) == 1
+    assert helps[0].cluster_id == "c1"
+    env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
+    assert any(row.action_type == "need_vicinity_help" and row.result_code == "LOGGED" for row in env.action_log)
+
+
+def test_sustained_skips_bev(tmp_path):
+    env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0, w1_cpu=8.0)
+    scaler = build(
+        {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 1}
+    )
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    assert any(getattr(a, "type", "") == "spawn" for a in actions)
+    assert not any(getattr(a, "type", "") == "resize" for a in actions)
+
+
+def test_non_sustained_uses_bev_when_vertical_room(tmp_path):
+    env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0, w1_cpu=8.0)
+    scaler = build(
+        {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 99}
+    )
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_up" for a in actions)
+    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
+
+
+def test_down_terminates_extra_replica_at_minima(tmp_path):
+    env = _write_world(tmp_path, two_replicas=True, cpu_alloc=0.5, cpu_max=4.0)
+    scaler = build(
+        {
+            "x_up_streak": 99,
+            "y_down_streak": 1,
+            "cooldown_ticks": 0,
+            "theta_free": 0.35,
+            "sustained_up_streak": 99,
+        }
+    )
+    _push_slack(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
+    assert len(terms) == 1
+    assert terms[0].container_id in {"c-api-1", "c-api-2"}
+
+
+def test_yaml_loads_reactive_local(tmp_path):
+    env = _write_world(tmp_path)
+    cfg = yaml.safe_load((tmp_path / "cfg.yaml").read_text(encoding="utf-8"))
+    cfg["autoscaler"] = {
+        "enabled": True,
+        "name": "reactive_local",
+        "params": {"x_up_streak": 1, "sustained_up_streak": 4},
+    }
+    path = tmp_path / "with_scaler.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    scaler = load_autoscaler_from_yaml(path)
+    assert scaler is not None
+    assert scaler.name == "reactive_local"
+    assert scaler.params.sustained_up_streak == 4
+    _ = env

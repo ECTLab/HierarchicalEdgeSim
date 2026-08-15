@@ -1,0 +1,86 @@
+# S2 — Reactive local ladder (BEV → BEH)
+
+**Status:** done  
+**Branch:** `ladder-based-implementation`  
+**Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S2  
+**Depends on:** [s1-horizontal-mutation-apis.md](./s1-horizontal-mutation-apis.md)
+
+S2 adds a **policy** that uses S1 mutations. `reactive_vertical` stays as a BEV-only baseline. The new scaler is `reactive_local`.
+
+---
+
+## Behavior
+
+Every decision tick, per microservice:
+
+1. Same reactive signals as vertical (drop streak → up, slack streak → down).
+2. **Up — AllocateResources local tiers**
+   - If the up-streak is **not** yet `sustained_up_streak`: **BEV** packs residual onto existing replicas (`common.distribute.distribute_up`).
+   - Leftover residual (or the full residual if **sustained**, skipping BEV) goes to **BEH**:
+     - Prefer servers in the home cluster that already host the MS
+     - Then other servers in that cluster by free CPU
+     - Spawn at MS minima until residual is covered or the cluster cannot fit another replica
+   - If residual remains → log-only `NeedVicinityHelpAction` (no vicinity protocol yet; S4).
+3. **Down**
+   - BEV shrink toward minima, then **terminate coldest extra replicas** (never the last).
+   - Down never emits vicinity/global help.
+
+**Sustained lock:** `sustained_up_streak` defaults to **6** vs `x_up_streak` **3**, so the first UP still tries vertical packing. Set `sustained_up_streak <= x_up_streak` to skip BEV on the first UP (tests do this).
+
+**Home cluster (until S3 ownership):** cluster of the first live replica (sorted container id). BEH only places on that cluster’s servers.
+
+---
+
+## What landed
+
+| Piece | Role |
+|---|---|
+| `NeedVicinityHelpAction` | Log-only escalation; `apply_actions` writes `need_vicinity_help` / `LOGGED` |
+| `autoscaler/common/distribute.py` | Shared BEV packing (vertical re-exports it) |
+| `autoscaler/reactive_local/` | Policy + in-cluster BEH |
+| `configs/demo_60_reactive_local.yaml` | One replica + empty sibling worker |
+
+Apply order is now: terminate → need_horizontal → need_vicinity_help → resize → spawn.
+
+---
+
+## Tests
+
+`tests/test_reactive_local.py`:
+
+- MS CPU/RAM max but server still has room → spawn on the **same** worker
+- Home worker full, sibling free → spawn on the **sibling**
+- Cluster full → `need_vicinity_help` logged, no crash
+- Sustained surge → spawn **without** resize
+- Non-sustained with vertical room → BEV resize only
+- Two replicas at minima + slack → terminate one
+- YAML `name: reactive_local` loads
+
+How to run:
+
+```bash
+python3 -m pytest tests/ -q
+python3 -m pytest tests/test_reactive_local.py -v
+```
+
+**Result when S2 landed:** 130 passed, 0 failed.
+
+Demo:
+
+```bash
+python3 examples/run_with_autoscaler.py configs/demo_60_reactive_local.yaml
+```
+
+---
+
+## Out of scope (later stages)
+
+Loans, app-owner vs worker-owner RPC, vicinity leader schedule, BEG. `NeedVicinityHelp` is a log line until S4.
+
+---
+
+## Document history
+
+| Version | Date | Note |
+|---|---|---|
+| v1 | 2026-08-15 | S2 reactive_local BEV→BEH notes |

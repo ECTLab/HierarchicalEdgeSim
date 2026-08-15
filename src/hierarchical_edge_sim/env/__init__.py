@@ -26,6 +26,7 @@ from .metrics_log import make_run_id, write_run_outputs
 from .api import (
     Env,
     NeedHorizontalAction,
+    NeedVicinityHelpAction,
     RejectReason,
     ResizeAction,
     ResizeResult,
@@ -91,4 +92,5 @@ __all__ = [
     "TerminateResult",
     "TerminateAction",
     "NeedHorizontalAction",
+    "NeedVicinityHelpAction",
 ]

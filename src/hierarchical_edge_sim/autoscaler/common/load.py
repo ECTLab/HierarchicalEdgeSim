@@ -40,4 +40,8 @@ def build_from_wrapper(wrapper: AutoscalerWrapper | None) -> Any | None:
         from hierarchical_edge_sim.autoscaler.reactive_vertical import build
 
         return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
+    if wrapper.name == "reactive_local":
+        from hierarchical_edge_sim.autoscaler.reactive_local import build
+
+        return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
     raise AutoscalerLoadError(f"no builder registered for '{wrapper.name}'")

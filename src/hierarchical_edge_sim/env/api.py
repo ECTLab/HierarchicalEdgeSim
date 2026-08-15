@@ -25,12 +25,13 @@ from .world import (
 )
 
 
-# Apply order lock (S1): terminate → need_horizontal (log) → resize → spawn
+# Apply order lock: terminate → log-only signals → resize → spawn
 _APPLY_RANK: dict[str, int] = {
     "terminate": 0,
     "need_horizontal": 1,
-    "resize": 2,
-    "spawn": 3,
+    "need_vicinity_help": 2,
+    "resize": 3,
+    "spawn": 4,
 }
 
 
@@ -148,6 +149,20 @@ class NeedHorizontalAction:
     tau: int | None = None
     residual_cpu_cores: float | None = None
     residual_ram_mb: float | None = None
+    container_id: str = ""  # unused; kept for uniform logging
+
+
+@dataclass(frozen=True, slots=True)
+class NeedVicinityHelpAction:
+    """Signal that the local cluster cannot cover remaining scale-up demand (S2 log-only)."""
+
+    type: str  # "need_vicinity_help"
+    ms_id: str
+    reason: str = "need_vicinity_help"
+    tau: int | None = None
+    residual_cpu_cores: float | None = None
+    residual_ram_mb: float | None = None
+    cluster_id: str = ""
     container_id: str = ""  # unused; kept for uniform logging
 
 
@@ -595,15 +610,15 @@ class Env:
 
         for action in ordered:
             action_type = getattr(action, "type", "")
-            if action_type == "need_horizontal":
+            if action_type in ("need_horizontal", "need_vicinity_help"):
                 self.action_log.append(
                     ActionLogRow(
                         tau=log_tau,
                         autoscaler_name=autoscaler_name,
                         ms_id=getattr(action, "ms_id", ""),
-                        action_type="need_horizontal",
-                        container_id="",
-                        reason=getattr(action, "reason", "need_horizontal"),
+                        action_type=action_type,
+                        container_id=getattr(action, "cluster_id", "") or "",
+                        reason=getattr(action, "reason", action_type),
                         cpu_old=None,
                         cpu_new=getattr(action, "residual_cpu_cores", None),
                         ram_old=None,

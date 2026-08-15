@@ -17,13 +17,26 @@ from .config import (
 from .validate import ConfigError, ValidationError, validate, validate_or_raise
 from .models import App, Cluster, Container, ContainerTickRecord, Microservice, Server, Vicinity
 from .root import RootOrchestrator
-from .world import World, build_world, place_container, server_free_cpu_cores, server_free_ram_mb
+from .world import World, build_world, place_container, remove_container, server_free_cpu_cores, server_free_ram_mb
 from .traces import TraceStore, load_traces
 from .usage import apply_tick, serving_capacity
 from .routing import distribute
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
-from .api import Env, NeedHorizontalAction, RejectReason, ResizeAction, ResizeResult, ResizeResultCode
+from .api import (
+    Env,
+    NeedHorizontalAction,
+    RejectReason,
+    ResizeAction,
+    ResizeResult,
+    ResizeResultCode,
+    SpawnAction,
+    SpawnResult,
+    SpawnResultCode,
+    TerminateAction,
+    TerminateResult,
+    TerminateResultCode,
+)
 
 __all__ = [
     "EPS",
@@ -53,6 +66,7 @@ __all__ = [
     "World",
     "build_world",
     "place_container",
+    "remove_container",
     "server_free_cpu_cores",
     "server_free_ram_mb",
     "TraceStore",
@@ -70,5 +84,11 @@ __all__ = [
     "ResizeResultCode",
     "ResizeResult",
     "ResizeAction",
+    "SpawnResultCode",
+    "SpawnResult",
+    "SpawnAction",
+    "TerminateResultCode",
+    "TerminateResult",
+    "TerminateAction",
     "NeedHorizontalAction",
 ]

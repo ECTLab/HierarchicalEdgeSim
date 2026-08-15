@@ -1,5 +1,27 @@
 """Re-export env action types for autoscaler modules."""
 
-from hierarchical_edge_sim.env.api import NeedHorizontalAction, ResizeAction, ResizeResult, ResizeResultCode
+from hierarchical_edge_sim.env.api import (
+    NeedHorizontalAction,
+    ResizeAction,
+    ResizeResult,
+    ResizeResultCode,
+    SpawnAction,
+    SpawnResult,
+    SpawnResultCode,
+    TerminateAction,
+    TerminateResult,
+    TerminateResultCode,
+)
 
-__all__ = ["NeedHorizontalAction", "ResizeAction", "ResizeResult", "ResizeResultCode"]
+__all__ = [
+    "NeedHorizontalAction",
+    "ResizeAction",
+    "ResizeResult",
+    "ResizeResultCode",
+    "SpawnAction",
+    "SpawnResult",
+    "SpawnResultCode",
+    "TerminateAction",
+    "TerminateResult",
+    "TerminateResultCode",
+]

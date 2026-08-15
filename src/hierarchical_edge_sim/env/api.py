@@ -8,14 +8,30 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .config import EPS, MicroserviceSpec, WorldSpec, load_yaml
+from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
 from .models import App, Cluster, Container, Microservice, Server, Vicinity
 from .root import RootOrchestrator
 from .traces import TraceStore, load_traces
 from .validate import validate_or_raise
-from .world import World, build_world, server_free_cpu_cores, server_free_ram_mb
+from .world import (
+    World,
+    build_world,
+    place_container,
+    remove_container,
+    server_free_cpu_cores,
+    server_free_ram_mb,
+)
+
+
+# Apply order lock (S1): terminate → need_horizontal (log) → resize → spawn
+_APPLY_RANK: dict[str, int] = {
+    "terminate": 0,
+    "need_horizontal": 1,
+    "resize": 2,
+    "spawn": 3,
+}
 
 
 class RejectReason(str, Enum):
@@ -33,11 +49,53 @@ class ResizeResultCode(str, Enum):
     DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
 
 
+class SpawnResultCode(str, Enum):
+    OK = "OK"
+    UNKNOWN_MS = "UNKNOWN_MS"
+    UNKNOWN_SERVER = "UNKNOWN_SERVER"
+    BELOW_MS_MIN = "BELOW_MS_MIN"
+    ABOVE_MS_MAX = "ABOVE_MS_MAX"
+    SERVER_CPU_EXCEEDED = "SERVER_CPU_EXCEEDED"
+    SERVER_RAM_EXCEEDED = "SERVER_RAM_EXCEEDED"
+    DUPLICATE_CONTAINER_ID = "DUPLICATE_CONTAINER_ID"
+    DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
+
+
+class TerminateResultCode(str, Enum):
+    OK = "OK"
+    UNKNOWN_CONTAINER = "UNKNOWN_CONTAINER"
+    LAST_REPLICA = "LAST_REPLICA"
+    MS_MISMATCH = "MS_MISMATCH"
+    DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
+
+
 @dataclass(frozen=True, slots=True)
 class ResizeResult:
     ok: bool
     code: ResizeResultCode
     container_id: str
+    cpu_alloc_cores: float
+    ram_alloc_mb: float
+
+
+@dataclass(frozen=True, slots=True)
+class SpawnResult:
+    ok: bool
+    code: SpawnResultCode
+    container_id: str
+    ms_id: str
+    server_id: str
+    cpu_alloc_cores: float
+    ram_alloc_mb: float
+
+
+@dataclass(frozen=True, slots=True)
+class TerminateResult:
+    ok: bool
+    code: TerminateResultCode
+    container_id: str
+    ms_id: str
+    server_id: str
     cpu_alloc_cores: float
     ram_alloc_mb: float
 
@@ -51,6 +109,31 @@ class ResizeAction:
     container_id: str
     cpu_alloc_cores: float | None = None
     ram_alloc_mb: float | None = None
+    reason: str = ""
+    tau: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SpawnAction:
+    """Horizontal scale-out proposal. Canonical env type."""
+
+    type: str  # "spawn"
+    ms_id: str
+    server_id: str
+    container_id: str = ""
+    cpu_alloc_cores: float | None = None
+    ram_alloc_mb: float | None = None
+    reason: str = ""
+    tau: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TerminateAction:
+    """Horizontal scale-in proposal. Canonical env type."""
+
+    type: str  # "terminate"
+    ms_id: str
+    container_id: str
     reason: str = ""
     tau: int | None = None
 
@@ -312,24 +395,202 @@ class Env:
             ram_alloc_mb=new_ram,
         )
 
+    def spawn(
+        self,
+        ms_id: str,
+        server_id: str,
+        cpu_alloc_cores: float | None = None,
+        ram_alloc_mb: float | None = None,
+        container_id: str | None = None,
+    ) -> SpawnResult:
+        """Create a new container for ``ms_id`` on ``server_id`` (horizontal scale-out).
+
+        Defaults alloc to MS minima when cpu/ram are omitted. Rejects alloc below
+        MS min, above MS max, or when the server lacks free capacity.
+        """
+        if ms_id not in self.world.microservices:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.UNKNOWN_MS,
+                container_id=container_id or "",
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        if server_id not in self.world.servers:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.UNKNOWN_SERVER,
+                container_id=container_id or "",
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+
+        spec = self.get_ms_spec(ms_id)
+        new_cpu = spec.cpu_min_cores if cpu_alloc_cores is None else float(cpu_alloc_cores)
+        new_ram = spec.ram_min_mb if ram_alloc_mb is None else float(ram_alloc_mb)
+        cid = container_id if container_id else self._allocate_container_id(ms_id, server_id)
+
+        if cid in self.world.containers:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.DUPLICATE_CONTAINER_ID,
+                container_id=cid,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        if new_cpu + EPS < spec.cpu_min_cores or new_ram + EPS < spec.ram_min_mb:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.BELOW_MS_MIN,
+                container_id=cid,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        if new_cpu > spec.cpu_max_cores + EPS or new_ram > spec.ram_max_mb + EPS:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.ABOVE_MS_MAX,
+                container_id=cid,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+
+        free_cpu, free_ram = self.get_server_free(server_id)
+        if new_cpu > free_cpu + EPS:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.SERVER_CPU_EXCEEDED,
+                container_id=cid,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        if new_ram > free_ram + EPS:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.SERVER_RAM_EXCEEDED,
+                container_id=cid,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+
+        ms = self.world.microservices[ms_id]
+        app = self.world.apps[ms.app_id]
+        server = self.world.servers[server_id]
+        place_container(
+            world=self.world,
+            server=server,
+            app=app,
+            microservice=ms,
+            spec=ContainerSpec(
+                id=cid,
+                server_id=server_id,
+                cpu_alloc_cores=new_cpu,
+                ram_alloc_mb=new_ram,
+            ),
+        )
+        return SpawnResult(
+            ok=True,
+            code=SpawnResultCode.OK,
+            container_id=cid,
+            ms_id=ms_id,
+            server_id=server_id,
+            cpu_alloc_cores=new_cpu,
+            ram_alloc_mb=new_ram,
+        )
+
+    def terminate(self, container_id: str, *, ms_id: str | None = None) -> TerminateResult:
+        """Remove a live container (horizontal scale-in).
+
+        Refuses to terminate the last replica of a microservice (routing requires
+        ≥1 live container).
+        """
+        if container_id not in self.world.containers:
+            return TerminateResult(
+                ok=False,
+                code=TerminateResultCode.UNKNOWN_CONTAINER,
+                container_id=container_id,
+                ms_id=ms_id or "",
+                server_id="",
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+
+        container = self.world.containers[container_id]
+        if ms_id is not None and ms_id != container.microservice_id:
+            return TerminateResult(
+                ok=False,
+                code=TerminateResultCode.MS_MISMATCH,
+                container_id=container_id,
+                ms_id=container.microservice_id,
+                server_id=container.server_id,
+                cpu_alloc_cores=container.cpu_alloc_cores,
+                ram_alloc_mb=container.ram_alloc_mb,
+            )
+
+        ms = self.world.microservices[container.microservice_id]
+        if len(ms.container_ids) <= 1:
+            return TerminateResult(
+                ok=False,
+                code=TerminateResultCode.LAST_REPLICA,
+                container_id=container_id,
+                ms_id=container.microservice_id,
+                server_id=container.server_id,
+                cpu_alloc_cores=container.cpu_alloc_cores,
+                ram_alloc_mb=container.ram_alloc_mb,
+            )
+
+        freed_cpu = container.cpu_alloc_cores
+        freed_ram = container.ram_alloc_mb
+        remove_container(self.world, container_id)
+        return TerminateResult(
+            ok=True,
+            code=TerminateResultCode.OK,
+            container_id=container_id,
+            ms_id=container.microservice_id,
+            server_id=container.server_id,
+            cpu_alloc_cores=freed_cpu,
+            ram_alloc_mb=freed_ram,
+        )
+
     def apply_actions(
         self,
         actions: list[Any],
         *,
         tau: int | None = None,
         autoscaler_name: str = "",
-    ) -> list[ResizeResult]:
-        """Apply action proposals one-by-one in deterministic order."""
+    ) -> list[ResizeResult | SpawnResult | TerminateResult]:
+        """Apply action proposals one-by-one in deterministic order.
+
+        Order lock: terminate → need_horizontal (log only) → resize → spawn;
+        then ``ms_id``, then ``container_id``, then ``server_id``.
+        """
         ordered = sorted(
             actions,
             key=lambda a: (
-                getattr(a, "type", ""),
+                _APPLY_RANK.get(getattr(a, "type", ""), 99),
                 getattr(a, "ms_id", ""),
                 getattr(a, "container_id", "") or "",
+                getattr(a, "server_id", "") or "",
             ),
         )
-        results: list[ResizeResult] = []
+        results: list[ResizeResult | SpawnResult | TerminateResult] = []
         seen_resize_containers: set[str] = set()
+        seen_terminate_containers: set[str] = set()
+        seen_spawn_ids: set[str] = set()
         log_tau = self.state.current_tau if tau is None else tau
 
         for action in ordered:
@@ -352,59 +613,142 @@ class Env:
                 )
                 continue
 
-            if action_type != "resize":
+            if action_type == "terminate":
+                container_id = getattr(action, "container_id", "")
+                if container_id in seen_terminate_containers:
+                    result = TerminateResult(
+                        ok=False,
+                        code=TerminateResultCode.DUPLICATE_IN_BATCH,
+                        container_id=container_id,
+                        ms_id=getattr(action, "ms_id", ""),
+                        server_id="",
+                        cpu_alloc_cores=0.0,
+                        ram_alloc_mb=0.0,
+                    )
+                    results.append(result)
+                    self._log_terminate_attempt(
+                        tau=log_tau,
+                        autoscaler_name=autoscaler_name,
+                        action=action,
+                        result=result,
+                    )
+                    continue
+                seen_terminate_containers.add(container_id)
+                result = self.terminate(
+                    container_id,
+                    ms_id=getattr(action, "ms_id", None) or None,
+                )
+                results.append(result)
+                self._log_terminate_attempt(
+                    tau=log_tau,
+                    autoscaler_name=autoscaler_name,
+                    action=action,
+                    result=result,
+                )
                 continue
 
-            container_id = action.container_id
-            if container_id in seen_resize_containers:
-                result = ResizeResult(
-                    ok=False,
-                    code=ResizeResultCode.DUPLICATE_IN_BATCH,
+            if action_type == "resize":
+                container_id = action.container_id
+                if container_id in seen_resize_containers:
+                    result = ResizeResult(
+                        ok=False,
+                        code=ResizeResultCode.DUPLICATE_IN_BATCH,
+                        container_id=container_id,
+                        cpu_alloc_cores=self.world.containers[container_id].cpu_alloc_cores
+                        if container_id in self.world.containers
+                        else 0.0,
+                        ram_alloc_mb=self.world.containers[container_id].ram_alloc_mb
+                        if container_id in self.world.containers
+                        else 0.0,
+                    )
+                    results.append(result)
+                    self._log_resize_attempt(
+                        tau=log_tau,
+                        autoscaler_name=autoscaler_name,
+                        action=action,
+                        cpu_old=result.cpu_alloc_cores,
+                        ram_old=result.ram_alloc_mb,
+                        result=result,
+                    )
+                    continue
+
+                seen_resize_containers.add(container_id)
+                cpu_old = (
+                    self.world.containers[container_id].cpu_alloc_cores
+                    if container_id in self.world.containers
+                    else 0.0
+                )
+                ram_old = (
+                    self.world.containers[container_id].ram_alloc_mb
+                    if container_id in self.world.containers
+                    else 0.0
+                )
+                result = self.resize(
                     container_id=container_id,
-                    cpu_alloc_cores=self.world.containers[container_id].cpu_alloc_cores
-                    if container_id in self.world.containers
-                    else 0.0,
-                    ram_alloc_mb=self.world.containers[container_id].ram_alloc_mb
-                    if container_id in self.world.containers
-                    else 0.0,
+                    cpu_alloc_cores=action.cpu_alloc_cores,
+                    ram_alloc_mb=action.ram_alloc_mb,
                 )
                 results.append(result)
                 self._log_resize_attempt(
                     tau=log_tau,
                     autoscaler_name=autoscaler_name,
                     action=action,
-                    cpu_old=result.cpu_alloc_cores,
-                    ram_old=result.ram_alloc_mb,
+                    cpu_old=cpu_old,
+                    ram_old=ram_old,
                     result=result,
                 )
                 continue
 
-            seen_resize_containers.add(container_id)
-            cpu_old = (
-                self.world.containers[container_id].cpu_alloc_cores
-                if container_id in self.world.containers
-                else 0.0
-            )
-            ram_old = (
-                self.world.containers[container_id].ram_alloc_mb
-                if container_id in self.world.containers
-                else 0.0
-            )
-            result = self.resize(
-                container_id=container_id,
-                cpu_alloc_cores=action.cpu_alloc_cores,
-                ram_alloc_mb=action.ram_alloc_mb,
-            )
-            results.append(result)
-            self._log_resize_attempt(
-                tau=log_tau,
-                autoscaler_name=autoscaler_name,
-                action=action,
-                cpu_old=cpu_old,
-                ram_old=ram_old,
-                result=result,
-            )
+            if action_type == "spawn":
+                requested_id = getattr(action, "container_id", "") or ""
+                if requested_id and requested_id in seen_spawn_ids:
+                    result = SpawnResult(
+                        ok=False,
+                        code=SpawnResultCode.DUPLICATE_IN_BATCH,
+                        container_id=requested_id,
+                        ms_id=getattr(action, "ms_id", ""),
+                        server_id=getattr(action, "server_id", ""),
+                        cpu_alloc_cores=0.0,
+                        ram_alloc_mb=0.0,
+                    )
+                    results.append(result)
+                    self._log_spawn_attempt(
+                        tau=log_tau,
+                        autoscaler_name=autoscaler_name,
+                        action=action,
+                        result=result,
+                    )
+                    continue
+
+                result = self.spawn(
+                    ms_id=action.ms_id,
+                    server_id=action.server_id,
+                    cpu_alloc_cores=action.cpu_alloc_cores,
+                    ram_alloc_mb=action.ram_alloc_mb,
+                    container_id=requested_id or None,
+                )
+                if requested_id:
+                    seen_spawn_ids.add(requested_id)
+                elif result.ok:
+                    seen_spawn_ids.add(result.container_id)
+                results.append(result)
+                self._log_spawn_attempt(
+                    tau=log_tau,
+                    autoscaler_name=autoscaler_name,
+                    action=action,
+                    result=result,
+                )
+                continue
+
         return results
+
+    def _allocate_container_id(self, ms_id: str, server_id: str) -> str:
+        n = 1
+        while True:
+            cid = f"c-{ms_id}-{server_id}-{n}"
+            if cid not in self.world.containers:
+                return cid
+            n += 1
 
     def _log_resize_attempt(
         self,
@@ -432,12 +776,53 @@ class Env:
             )
         )
 
-    # Write APIs (stubs for horizontal)
-    def spawn(self, *args, **kwargs):
-        raise NotImplementedError(RejectReason.NOT_IMPLEMENTED_IN_PART_A.value)
+    def _log_spawn_attempt(
+        self,
+        *,
+        tau: int,
+        autoscaler_name: str,
+        action: Any,
+        result: SpawnResult,
+    ) -> None:
+        self.action_log.append(
+            ActionLogRow(
+                tau=tau,
+                autoscaler_name=autoscaler_name,
+                ms_id=result.ms_id or getattr(action, "ms_id", ""),
+                action_type="spawn",
+                container_id=result.container_id,
+                reason=getattr(action, "reason", ""),
+                cpu_old=None,
+                cpu_new=result.cpu_alloc_cores if result.ok else None,
+                ram_old=None,
+                ram_new=result.ram_alloc_mb if result.ok else None,
+                result_code=result.code.value,
+            )
+        )
 
-    def terminate(self, *args, **kwargs):
-        raise NotImplementedError(RejectReason.NOT_IMPLEMENTED_IN_PART_A.value)
+    def _log_terminate_attempt(
+        self,
+        *,
+        tau: int,
+        autoscaler_name: str,
+        action: Any,
+        result: TerminateResult,
+    ) -> None:
+        self.action_log.append(
+            ActionLogRow(
+                tau=tau,
+                autoscaler_name=autoscaler_name,
+                ms_id=result.ms_id or getattr(action, "ms_id", ""),
+                action_type="terminate",
+                container_id=result.container_id,
+                reason=getattr(action, "reason", ""),
+                cpu_old=result.cpu_alloc_cores if result.ok else None,
+                cpu_new=None,
+                ram_old=result.ram_alloc_mb if result.ok else None,
+                ram_new=None,
+                result_code=result.code.value,
+            )
+        )
 
 
 def _invoke_autoscaler(env: Env, autoscaler: Any | None, tau: int) -> None:

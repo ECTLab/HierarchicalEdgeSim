@@ -40,11 +40,3 @@ def test_list_containers_includes_c_api_1(tiny_config_path):
     assert env.list_microservices() == ["api"]
     assert env.list_servers() == ["c1-w1", "c1-w2"]
     assert env.list_clusters() == ["c1"]
-
-
-def test_spawn_terminate_not_implemented_part_a(tiny_config_path):
-    env = Env.from_config(tiny_config_path)
-    with pytest.raises(NotImplementedError):
-        env.spawn(ms_id="api")
-    with pytest.raises(NotImplementedError):
-        env.terminate(container_id="c-api-1")

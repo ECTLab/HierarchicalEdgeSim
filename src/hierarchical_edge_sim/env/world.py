@@ -80,6 +80,16 @@ def place_container(
     return container
 
 
+def remove_container(world: World, container_id: str) -> Container:
+    """Unregister a live container from world / server / microservice indexes."""
+    container = world.containers.pop(container_id)
+    server = world.servers[container.server_id]
+    server.container_ids = [cid for cid in server.container_ids if cid != container_id]
+    ms = world.microservices[container.microservice_id]
+    ms.container_ids = [cid for cid in ms.container_ids if cid != container_id]
+    return container
+
+
 def server_free_cpu_cores(world: World, server_id: str) -> float:
     """Return free CPU capacity based on allocated container resources."""
     server = world.servers[server_id]

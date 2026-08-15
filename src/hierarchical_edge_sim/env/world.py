@@ -126,6 +126,7 @@ def _register_app(world: World, app_spec: AppSpec) -> None:
         world.microservices[microservice.id] = microservice
         app.microservice_ids.append(microservice.id)
         _register_microservice_containers(world, app, microservice, ms_spec)
+    _stamp_app_owner(world, app)
 
 
 def _register_microservice_containers(
@@ -143,3 +144,15 @@ def _register_microservice_containers(
             microservice=microservice,
             spec=container_spec,
         )
+
+
+def _stamp_app_owner(world: World, app: App) -> None:
+    """Paper stamp: owning cluster is where the app was first placed."""
+    for ms_id in app.microservice_ids:
+        ms = world.microservices[ms_id]
+        if not ms.container_ids:
+            continue
+        first = sorted(ms.container_ids)[0]
+        server_id = world.containers[first].server_id
+        app.owner_cluster_id = world.servers[server_id].cluster_id
+        return

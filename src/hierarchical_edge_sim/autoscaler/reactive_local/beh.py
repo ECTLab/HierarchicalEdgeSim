@@ -10,12 +10,8 @@ from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 
 
 def home_cluster_id(env: Env, ms_id: str) -> str:
-    """Cluster of the first live replica (sorted container id). S3 will stamp ownership."""
-    ms = env.get_microservice(ms_id)
-    if not ms.container_ids:
-        raise KeyError(f"microservice '{ms_id}' has no containers")
-    first = sorted(ms.container_ids)[0]
-    return env.get_server(env.get_container(first).server_id).cluster_id
+    """App-owning cluster (paper stamp). BEH stays inside this cluster until S4."""
+    return env.get_app_owner_cluster_id(ms_id)
 
 
 def rank_servers_for_spawn(env: Env, ms_id: str, cluster_id: str) -> list[str]:

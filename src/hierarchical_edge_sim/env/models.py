@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +58,21 @@ class Microservice:
     container_ids: list[str] = field(default_factory=list)
 
 
+class LoanTier(str, Enum):
+    VICINITY = "vicinity"
+    GLOBAL = "global"
+
+
+@dataclass(frozen=True, slots=True)
+class LoanRecord:
+    """One borrowed (borrower, microservice) grant on a worker. Paper L_j."""
+
+    borrower_cluster_id: str
+    ms_id: str
+    tier: LoanTier
+    ts: int
+
+
 @dataclass(slots=True)
 class Server:
     id: str
@@ -64,6 +80,7 @@ class Server:
     cpu_cap_cores: float
     ram_cap_mb: float
     container_ids: list[str] = field(default_factory=list)
+    loans: list[LoanRecord] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -86,3 +103,5 @@ class Vicinity:
 class App:
     id: str
     microservice_ids: list[str] = field(default_factory=list)
+    # Cluster that admitted/placed the app (paper stamp). Inferred from first replica.
+    owner_cluster_id: str | None = None

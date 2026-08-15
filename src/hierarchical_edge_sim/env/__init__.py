@@ -15,8 +15,19 @@ from .config import (
     to_world_spec,
 )
 from .validate import ConfigError, ValidationError, validate, validate_or_raise
-from .models import App, Cluster, Container, ContainerTickRecord, Microservice, Server, Vicinity
+from .models import (
+    App,
+    Cluster,
+    Container,
+    ContainerTickRecord,
+    LoanRecord,
+    LoanTier,
+    Microservice,
+    Server,
+    Vicinity,
+)
 from .root import RootOrchestrator
+from .loans import add_loan, drop_loan, get_loan, has_loan
 from .world import World, build_world, place_container, remove_container, server_free_cpu_cores, server_free_ram_mb
 from .traces import TraceStore, load_traces
 from .usage import apply_tick, serving_capacity
@@ -63,6 +74,8 @@ __all__ = [
     "Cluster",
     "Vicinity",
     "App",
+    "LoanRecord",
+    "LoanTier",
     "RootOrchestrator",
     "World",
     "build_world",
@@ -70,6 +83,10 @@ __all__ = [
     "remove_container",
     "server_free_cpu_cores",
     "server_free_ram_mb",
+    "add_loan",
+    "drop_loan",
+    "get_loan",
+    "has_loan",
     "TraceStore",
     "load_traces",
     "serving_capacity",

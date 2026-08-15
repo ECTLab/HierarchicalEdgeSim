@@ -10,6 +10,7 @@ from typing import Any
 
 from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml
 from .engine import EngineState, run_ticks, tick
+from .loans import count_ms_on_server, drop_loan, has_loan
 from .metrics_log import make_run_id, write_run_outputs
 from .models import App, Cluster, Container, Microservice, Server, Vicinity
 from .root import RootOrchestrator
@@ -48,6 +49,7 @@ class ResizeResultCode(str, Enum):
     SERVER_RAM_EXCEEDED = "SERVER_RAM_EXCEEDED"
     NO_CHANGE = "NO_CHANGE"
     DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
+    NOT_AUTHORIZED = "NOT_AUTHORIZED"
 
 
 class SpawnResultCode(str, Enum):
@@ -60,6 +62,7 @@ class SpawnResultCode(str, Enum):
     SERVER_RAM_EXCEEDED = "SERVER_RAM_EXCEEDED"
     DUPLICATE_CONTAINER_ID = "DUPLICATE_CONTAINER_ID"
     DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
+    NOT_AUTHORIZED = "NOT_AUTHORIZED"
 
 
 class TerminateResultCode(str, Enum):
@@ -68,6 +71,7 @@ class TerminateResultCode(str, Enum):
     LAST_REPLICA = "LAST_REPLICA"
     MS_MISMATCH = "MS_MISMATCH"
     DUPLICATE_IN_BATCH = "DUPLICATE_IN_BATCH"
+    NOT_AUTHORIZED = "NOT_AUTHORIZED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +116,7 @@ class ResizeAction:
     ram_alloc_mb: float | None = None
     reason: str = ""
     tau: int | None = None
+    actor_cluster_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,7 @@ class SpawnAction:
     ram_alloc_mb: float | None = None
     reason: str = ""
     tau: int | None = None
+    actor_cluster_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +143,7 @@ class TerminateAction:
     container_id: str
     reason: str = ""
     tau: int | None = None
+    actor_cluster_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +290,14 @@ class Env:
     def get_app(self, app_id: str) -> App:
         return self.world.apps[app_id]
 
+    def get_app_owner_cluster_id(self, ms_id: str) -> str:
+        """Cluster stamped as owner of the app that hosts ``ms_id``."""
+        ms = self.world.microservices[ms_id]
+        owner = self.world.apps[ms.app_id].owner_cluster_id
+        if not owner:
+            raise RuntimeError(f"app '{ms.app_id}' has no owner_cluster_id")
+        return owner
+
     def get_microservice(self, ms_id: str) -> Microservice:
         return self.world.microservices[ms_id]
 
@@ -315,6 +330,167 @@ class Env:
                 "(World.root is None)"
             )
         return self.world.root
+
+    def request_worker_owner_scale(
+        self,
+        *,
+        actor_cluster_id: str,
+        act: str,
+        ms_id: str = "",
+        server_id: str = "",
+        container_id: str = "",
+        cpu_alloc_cores: float | None = None,
+        ram_alloc_mb: float | None = None,
+        tau: int | None = None,
+    ) -> ResizeResult | SpawnResult | TerminateResult:
+        """Single writer for a worker: only the worker-owner or a loaned borrower may mutate.
+
+        Direct ``resize`` / ``spawn`` / ``terminate`` remain the physical ops; this is the
+        authorized path (paper RequestWorkerOwnerScale). S4 will grant loans; S3 rejects
+        foreign actors without a registry entry.
+        """
+        _ = tau
+        if act == "resize":
+            return self._owner_resize(
+                actor_cluster_id=actor_cluster_id,
+                container_id=container_id,
+                cpu_alloc_cores=cpu_alloc_cores,
+                ram_alloc_mb=ram_alloc_mb,
+            )
+        if act == "spawn":
+            return self._owner_spawn(
+                actor_cluster_id=actor_cluster_id,
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=cpu_alloc_cores,
+                ram_alloc_mb=ram_alloc_mb,
+                container_id=container_id,
+            )
+        if act == "terminate":
+            return self._owner_terminate(
+                actor_cluster_id=actor_cluster_id,
+                container_id=container_id,
+                ms_id=ms_id or None,
+            )
+        raise ValueError(f"unknown owner-scale act '{act}'")
+
+    def _authorized_for_server(self, actor_cluster_id: str, server_id: str, ms_id: str) -> bool:
+        server = self.world.servers[server_id]
+        if actor_cluster_id == server.cluster_id:
+            return True
+        return has_loan(server, actor_cluster_id, ms_id)
+
+    def _owner_resize(
+        self,
+        *,
+        actor_cluster_id: str,
+        container_id: str,
+        cpu_alloc_cores: float | None,
+        ram_alloc_mb: float | None,
+    ) -> ResizeResult:
+        if container_id not in self.world.containers:
+            return ResizeResult(
+                ok=False,
+                code=ResizeResultCode.UNKNOWN_CONTAINER,
+                container_id=container_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        container = self.world.containers[container_id]
+        if not self._authorized_for_server(
+            actor_cluster_id, container.server_id, container.microservice_id
+        ):
+            return ResizeResult(
+                ok=False,
+                code=ResizeResultCode.NOT_AUTHORIZED,
+                container_id=container_id,
+                cpu_alloc_cores=container.cpu_alloc_cores,
+                ram_alloc_mb=container.ram_alloc_mb,
+            )
+        return self.resize(
+            container_id,
+            cpu_alloc_cores=cpu_alloc_cores,
+            ram_alloc_mb=ram_alloc_mb,
+        )
+
+    def _owner_spawn(
+        self,
+        *,
+        actor_cluster_id: str,
+        ms_id: str,
+        server_id: str,
+        cpu_alloc_cores: float | None,
+        ram_alloc_mb: float | None,
+        container_id: str,
+    ) -> SpawnResult:
+        if server_id not in self.world.servers:
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.UNKNOWN_SERVER,
+                container_id=container_id or "",
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        if not self._authorized_for_server(actor_cluster_id, server_id, ms_id):
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.NOT_AUTHORIZED,
+                container_id=container_id or "",
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        return self.spawn(
+            ms_id=ms_id,
+            server_id=server_id,
+            cpu_alloc_cores=cpu_alloc_cores,
+            ram_alloc_mb=ram_alloc_mb,
+            container_id=container_id or None,
+        )
+
+    def _owner_terminate(
+        self,
+        *,
+        actor_cluster_id: str,
+        container_id: str,
+        ms_id: str | None,
+    ) -> TerminateResult:
+        if container_id not in self.world.containers:
+            return TerminateResult(
+                ok=False,
+                code=TerminateResultCode.UNKNOWN_CONTAINER,
+                container_id=container_id,
+                ms_id=ms_id or "",
+                server_id="",
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        container = self.world.containers[container_id]
+        if not self._authorized_for_server(
+            actor_cluster_id, container.server_id, container.microservice_id
+        ):
+            return TerminateResult(
+                ok=False,
+                code=TerminateResultCode.NOT_AUTHORIZED,
+                container_id=container_id,
+                ms_id=container.microservice_id,
+                server_id=container.server_id,
+                cpu_alloc_cores=container.cpu_alloc_cores,
+                ram_alloc_mb=container.ram_alloc_mb,
+            )
+        server_id = container.server_id
+        ms = container.microservice_id
+        result = self.terminate(container_id, ms_id=ms_id)
+        if result.ok:
+            server = self.world.servers[server_id]
+            if server.cluster_id != actor_cluster_id and count_ms_on_server(
+                server, self.world.containers, ms
+            ) == 0:
+                drop_loan(server, actor_cluster_id, ms)
+        return result
 
     def resize(
         self,
@@ -649,9 +825,12 @@ class Env:
                     )
                     continue
                 seen_terminate_containers.add(container_id)
-                result = self.terminate(
-                    container_id,
-                    ms_id=getattr(action, "ms_id", None) or None,
+                result = self.request_worker_owner_scale(
+                    actor_cluster_id=self._actor_for_action(action),
+                    act="terminate",
+                    container_id=container_id,
+                    ms_id=getattr(action, "ms_id", "") or "",
+                    tau=log_tau,
                 )
                 results.append(result)
                 self._log_terminate_attempt(
@@ -698,10 +877,14 @@ class Env:
                     if container_id in self.world.containers
                     else 0.0
                 )
-                result = self.resize(
+                result = self.request_worker_owner_scale(
+                    actor_cluster_id=self._actor_for_action(action),
+                    act="resize",
                     container_id=container_id,
+                    ms_id=getattr(action, "ms_id", "") or "",
                     cpu_alloc_cores=action.cpu_alloc_cores,
                     ram_alloc_mb=action.ram_alloc_mb,
+                    tau=log_tau,
                 )
                 results.append(result)
                 self._log_resize_attempt(
@@ -735,12 +918,15 @@ class Env:
                     )
                     continue
 
-                result = self.spawn(
+                result = self.request_worker_owner_scale(
+                    actor_cluster_id=self._actor_for_action(action),
+                    act="spawn",
                     ms_id=action.ms_id,
                     server_id=action.server_id,
                     cpu_alloc_cores=action.cpu_alloc_cores,
                     ram_alloc_mb=action.ram_alloc_mb,
-                    container_id=requested_id or None,
+                    container_id=requested_id,
+                    tau=log_tau,
                 )
                 if requested_id:
                     seen_spawn_ids.add(requested_id)
@@ -756,6 +942,19 @@ class Env:
                 continue
 
         return results
+
+    def _actor_for_action(self, action: Any) -> str:
+        explicit = getattr(action, "actor_cluster_id", "") or ""
+        if explicit:
+            return explicit
+        ms_id = getattr(action, "ms_id", "") or ""
+        if not ms_id:
+            cid = getattr(action, "container_id", "") or ""
+            if cid in self.world.containers:
+                ms_id = self.world.containers[cid].microservice_id
+        if ms_id and ms_id in self.world.microservices:
+            return self.get_app_owner_cluster_id(ms_id)
+        return ""
 
     def _allocate_container_id(self, ms_id: str, server_id: str) -> str:
         n = 1

@@ -112,10 +112,46 @@ physics and totals should match:
 
 `trace_vs_log_requests.png` is the conservation check (trace = sum incoming;
 incoming = served + dropped). TCN should BEV-down about 10 times (hold-over-spike),
-not ~25.
+not ~25. TCN plots shade τ=1…60 (no hats) and annotate drop rate after τ=61.
 
 The 69% → 7.85% rows in the results doc are historical. HEAD only reproduces
 the current pair. Do not commit `results/`.
+
+### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
+
+Same 4×8-core cluster, same initial `2.0 / 1024`, same TCN weights. Only the
+trace and the per-MS min–max change (`models/tcn_delta_v1_ms150/`, 240–40083).
+MS_150 is ~4.6× heavier than MS_588 and is not 60-minute periodic. Recorded
+numbers: [alibaba-tcn-ms150-results.md](./alibaba-tcn-ms150-results.md).
+
+`/usr/bin/python3` may not have torch. Put the interpreter that can
+`import torch` on `PYTHONPATH` (this machine: the `alibaba-trace` venv
+site-packages) together with `$PWD/src:$PWD/examples`.
+
+```bash
+export PYTHONPATH="/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+
+REACTIVE=$(python3 examples/run_with_autoscaler.py configs/demo_alibaba_ms150_reactive_local.yaml | sed -n 's/^Run complete. Outputs written to: //p')
+PROACTIVE=$(python3 examples/run_with_autoscaler.py configs/demo_alibaba_ms150_proactive.yaml | sed -n 's/^Run complete. Outputs written to: //p')
+python3 examples/compare_trace_vs_log.py "$REACTIVE"
+python3 examples/compare_trace_vs_log.py "$PROACTIVE"
+python3 examples/compare_reactive_baseline.py \
+  --run reactive_local "$REACTIVE" \
+  --run proactive_tcn "$PROACTIVE" \
+  --out "$PROACTIVE/analysis/baseline_comparison.png"
+```
+
+Outputs land in `results/alibaba_ms150_reactive_local/42_<UTC>/` and
+`results/alibaba_ms150_proactive/42_<UTC>/`. On current HEAD:
+
+| | Drop rate | Incoming | Served | Dropped |
+|---|---|---|---|---|
+| `reactive_local` | **5.51%** | 15,655,433 | 14,793,013 | 862,420 |
+| proactive TCN | **4.40%** | 15,655,433 | 14,966,340 | 689,093 |
+
+The first 60 ticks are identical (TCN cold-start is reactive). After TCN is
+on (τ≥61), TCN drop is **0.14%** vs reactive **1.37%**.
 
 ### C) Two clusters, one app per cluster (this guide's focus)
 
@@ -224,7 +260,7 @@ LOCAL=$(.venv/bin/python examples/run_with_autoscaler.py configs/demo_300_two_co
   --run off "$OFF" --run vertical "$VERT" --run local "$LOCAL"
 ```
 
-Writes `baseline_comparison.png` under the first run’s `analysis/` (or `--out PATH`): dropped time series, live replica count, and bars for total drops / peak replicas / OK actions.
+Writes `baseline_comparison.png` under the first run’s `analysis/` (or `--out PATH`): dropped time series, live replica count, and bars for total drops / peak replicas / OK actions. When a TCN run is in the set, the first ``W`` ticks (lookback, no hats; first apply at τ=W+1) are grey, and the bar panel splits dropped load into τ≤W vs τ≥W+1.
 
 S7 should reuse these two figure types (per-run ladder + labeled comparison) rather than a new plotting stack.
 

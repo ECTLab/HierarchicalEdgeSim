@@ -22,10 +22,12 @@ from analysis.aggregate import (  # noqa: E402
     replica_counts_by_site,
     series_on_tau,
     sum_aligned,
+    sum_tau_window,
 )
 from analysis.io import (  # noqa: E402
     ActionRow,
     ContainerSeries,
+    cold_start_until_tau,
     find_container_logs,
     list_microservice_trace_refs,
     load_run_meta,
@@ -88,6 +90,41 @@ def _tiny_plot_env(tmp_path: Path) -> Env:
 
 def test_series_on_tau_fills_gaps():
     assert series_on_tau([1, 2, 3, 4], [2, 3], [10.0, 20.0]) == [0.0, 10.0, 20.0, 0.0]
+
+
+def test_sum_tau_window_inclusive():
+    tau = [1, 2, 3, 4]
+    vals = [10.0, 20.0, 30.0, 40.0]
+    assert sum_tau_window(tau, vals, start=1, end=60) == 100.0
+    assert sum_tau_window(tau, vals, start=3, end=4) == 70.0
+    assert sum_tau_window(tau, vals, start=5, end=10) == 0.0
+
+
+def test_cold_start_until_tau_from_meta():
+    assert cold_start_until_tau({}) is None
+    assert cold_start_until_tau({"autoscaler": {"name": "reactive_local"}}) is None
+    assert (
+        cold_start_until_tau(
+            {
+                "autoscaler": {
+                    "name": "proactive_auto_scaler",
+                    "params": {"feature_window": 10, "predictor": "persistence"},
+                }
+            }
+        )
+        is None
+    )
+    assert (
+        cold_start_until_tau(
+            {
+                "autoscaler": {
+                    "name": "proactive_auto_scaler",
+                    "params": {"feature_window": 60, "predictor": "tcn_delta"},
+                }
+            }
+        )
+        == 60
+    )
 
 
 def test_classify_site_home_vicinity_global():

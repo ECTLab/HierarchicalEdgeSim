@@ -302,3 +302,19 @@ def test_yaml_loads_alibaba_tcn(project_root: Path):
     assert scaler.params.feature_window == 60
     assert scaler.params.horizon_H == 5
     assert scaler.params.hold_down_ticks == 55
+
+
+def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
+    pytest.importorskip("torch")
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.tcn import (
+        TcnDeltaPredictor,
+    )
+
+    scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_alibaba_ms150_proactive.yaml")
+    assert scaler is not None
+    assert scaler.params.predictor == "tcn_delta"
+    assert scaler.params.model_dir == "models/tcn_delta_v1_ms150"
+    assert scaler.params.hold_down_ticks == 55
+    pred = TcnDeltaPredictor.from_model_dir(project_root / scaler.params.model_dir)
+    assert pred.load_min == 240.0
+    assert pred.load_max == 40083.0

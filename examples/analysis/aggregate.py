@@ -26,6 +26,17 @@ def series_on_tau(
     return [float(by_t.get(t, fill)) for t in tau_full]
 
 
+def sum_tau_window(
+    tau: list[int],
+    values: list[float],
+    *,
+    start: int,
+    end: int,
+) -> float:
+    """Sum ``values`` on ticks in ``[start, end]`` inclusive."""
+    return float(sum(v for t, v in zip(tau, values) if start <= t <= end))
+
+
 def sum_aligned(
     tau_full: list[int],
     containers: list[ContainerSeries],

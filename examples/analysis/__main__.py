@@ -50,6 +50,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  total_served={s.total_served:.2f}")
         print(f"  total_dropped={s.total_dropped:.2f}")
         print(f"  drop_rate_percent={drop_rate:.2f}")
+        if s.cold_start_until is not None:
+            after_in = s.incoming_after_tcn or 0.0
+            after_drop = s.dropped_after_tcn or 0.0
+            after_rate = (after_drop / after_in * 100.0) if after_in else 0.0
+            print(f"  cold_start_until_tau={s.cold_start_until}")
+            print(f"  drop_rate_after_tcn_on_percent={after_rate:.2f}")
         print(f"  output_dir={s.output_dir}")
     return 0
 

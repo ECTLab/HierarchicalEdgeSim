@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .aggregate import replica_counts_by_site, app_owner_cluster_id, cluster_to_vicinity, sum_aligned
-from .io import find_container_logs, load_run_meta, read_actions, read_container_log
+from .aggregate import (
+    app_owner_cluster_id,
+    cluster_to_vicinity,
+    replica_counts_by_site,
+    sum_aligned,
+    sum_tau_window,
+)
+from .io import cold_start_until_tau, find_container_logs, load_run_meta, read_actions, read_container_log
 from .plots import plot_baseline_comparison
 
 
@@ -16,13 +22,20 @@ def compare_runs(
     app_id: str | None = None,
     ms_id: str | None = None,
 ) -> Path:
+    resolved = [(label, Path(run_dir).resolve()) for label, run_dir in labeled_dirs]
+    metas = [load_run_meta(run_dir) for _, run_dir in resolved]
+    until: int | None = None
+    for meta in metas:
+        run_until = cold_start_until_tau(meta)
+        if run_until is not None:
+            until = max(until or 0, run_until)
+
     series: list[tuple[str, list[int], list[float], list[float]]] = []
     totals: list[tuple[str, float, float, int]] = []
+    drop_windows: list[tuple[str, float, float]] = []
     chosen_app = app_id
     chosen_ms = ms_id
-    for label, run_dir in labeled_dirs:
-        run_dir = run_dir.resolve()
-        meta = load_run_meta(run_dir)
+    for (label, run_dir), meta in zip(resolved, metas):
         containers = [read_container_log(p) for p in find_container_logs(run_dir)]
         if chosen_app:
             containers = [c for c in containers if c.app_id == chosen_app]
@@ -49,12 +62,22 @@ def compare_runs(
         ]
         series.append((label, tau, dropped, replica_total))
         totals.append((label, sum(dropped), max(replica_total) if replica_total else 0.0, len(actions)))
+        if until is not None and tau:
+            before = sum_tau_window(tau, dropped, start=tau[0], end=until)
+            after = sum_tau_window(tau, dropped, start=until + 1, end=tau[-1])
+            drop_windows.append((label, before, after))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     plot_baseline_comparison(
         series=series,
         totals=totals,
         out_path=out_path,
-        title="Reactive baseline comparison",
+        title=(
+            f"Reactive baseline comparison (grey = no TCN, τ≤{until})"
+            if until is not None
+            else "Reactive baseline comparison"
+        ),
+        cold_start_until=until,
+        drop_windows=drop_windows or None,
     )
     return out_path

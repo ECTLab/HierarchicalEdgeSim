@@ -48,6 +48,9 @@ stamps; the drop rates should match this table.
 
 How to regenerate: [how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B6.
 
+TCN figures shade τ=1…60 (lookback, no hats; first apply at τ=61) and annotate
+drop rate on that post-warmup window as well as the whole run.
+
 The ladder rows before **3.79%** are historical (old control path). HEAD only
 reproduces the current pair.
 
@@ -60,3 +63,6 @@ reproduces the current pair.
 | `traces/alibaba/MS_588.csv` | 721 rows, `time_unit=time_tick+1`, `requests=total_requests` |
 
 The 47 MB full CSV and processed npy tensors stayed in `alibaba-trace`.
+
+Same controller on **MS_150** (transfer, not a retune):
+[alibaba-tcn-ms150-results.md](./alibaba-tcn-ms150-results.md).

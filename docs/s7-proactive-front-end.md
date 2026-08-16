@@ -60,10 +60,14 @@ Decide residual is the gap from current alloc `A` to `A_req = n·min + (ρ · r*
 | Piece | Role |
 |---|---|
 | `models/tcn_delta_v1/` | Copied weights + `meta.json` (MS_588 min/max, 60×2→5) |
+| `models/tcn_delta_v1_ms150/` | Same weights; MS_150 min/max 240–40083 |
 | `traces/alibaba/MS_588.csv` | 721 one-minute ticks from Alibaba v2021 |
+| `traces/alibaba/MS_150.csv` | Same format; heavier, not 60-minute periodic |
 | `predictors/tcn.py` | Option A loader (torch optional extra) |
-| `configs/demo_alibaba_proactive.yaml` | TCN + Alibaba world |
-| `configs/demo_alibaba_reactive_local.yaml` | Same world, reactive baseline |
+| `configs/demo_alibaba_proactive.yaml` | TCN + Alibaba MS_588 world |
+| `configs/demo_alibaba_reactive_local.yaml` | Same MS_588 world, reactive baseline |
+| `configs/demo_alibaba_ms150_proactive.yaml` | TCN + Alibaba MS_150 transfer |
+| `configs/demo_alibaba_ms150_reactive_local.yaml` | Same MS_150 world, reactive baseline |
 | `configs/demo_60_proactive.yaml` | Torch-free persistence smoke |
 
 YAML leftover keys after the decide block are `reactive_local` params (`x_up_streak`, `cascade_home`, …).

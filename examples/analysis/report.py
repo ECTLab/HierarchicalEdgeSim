@@ -13,8 +13,10 @@ from .aggregate import (
     group_containers_by_microservice,
     replica_counts_by_site,
     sum_aligned,
+    sum_tau_window,
 )
 from .io import (
+    cold_start_until_tau,
     find_container_logs,
     list_microservice_trace_refs,
     load_run_meta,
@@ -47,6 +49,9 @@ class AppAnalysisSummary:
     total_dropped: float
     max_abs_diff_trace_vs_incoming: float
     output_dir: Path
+    cold_start_until: int | None = None
+    incoming_after_tcn: float | None = None
+    dropped_after_tcn: float | None = None
 
 
 def analyze_run(
@@ -89,6 +94,7 @@ def analyze_run(
     }
     actions = read_actions(run_dir)
     vmap = cluster_to_vicinity(meta)
+    until = cold_start_until_tau(meta)
 
     summaries: list[AppAnalysisSummary] = []
     for app_id, app_containers in by_app.items():
@@ -101,6 +107,8 @@ def analyze_run(
         total_incoming = 0.0
         total_served = 0.0
         total_dropped = 0.0
+        incoming_after_tcn = 0.0
+        dropped_after_tcn = 0.0
         ticks = 0
 
         for ms_id, ms_containers in by_ms.items():
@@ -133,6 +141,13 @@ def analyze_run(
             total_incoming += sum(incoming)
             total_served += sum(served)
             total_dropped += sum(dropped)
+            if until is not None and tau_trace:
+                incoming_after_tcn += sum_tau_window(
+                    tau_trace, incoming, start=until + 1, end=tau_trace[-1]
+                )
+                dropped_after_tcn += sum_tau_window(
+                    tau_trace, dropped, start=until + 1, end=tau_trace[-1]
+                )
 
             plot_name = (
                 "trace_vs_log_requests.png"
@@ -145,6 +160,7 @@ def analyze_run(
                 containers=ms_containers,
                 out_path=app_out / plot_name,
                 title=f"{app_id}/{ms_id}: Trace vs Logs",
+                cold_start_until=until,
             )
             split_name = (
                 "routing_split.png" if len(by_ms) == 1 else f"routing_split_{ms_id}.png"
@@ -163,6 +179,7 @@ def analyze_run(
                     "tcn_forecast.png" if len(by_ms) == 1 else f"tcn_forecast_{ms_id}.png"
                 ),
                 title=f"{app_id}/{ms_id}: TCN vs observed incoming",
+                cold_start_until=until,
             )
 
             markers = action_markers(actions, ms_id=ms_id)
@@ -175,6 +192,7 @@ def analyze_run(
                 markers=markers,
                 out_path=app_out / qos_name,
                 title=f"{app_id}/{ms_id}: load and drops",
+                cold_start_until=until,
             )
             counts = replica_counts_by_site(
                 tau_trace, ms_containers, owner_cluster_id=owner, vmap=vmap
@@ -202,6 +220,9 @@ def analyze_run(
                 total_dropped=total_dropped,
                 max_abs_diff_trace_vs_incoming=max_diff,
                 output_dir=app_out,
+                cold_start_until=until,
+                incoming_after_tcn=incoming_after_tcn if until is not None else None,
+                dropped_after_tcn=dropped_after_tcn if until is not None else None,
             )
         )
 
@@ -224,6 +245,7 @@ def _maybe_plot_tcn_forecast(
     incoming: list[float],
     out_path: Path,
     title: str,
+    cold_start_until: int | None = None,
 ) -> None:
     scaler = meta.get("autoscaler") or {}
     params = scaler.get("params") or {}
@@ -276,4 +298,5 @@ def _maybe_plot_tcn_forecast(
         pred_horizon=step_h,
         out_path=out_path,
         title=title,
+        cold_start_until=cold_start_until,
     )

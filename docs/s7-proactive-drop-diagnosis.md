@@ -92,6 +92,8 @@ TCN downs both pass `protect_last_serving=True`.
 
 ## Results on MS_588 (same 3,385,510 incoming)
 
+Same controller on MS_150: [alibaba-tcn-ms150-results.md](./alibaba-tcn-ms150-results.md).
+
 | Run | Drop rate | Served | Zero-serve ticks | CPU-alive / RAM-dead ticks |
 |---|---|---|---|---|
 | TCN original (`42_20260816T083509Z`) | 69.11% | 1.05M | 331 | 344 (`c-api-1` at RAM 256) |

@@ -27,6 +27,7 @@ _FAMILY_STYLE = {
 }
 
 _ROUTING_TOP_N = 6
+_COLD_START_FACE = "#9e9e9e"
 
 
 def _ylim_from_zero(ax) -> None:
@@ -55,6 +56,57 @@ def _legend(ax, *, ncol: int = 1, loc: str = "upper left") -> None:
     )
 
 
+def _draw_cold_start_span(
+    ax,
+    until: int | None,
+    *,
+    legend: bool = True,
+) -> None:
+    """Grey band over τ=1…W: no hats yet; first proactive apply is τ=W+1."""
+    if until is None or until < 1:
+        return
+    ax.axvspan(
+        0.5,
+        float(until) + 0.5,
+        color=_COLD_START_FACE,
+        alpha=0.22,
+        zorder=0,
+        label=f"no TCN (τ≤{until})" if legend else None,
+    )
+
+
+def _annotate_drop_rates(
+    ax,
+    tau: list[int],
+    incoming: list[float],
+    dropped: list[float],
+    until: int | None,
+) -> None:
+    if not tau or not incoming:
+        return
+    t0, t1 = tau[0], tau[-1]
+    whole_i = float(sum(incoming))
+    whole_d = float(sum(dropped))
+    whole_pct = (100.0 * whole_d / whole_i) if whole_i else 0.0
+    lines = [f"drop τ={t0}–{t1}: {whole_pct:.2f}%"]
+    if until is not None and until < t1:
+        after_i = float(sum(v for t, v in zip(tau, incoming) if t > until))
+        after_d = float(sum(v for t, v in zip(tau, dropped) if t > until))
+        after_pct = (100.0 * after_d / after_i) if after_i else 0.0
+        lines.append(f"after TCN on (τ≥{until + 1}): {after_pct:.2f}%")
+    ax.text(
+        0.99,
+        0.97,
+        "\n".join(lines),
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=8,
+        color="#333333",
+        bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
+    )
+
+
 def _draw_action_markers(ax, markers: dict[str, list[int]], *, legend: bool = True) -> None:
     seen: set[str] = set()
     for family, ticks in markers.items():
@@ -80,6 +132,7 @@ def plot_combined_requests(
     containers: list[ContainerSeries],
     out_path: Path,
     title: str,
+    cold_start_until: int | None = None,
 ) -> None:
     """MS totals only. Per-replica routing goes on ``plot_routing_split``."""
     if containers and all(c.tau == tau for c in containers):
@@ -92,6 +145,7 @@ def plot_combined_requests(
         total_dropped = sum_aligned(tau, containers, "dropped")
 
     fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
     ax.plot(tau, trace_requests, label="trace", linewidth=2.4, color="#222222")
     ax.plot(tau, total_incoming, label="sum incoming", linestyle="--", linewidth=1.8, color="#1f77b4")
     ax.plot(tau, total_served, label="sum served", linewidth=1.8, color="#2ca02c")
@@ -100,6 +154,7 @@ def plot_combined_requests(
     ax.set_ylabel("requests")
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
+    _annotate_drop_rates(ax, tau, total_incoming, total_dropped, cold_start_until)
     _legend(ax, ncol=2)
     _ylim_from_zero(ax)
     _save(fig, out_path)
@@ -202,6 +257,7 @@ def plot_ladder_qos(
     markers: dict[str, list[int]],
     out_path: Path,
     title: str,
+    cold_start_until: int | None = None,
 ) -> None:
     fig, (ax_load, ax_cpu) = plt.subplots(
         2,
@@ -210,15 +266,18 @@ def plot_ladder_qos(
         sharex=True,
         gridspec_kw={"height_ratios": [2.0, 1.0]},
     )
+    _draw_cold_start_span(ax_load, cold_start_until)
     ax_load.plot(tau, incoming, label="incoming", linewidth=2)
     ax_load.plot(tau, dropped, label="dropped", color="#d62728", linewidth=1.8)
     ax_load.set_ylabel("requests")
     ax_load.set_title(title)
     ax_load.grid(True, alpha=0.3)
     _draw_action_markers(ax_load, markers)
+    _annotate_drop_rates(ax_load, tau, incoming, dropped, cold_start_until)
     _legend(ax_load, ncol=3)
     _ylim_from_zero(ax_load)
 
+    _draw_cold_start_span(ax_cpu, cold_start_until, legend=False)
     ax_cpu.plot(
         tau,
         cpu_capacity,
@@ -269,8 +328,10 @@ def plot_forecast_vs_actual(
     pred_horizon: list[float],
     out_path: Path,
     title: str,
+    cold_start_until: int | None = None,
 ) -> None:
     fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
     ax.plot(tau, actual_counts, label="observed incoming", color="#222222", linewidth=2.0)
     ax.plot(tau, pred_step1, label="TCN t+1", color="#1f77b4", linewidth=1.6)
     ax.plot(tau, pred_horizon, label="TCN t+5", color="#ff7f0e", linewidth=1.4, linestyle="--")
@@ -289,11 +350,20 @@ def plot_baseline_comparison(
     totals: list[tuple[str, float, float, int]],
     out_path: Path,
     title: str,
+    cold_start_until: int | None = None,
+    drop_windows: list[tuple[str, float, float]] | None = None,
 ) -> None:
-    """series: (label, tau, dropped, replica_count). totals: (label, sum_drop, max_replicas, n_ok_actions)."""
+    """series: (label, tau, dropped, replica_count). totals: (label, sum_drop, max_replicas, n_ok_actions).
+
+    When ``drop_windows`` is set (label, dropped_in_lookback, dropped_after), the
+    bar panel compares those two windows instead of mixing drop counts with
+    replica/action counts.
+    """
     fig, axes = plt.subplots(3, 1, figsize=(11, 10), sharex=False)
     ax_drop, ax_rep, ax_bar = axes
 
+    _draw_cold_start_span(ax_drop, cold_start_until)
+    _draw_cold_start_span(ax_rep, cold_start_until, legend=False)
     for label, tau, dropped, replicas in series:
         ax_drop.plot(tau, dropped, label=label, linewidth=2)
         ax_rep.plot(tau, replicas, label=label, linewidth=2, drawstyle="steps-post")
@@ -309,15 +379,37 @@ def plot_baseline_comparison(
     _legend(ax_rep)
     _ylim_from_zero(ax_rep)
 
-    labels = [row[0] for row in totals]
-    x = list(range(len(labels)))
-    width = 0.25
-    drops = [row[1] for row in totals]
-    max_rep = [row[2] for row in totals]
-    n_act = [float(row[3]) for row in totals]
-    ax_bar.bar([i - width for i in x], drops, width=width, label="total dropped")
-    ax_bar.bar(x, max_rep, width=width, label="peak replicas")
-    ax_bar.bar([i + width for i in x], n_act, width=width, label="OK actions")
+    if drop_windows:
+        labels = [row[0] for row in drop_windows]
+        x = list(range(len(labels)))
+        width = 0.35
+        before = [row[1] for row in drop_windows]
+        after = [row[2] for row in drop_windows]
+        w = int(cold_start_until or 0)
+        ax_bar.bar(
+            [i - width / 2 for i in x],
+            before,
+            width=width,
+            label=f"dropped τ≤{w}" if w else "dropped (lookback)",
+            color="#9e9e9e",
+        )
+        ax_bar.bar(
+            [i + width / 2 for i in x],
+            after,
+            width=width,
+            label=f"dropped τ≥{w + 1}" if w else "dropped (after TCN on)",
+            color="#d62728",
+        )
+    else:
+        labels = [row[0] for row in totals]
+        x = list(range(len(labels)))
+        width = 0.25
+        drops = [row[1] for row in totals]
+        max_rep = [row[2] for row in totals]
+        n_act = [float(row[3]) for row in totals]
+        ax_bar.bar([i - width for i in x], drops, width=width, label="total dropped")
+        ax_bar.bar(x, max_rep, width=width, label="peak replicas")
+        ax_bar.bar([i + width for i in x], n_act, width=width, label="OK actions")
     ax_bar.set_xticks(x)
     ax_bar.set_xticklabels(labels)
     ax_bar.set_ylabel("count")

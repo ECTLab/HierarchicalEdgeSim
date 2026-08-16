@@ -16,7 +16,7 @@ on all runs: 3,385,510.
 | | Drop rate | Served | Dropped | Lives | OK actions |
 |---|---|---|---|---|---|
 | `reactive_local` `42_20260816T100437Z` | **15.44%** | 2,862,823 | 522,687 | 2 | 49 |
-| proactive TCN `42_20260816T102455Z` | **7.85%** | 3,119,652 | 265,858 | 7 | 74 |
+| proactive TCN `42_20260816T104101Z` | **3.79%** | 3,257,244 | 128,266 | 9 | 57 |
 
 Reactive’s one BEH spawn is now packed above min (`0.61 / 384`), so this
 baseline is not identical to the first 15.11% recording.
@@ -25,9 +25,9 @@ baseline is not identical to the first 15.11% recording.
 
 | Kind | reactive_local | proactive TCN |
 |---|---|---|
-| BEV up | 23 | 38 |
-| BEV down | 24 | 25 |
-| BEH spawn | 1 | 6 |
+| BEV up | 23 | 34 |
+| BEV down | 24 | 10 |
+| BEH spawn | 1 | 8 |
 | BEH terminate | 1 | 5 |
 
 ## Ladder of TCN runs
@@ -37,16 +37,19 @@ baseline is not identical to the first 15.11% recording.
 | `42_20260816T083509Z` | 69.11% | 331 | First Option A wiring. RAM floor + min BEH. |
 | `42_20260816T094113Z` | 45.29% | 0 | After decide-on-headroom + last-serving guard. |
 | `42_20260816T100507Z` | 14.15% | 0 | After BEH-above-min. Still 202 RAM-dead attractor ticks. |
-| `42_20260816T102455Z` | **7.85%** | 0 | After no CPU-weighted `μ=0` downs. |
+| `42_20260816T102455Z` | 7.85% | 0 | After no CPU-weighted `μ=0` downs. |
+| `42_20260816T104101Z` | **3.79%** | 0 | Hold-over-spike + hot-UP cooldown bypass + RAM sliver. |
 
-## Run directories (local, gitignored)
+## Regenerating plots
 
-- Reactive: `results/alibaba_reactive_local/42_20260816T100437Z/analysis/demo_app/`
-- TCN: `results/alibaba_proactive/42_20260816T102455Z/analysis/demo_app/`
-- Comparison: `results/alibaba_proactive/42_20260816T102455Z/analysis/baseline_comparison.png`
-- TCN vs incoming: `…/analysis/demo_app/tcn_forecast.png`
+Run directories are gitignored (`results/`). The `42_…Z` ids above are labels
+for the recorded numbers, not files in the repo. A fresh clone gets new UTC
+stamps; the drop rates should match this table.
 
 How to regenerate: [how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B6.
+
+The ladder rows before **3.79%** are historical (old control path). HEAD only
+reproduces the current pair.
 
 ## What was copied from alibaba-trace
 

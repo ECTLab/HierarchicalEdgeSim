@@ -118,6 +118,8 @@ def distribute_down(
     tau: int,
     reason: str = "reactive_down",
     protect_last_serving: bool = False,
+    min_serve_cpu: float = 0.0,
+    min_serve_ram: float = 0.0,
 ) -> list[ResizeAction]:
     _ = env
     if not replicas or (delta_cpu <= EPS and delta_ram <= EPS):
@@ -155,7 +157,14 @@ def distribute_down(
         new_ram = max(spec.ram_min_mb, r.ram_alloc - take_ram)
         if protect_last_serving:
             new_cpu, new_ram, apply = _safe_down_alloc(
-                r, new_cpu, new_ram, spec, ram_modeled, protect_id
+                r,
+                new_cpu,
+                new_ram,
+                spec,
+                ram_modeled,
+                protect_id,
+                min_serve_cpu=min_serve_cpu,
+                min_serve_ram=min_serve_ram,
             )
             if not apply:
                 continue
@@ -184,12 +193,21 @@ def _safe_down_alloc(
     spec: MicroserviceSpec,
     ram_modeled: bool,
     protect_id: str | None,
+    min_serve_cpu: float = 0.0,
+    min_serve_ram: float = 0.0,
 ) -> tuple[float, float, bool]:
-    """Keep μ>0, or idle (CPU at floor). Never leave a CPU-weighted μ=0 attractor.
+    """Keep a usable μ, or idle (CPU at floor). Never leave a CPU-weighted μ≈0 attractor.
 
-    Routing is CPU-headroom weighted, so RAM-at-floor + CPU above min steals load
-    and drops all of it.
+    Routing is CPU-headroom weighted, so tiny RAM headroom + CPU above min steals
+    load and drops most of it.
     """
+    floor_cpu = spec.cpu_min_cores + max(0.0, min_serve_cpu)
+    floor_ram = spec.ram_min_mb + max(0.0, min_serve_ram)
+    if new_cpu + EPS < floor_cpu:
+        new_cpu = replica.cpu_alloc if replica.cpu_alloc + EPS < floor_cpu else floor_cpu
+    if ram_modeled and new_ram + EPS < floor_ram:
+        new_ram = replica.ram_alloc if replica.ram_alloc + EPS < floor_ram else floor_ram
+
     if replica.container_id == protect_id:
         if new_cpu <= spec.cpu_min_cores + EPS:
             new_cpu = replica.cpu_alloc

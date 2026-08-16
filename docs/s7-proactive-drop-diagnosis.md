@@ -97,7 +97,8 @@ TCN downs both pass `protect_last_serving=True`.
 | TCN original (`42_20260816T083509Z`) | 69.11% | 1.05M | 331 | 344 (`c-api-1` at RAM 256) |
 | TCN after (1)(2) (`42_20260816T094113Z`) | 45.29% | 1.85M | 0 | 59 |
 | TCN after (3) (`42_20260816T100507Z`) | 14.15% | 2.91M | 0 | 202 |
-| TCN after (4) (`42_20260816T102455Z`) | **7.85%** | 3.12M | 0 | **0** |
+| TCN after (4) (`42_20260816T102455Z`) | 7.85% | 3.12M | 0 | **0** |
+| TCN after hold-over-spike (`42_20260816T104101Z`) | **3.79%** | 3.26M | 0 | 0 |
 | reactive re-run (`42_20260816T100437Z`) | 15.44% | 2.86M | 5 | 10 |
 
 Reactive moved slightly from the first recorded 15.11% because BEH now packs
@@ -110,28 +111,44 @@ BEV-down left RAM at 256 with CPU above min.
 
 ---
 
-## Where to look
+## Remaining ~8% (after (1)–(4))
 
-Plots are local and gitignored. Latest pair:
+Of the 7.85% at `42_20260816T102455Z`, **79% of drops were capacity-short**
+(`μ < incoming`), not zombies. Conservation still held.
 
-- TCN: `results/alibaba_proactive/42_20260816T102455Z/analysis/demo_app/`
-  (`ladder_qos.png`, `tcn_forecast.png`, `trace_vs_log_requests.png`)
-- Comparison: `results/alibaba_proactive/42_20260816T102455Z/analysis/baseline_comparison.png`
-- Reactive: `results/alibaba_reactive_local/42_20260816T100437Z/analysis/demo_app/`
+| Bucket | Drops | Share of 7.85% |
+|---|---|---|
+| Cold start τ=1–60 (TCN blind) | 56k | 1.66 pp — same as reactive |
+| ≥15k spike ticks | 177k | 4.7 pp |
+| Other | 33k | 1.0 pp (near-floor RAM 258 MB stealing CPU-weighted share) |
 
-Regenerate:
+The TCN **does not see the spike in its 5-step horizon**. Hats 5 minutes before
+a 25–30k spike are ~7–9k (MISS on 13/18). The one HINT at τ=76 was then
+**blocked by `cooldown_C=5`** after an UP at τ=72. Grow landed *on* the spike
+tick (apply τ+1), so the first minute still dropped. Then BEV-down 15–40 ticks
+later stripped capacity, and the next 60-minute spike started low.
 
-```bash
-export PYTHONPATH=/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples
-export MPLCONFIGDIR=$PWD/.mplconfig
-python3 examples/run_with_autoscaler.py configs/demo_alibaba_reactive_local.yaml
-python3 examples/run_with_autoscaler.py configs/demo_alibaba_proactive.yaml
-python3 examples/compare_trace_vs_log.py <reactive_run_dir>
-python3 examples/compare_trace_vs_log.py <proactive_run_dir>
-python3 examples/compare_reactive_baseline.py \
-  --run reactive_local <reactive_run_dir> \
-  --run proactive_tcn <proactive_run_dir>
-```
+Holding peak μ for 60 ticks was worth ~4.25 pp on that run. Cluster max (8×4.0)
+can serve every spike; nothing is physically unservable.
+
+### Fixes for that remainder
+
+| Change | Where | Why |
+|---|---|---|
+| `hold_down_ticks` (TCN default 55) | `params.py`, `policy.py` | After `u_obs` or `û` ≥ `θ_up`, block Down so the next cycle keeps surge capacity. |
+| Cooldown does not block a *hot* UP | `policy.py` | The τ=76 HINT can grow; cooldown still suppresses lukewarm UPs. |
+| Down keeps a serve sliver (`δ_cpu_min` / `δ_ram_min`) | `_safe_down_alloc` | Stops RAM≈258 + CPU 2.8 (μ=140) from taking a full routing share. |
+
+After this, TCN is **3.79%**. Remaining drops are almost entirely cold-start
+(τ=21 still 18k on 2.0 cores) plus the first minute of later spikes. Valley
+waste is gone. TCN weights were not retrained.
+
+---
+
+Recorded totals for that 3.79% pair are in
+[alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md). Plots live under
+gitignored `results/` and are not in git. Regenerate from HEAD:
+[how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B6.
 
 ---
 
@@ -140,7 +157,8 @@ python3 examples/compare_reactive_baseline.py \
 - Vicinity / BEG / cascade still spawn at MS minima (`place_minima_spawns`,
   `check_cascading_migration`). The Alibaba demo is single-cluster, so this
   did not affect the numbers above.
-- TCN lag on the 60-minute spike cycle is unchanged. Chasing the last ~8%
-  would be predictor / hold-over-spike work, not more usage-model patches.
+- TCN still lags the 60-minute spike (5-step hats stay ~7–9k). Hold-over-spike
+  covers the *next* cycle; the first TCN spike (τ=81) and cold-start τ=21
+  still drop. Retrain / a longer horizon would be the next lever.
 - `sustained_tau: 99` stays BEV-first so a biased horizon does not skip
   vertical packing.

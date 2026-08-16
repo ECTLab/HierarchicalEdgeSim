@@ -59,6 +59,9 @@ autoscaler:
     # BEV-first; BEH still fires when vertical room is gone.
     sustained_tau: 99
     cooldown_C: 5
+    # MS_588 spikes every ~60 min. TCN's 5-step horizon misses them; hold
+    # capacity after a surge so the next cycle does not start stripped.
+    hold_down_ticks: 55
     predictor: tcn_delta
     model_dir: models/tcn_delta_v1
     time_tick_offset: 0

@@ -83,6 +83,31 @@ def test_distribute_down_still_shrinks_above_floor():
     assert actions[0].ram_alloc_mb == 1152.0
 
 
+def test_distribute_down_keeps_ram_serve_sliver():
+    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
+    actions = distribute_down(
+        env=None,  # type: ignore[arg-type]
+        ms_id="api",
+        spec=_spec(),
+        params=params,
+        replicas=[
+            _view("c-api-1", cpu=4.0, ram=1280.0),
+            _view("c-other", cpu=2.78, ram=384.0, slack=1.0),
+        ],
+        delta_cpu=1.0,
+        delta_ram=200.0,
+        tau=480,
+        reason="bev_down",
+        protect_last_serving=True,
+        min_serve_cpu=0.25,
+        min_serve_ram=128.0,
+    )
+    assert actions
+    for action in actions:
+        assert action.ram_alloc_mb >= 384.0 - 1e-9
+        assert action.cpu_alloc_cores >= 0.75 - 1e-9
+
+
 def test_distribute_down_refuses_ram_floor_while_cpu_headroom_remains():
     """Routing is CPU-weighted; RAM-at-floor + CPU>min steals load and drops it."""
     params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)

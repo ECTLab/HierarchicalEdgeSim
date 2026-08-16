@@ -23,6 +23,7 @@ class DecideResult:
     sustained: bool
     u_obs: float
     r_star: float
+    u_hat_max: float = 0.0
 
 
 def predict_and_decide(
@@ -112,4 +113,5 @@ def predict_and_decide(
         sustained=sustained,
         u_obs=u_obs,
         r_star=r_star,
+        u_hat_max=max_u_hat,
     )

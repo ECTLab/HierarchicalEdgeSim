@@ -253,6 +253,8 @@ def ladder_down(
         tau=tau,
         reason="bev_down",
         protect_last_serving=protect_last_serving,
+        min_serve_cpu=params.delta_cpu_min_cores if protect_last_serving else 0.0,
+        min_serve_ram=params.delta_ram_min_mb if protect_last_serving else 0.0,
     )
     granted_cpu, granted_ram = _granted_down(replicas, bev)
     remain_cpu = max(0.0, delta_cpu - granted_cpu)

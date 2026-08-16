@@ -1,8 +1,9 @@
-"""I/O helpers for traces, container logs, and run metadata."""
+"""I/O helpers for traces, container logs, actions, and run metadata."""
 
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,8 @@ class ContainerSeries:
     cpu_used: list[float]
     ram_capacity: list[float]
     ram_used: list[float]
+    cluster_id: str = ""
+    server_id: str = ""
 
 
 @dataclass(slots=True)
@@ -30,6 +33,17 @@ class MicroserviceTraceRef:
     app_id: str
     microservice_id: str
     trace_file: str
+
+
+@dataclass(slots=True)
+class ActionRow:
+    tau: int
+    autoscaler_name: str
+    ms_id: str
+    action_type: str
+    container_id: str
+    reason: str
+    result_code: str
 
 
 def read_trace(path: Path) -> tuple[list[int], list[float]]:
@@ -45,6 +59,13 @@ def read_container_log(path: Path) -> ContainerSeries:
     app_id = path.parent.parent.name
     with path.open("r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
+    cluster_id = ""
+    server_id = ""
+    meta_path = path.with_name(f"{container_id}.meta.json")
+    if meta_path.is_file():
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        cluster_id = str(payload.get("cluster_id") or "")
+        server_id = str(payload.get("server_id") or "")
     return ContainerSeries(
         app_id=app_id,
         microservice_id=microservice_id,
@@ -58,6 +79,8 @@ def read_container_log(path: Path) -> ContainerSeries:
         cpu_used=[float(r["cpu_core_used"]) for r in rows],
         ram_capacity=[float(r["ram_size_capacity_mb"]) for r in rows],
         ram_used=[float(r["ram_size_used_mb"]) for r in rows],
+        cluster_id=cluster_id,
+        server_id=server_id,
     )
 
 
@@ -70,6 +93,26 @@ def load_run_meta(run_dir: Path) -> dict:
     if not meta_path.is_file():
         raise FileNotFoundError(f"missing run_meta.yaml in {run_dir}")
     return yaml.safe_load(meta_path.read_text(encoding="utf-8"))
+
+
+def read_actions(run_dir: Path) -> list[ActionRow]:
+    path = run_dir / "actions.csv"
+    if not path.is_file():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    return [
+        ActionRow(
+            tau=int(r["tau"]),
+            autoscaler_name=r.get("autoscaler_name") or "",
+            ms_id=r.get("ms_id") or "",
+            action_type=r.get("action_type") or "",
+            container_id=r.get("container_id") or "",
+            reason=r.get("reason") or "",
+            result_code=r.get("result_code") or "",
+        )
+        for r in rows
+    ]
 
 
 def list_microservice_trace_refs(meta: dict) -> list[MicroserviceTraceRef]:

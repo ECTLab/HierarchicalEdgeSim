@@ -46,6 +46,7 @@ def test_phased_trace_length(project_root: Path):
 def test_demo_config_loads_scaler(project_root: Path):
     for name in (
         "demo_300_two_containers_reactive.yaml",
+        "demo_300_two_containers_reactive_local.yaml",
         "demo_60_two_containers_reactive.yaml",
         "demo_60_reactive_local.yaml",
     ):

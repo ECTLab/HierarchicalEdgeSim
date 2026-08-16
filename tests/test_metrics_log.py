@@ -129,6 +129,54 @@ def test_log_csv_golden_tick4(tmp_path: Path):
     assert float(tick4["cpu_core_used"]) == 1.0
 
 
+def test_run_meta_includes_vicinities_list(tmp_path: Path):
+    run_dir = _run_and_write(tmp_path)
+    meta = yaml.safe_load((run_dir / "run_meta.yaml").read_text(encoding="utf-8"))
+    assert meta["config"]["vicinities"] == []
+
+
+def test_run_meta_serializes_vicinity_members(tmp_path: Path):
+    cfg = deepcopy(_tiny_dict())
+    cfg["topology"]["vicinities"] = [{"id": "v1", "members": ["c1"], "leader": "c1"}]
+    config_path = _write_tmp_config_tree(tmp_path, cfg, {"api.csv": VALID_TRACE})
+    raw = load_yaml(config_path)
+    spec = validate_or_raise(raw)
+    world = build_world(spec)
+    traces = load_traces(spec)
+    run_ticks(world=world, traces=traces, world_spec=spec)
+    run_id = make_run_id(spec.sim.seed, now_utc=datetime(2026, 8, 6, 8, 20, 0, tzinfo=UTC))
+    run_dir = write_run_outputs(world=world, world_spec=spec, traces=traces, run_id=run_id)
+    meta = yaml.safe_load((run_dir / "run_meta.yaml").read_text(encoding="utf-8"))
+    assert meta["config"]["vicinities"] == [{"id": "v1", "members": ["c1"], "leader": "c1"}]
+
+
+def test_terminated_container_history_is_flushed(tmp_path: Path):
+    from datetime import UTC, datetime
+
+    from hierarchical_edge_sim.env.api import Env
+
+    cfg = deepcopy(_tiny_dict(results_dir=str(tmp_path / "results")))
+    config_path = _write_tmp_config_tree(tmp_path, cfg, {"api.csv": VALID_TRACE})
+    env = Env.from_config(config_path)
+    spawned = env.spawn(ms_id="api", server_id="c1-w2")
+    assert spawned.ok
+    env.run(max_ticks=2, now_utc=datetime(2026, 8, 6, 9, 0, 0, tzinfo=UTC))
+    env.terminate(spawned.container_id)
+    run_dir = write_run_outputs(
+        world=env.world,
+        world_spec=env.world_spec,
+        traces=env.traces,
+        run_id="retired_flush",
+        retired_containers=env.retired_containers,
+    )
+    log_path = run_dir / "apps" / "demo_app" / "api" / f"{spawned.container_id}.log.csv"
+    assert log_path.is_file()
+    with log_path.open("r", encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["time_unit"] for r in rows] == ["1", "2"]
+    assert spawned.container_id not in env.world.containers
+
+
 def test_meta_json_fields(tmp_path: Path):
     run_dir = _run_and_write(tmp_path)
     meta_path = run_dir / "apps" / "demo_app" / "api" / "c-api-1.meta.json"

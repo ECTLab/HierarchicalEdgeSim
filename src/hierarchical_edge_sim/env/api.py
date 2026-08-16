@@ -212,6 +212,7 @@ class Env:
     state: EngineState
     action_log: list[ActionLogRow] = field(default_factory=list)
     autoscaler_meta: dict[str, Any] | None = None
+    retired_containers: list[Container] = field(default_factory=list)
 
     @classmethod
     def from_config(cls, config_path: str | Path) -> "Env":
@@ -255,6 +256,7 @@ class Env:
             run_id=run_id,
             action_log=self.action_log,
             autoscaler_meta=self.autoscaler_meta,
+            retired_containers=self.retired_containers,
         )
 
     def _run_partial(self, max_ticks: int, autoscaler: Any | None = None) -> None:
@@ -781,7 +783,8 @@ class Env:
 
         freed_cpu = container.cpu_alloc_cores
         freed_ram = container.ram_alloc_mb
-        remove_container(self.world, container_id)
+        removed = remove_container(self.world, container_id)
+        self.retired_containers.append(removed)
         return TerminateResult(
             ok=True,
             code=TerminateResultCode.OK,

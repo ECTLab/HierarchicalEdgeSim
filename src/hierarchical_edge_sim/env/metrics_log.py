@@ -30,6 +30,7 @@ def write_run_outputs(
     run_id: str,
     action_log: list | None = None,
     autoscaler_meta: dict | None = None,
+    retired_containers: list | None = None,
 ) -> Path:
     """Write run_meta + per-container metadata/log CSVs.
 
@@ -49,7 +50,9 @@ def write_run_outputs(
     )
     _write_actions_csv(run_dir=run_dir, action_log=action_log or [])
 
-    for container in world.containers.values():
+    by_id = {c.id: c for c in (retired_containers or [])}
+    by_id.update(world.containers)
+    for container in sorted(by_id.values(), key=lambda c: c.id):
         ms = world.microservices[container.microservice_id]
         server = world.servers[container.server_id]
         spec = ms_specs[container.microservice_id]
@@ -79,6 +82,7 @@ def _write_run_meta(
             "sim": asdict(world_spec.sim),
             "traces_dir": world_spec.traces_dir,
             "clusters": [asdict(c) for c in world_spec.clusters],
+            "vicinities": [asdict(v) for v in world_spec.vicinities],
             "apps": [asdict(a) for a in world_spec.apps],
         },
     }

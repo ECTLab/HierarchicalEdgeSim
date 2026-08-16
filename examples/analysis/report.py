@@ -5,16 +5,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .aggregate import group_containers_by_app, group_containers_by_microservice, sum_series
+from .aggregate import (
+    action_markers,
+    app_owner_cluster_id,
+    cluster_to_vicinity,
+    group_containers_by_app,
+    group_containers_by_microservice,
+    replica_counts_by_site,
+    sum_aligned,
+)
 from .io import (
     find_container_logs,
     list_microservice_trace_refs,
     load_run_meta,
+    read_actions,
     read_container_log,
     read_trace,
     resolve_trace_path,
 )
-from .plots import plot_combined_requests, plot_cpu, plot_ram
+from .plots import (
+    plot_combined_requests,
+    plot_cpu,
+    plot_ladder_qos,
+    plot_ram,
+    plot_replica_sites,
+)
 
 
 @dataclass(slots=True)
@@ -40,13 +55,14 @@ def analyze_run(
     For each application:
       - one combined requests plot (trace vs sum incoming/served/dropped)
       - per-container CPU and RAM plots
+      - ladder QoS (incoming, CPU alloc, drops + action markers)
+      - replica counts by site (home / vicinity / global)
     """
     run_dir = run_dir.resolve()
     if not run_dir.is_dir():
         raise NotADirectoryError(f"run_dir is not a directory: {run_dir}")
 
     if project_root is None:
-        # examples/analysis/report.py -> examples/analysis -> examples -> project root
         project_root = Path(__file__).resolve().parents[2]
 
     meta = load_run_meta(run_dir)
@@ -66,19 +82,21 @@ def analyze_run(
         (ref.app_id, ref.microservice_id): ref
         for ref in list_microservice_trace_refs(meta)
     }
+    actions = read_actions(run_dir)
+    vmap = cluster_to_vicinity(meta)
 
     summaries: list[AppAnalysisSummary] = []
     for app_id, app_containers in by_app.items():
         app_out = run_dir / "analysis" / app_id
         app_out.mkdir(parents=True, exist_ok=True)
+        owner = app_owner_cluster_id(meta, app_id)
 
-        # One combined requests figure per microservice in the app (usually one).
         by_ms = group_containers_by_microservice(app_containers)
         max_diff = 0.0
         total_incoming = 0.0
         total_served = 0.0
         total_dropped = 0.0
-        ticks = len(app_containers[0].tau)
+        ticks = 0
 
         for ms_id, ms_containers in by_ms.items():
             for c in ms_containers:
@@ -93,14 +111,11 @@ def analyze_run(
                 raise KeyError(f"no trace_file in run_meta for app={app_id} ms={ms_id}")
             trace_path = resolve_trace_path(project_root, meta, ref.trace_file)
             tau_trace, trace_requests = read_trace(trace_path)
+            ticks = max(ticks, len(tau_trace))
 
-            for c in ms_containers:
-                if c.tau != tau_trace:
-                    raise ValueError(f"time_unit mismatch between trace and log for {c.container_id}")
-
-            incoming = sum_series([c.incoming for c in ms_containers])
-            served = sum_series([c.served for c in ms_containers])
-            dropped = sum_series([c.dropped for c in ms_containers])
+            incoming = sum_aligned(tau_trace, ms_containers, "incoming")
+            served = sum_aligned(tau_trace, ms_containers, "served")
+            dropped = sum_aligned(tau_trace, ms_containers, "dropped")
             diff = max(abs(a - b) for a, b in zip(trace_requests, incoming))
             if diff > 1e-9:
                 raise ValueError(
@@ -123,6 +138,29 @@ def analyze_run(
                 containers=ms_containers,
                 out_path=app_out / plot_name,
                 title=f"{app_id}/{ms_id}: Trace vs Logs",
+            )
+
+            markers = action_markers(actions, ms_id=ms_id)
+            qos_name = "ladder_qos.png" if len(by_ms) == 1 else f"ladder_qos_{ms_id}.png"
+            plot_ladder_qos(
+                tau=tau_trace,
+                incoming=incoming,
+                cpu_capacity=sum_aligned(tau_trace, ms_containers, "cpu_capacity"),
+                dropped=dropped,
+                markers=markers,
+                out_path=app_out / qos_name,
+                title=f"{app_id}/{ms_id}: load and drops",
+            )
+            counts = replica_counts_by_site(
+                tau_trace, ms_containers, owner_cluster_id=owner, vmap=vmap
+            )
+            rep_name = "replicas_by_site.png" if len(by_ms) == 1 else f"replicas_by_site_{ms_id}.png"
+            plot_replica_sites(
+                tau=tau_trace,
+                counts=counts,
+                markers=markers,
+                out_path=app_out / rep_name,
+                title=f"{app_id}/{ms_id}: replicas by site",
             )
 
         for c in app_containers:

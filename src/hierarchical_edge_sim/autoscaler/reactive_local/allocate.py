@@ -79,9 +79,18 @@ def aggregate_ms(env: Env, ms_id: str, tau: int) -> dict:
         room_down_cpu += rdown_cpu
         room_down_ram += rdown_ram
 
-    q_cpu = sum_used_cpu / max(sum_h_cpu, EPS)
+    # Headroom 0 + load ⇒ saturated (floors buy no μ). Do not report q=0.
+    q_cpu = (
+        1.0
+        if sum_h_cpu <= EPS and sum_in > EPS
+        else (sum_used_cpu / max(sum_h_cpu, EPS) if sum_h_cpu > EPS else 0.0)
+    )
     if spec.ram_per_request_mb > EPS:
-        q_ram = sum_used_ram / max(sum_h_ram, EPS)
+        q_ram = (
+            1.0
+            if sum_h_ram <= EPS and sum_in > EPS
+            else (sum_used_ram / max(sum_h_ram, EPS) if sum_h_ram > EPS else 0.0)
+        )
         q_ms = min(max(max(q_cpu, q_ram), 0.0), 1.0)
     else:
         q_ms = min(max(q_cpu, 0.0), 1.0)
@@ -101,6 +110,7 @@ def aggregate_ms(env: Env, ms_id: str, tau: int) -> dict:
         "sum_cpu_alloc": sum(r.cpu_alloc for r in replicas),
         "sum_ram_alloc": sum(r.ram_alloc for r in replicas),
         "sum_h_cpu": sum_h_cpu,
+        "sum_h_ram": sum_h_ram,
         "spec": spec,
     }
 
@@ -199,6 +209,8 @@ def ladder_up(
         remain_ram=remain_ram,
         tau=tau,
         pending_resize=actions,
+        min_head_cpu=params.delta_cpu_min_cores,
+        min_head_ram=params.delta_ram_min_mb,
     )
     actions.extend(spawns)
     leftover: HelpRequest | None = None
@@ -225,6 +237,7 @@ def ladder_down(
     *,
     delta_cpu: float,
     delta_ram: float,
+    protect_last_serving: bool = False,
 ) -> list[Any]:
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
@@ -239,6 +252,7 @@ def ladder_down(
         delta_ram=delta_ram,
         tau=tau,
         reason="bev_down",
+        protect_last_serving=protect_last_serving,
     )
     granted_cpu, granted_ram = _granted_down(replicas, bev)
     remain_cpu = max(0.0, delta_cpu - granted_cpu)
@@ -255,6 +269,8 @@ def ladder_down(
         ram_modeled=ram_modeled,
         skip_ids=skip_ids,
         tau=tau,
+        spec=spec,
+        protect_last_serving=protect_last_serving,
     )
     actions: list[Any] = [*bev, *terms]
     if params.cascade_home:

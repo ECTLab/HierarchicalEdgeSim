@@ -1,9 +1,10 @@
 # S7 — Proactive front-end on the completed ladder
 
-**Status:** done (Option A TCN)  
-**Branch:** `ladder-based-implementation`  
+**Status:** done (Option A TCN) + control-path fixes vs the 69% Alibaba drop  
+**Branch:** `proactive-integration`  
 **Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S7  
-**Depends on:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)
+**Depends on:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)  
+**Alibaba diagnosis:** [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md)
 
 PredictAndDecide sits in front of the same AllocateResources path as `reactive_local` (BEV → BEH → vicinity → BEG, cost-ordered down + cascade). `reactive_local` stays the baseline scaler name.
 
@@ -38,17 +39,17 @@ TTW close:
   if history < W:  reactive streaks → ladder   # cold start
   else:
     r̂ = TCN(60×2) → 5 RPS hats
-    PredictAndDecide(r_t, r̂, A, ρ) → (Δ, δ_cpu, δ_ram, sustained)
+    PredictAndDecide(r_t, r̂, H=Σ(A−min), ρ) → (Δ, δ_cpu, δ_ram, sustained)
     same ladder as S2–S6
 ```
 
-Decide maps RPS to utilization with `C_full = (A / ρ) / tick_sec`, then:
+Decide maps RPS to utilization with `C_full = (H / ρ) / tick_sec` where `H = Σ(A − min)` (floors buy no μ). `H ≈ 0` and `r_t > 0` is treated as saturated (Up). Residual is `A_req = n·min + (ρ · r* · tick_sec) / θ_target`. Proactive BEV-down will not pin the last serving replica onto a floor, and will not leave any replica at `μ = 0` with CPU headroom (routing would send it load it cannot serve). Then:
 
 - **Up** if `u_obs ≥ θ_up` or any `û ≥ θ_up`
 - **Down** if both observed and all hats are `≤ θ_down`
 - else **None**
 
-Decide residual is the gap from current alloc `A` to `A_req = min + (ρ · r* · tick_sec) / θ_target`, where `r*` is `max(r_t, hats)`. Apply clips that gap to one reactive-sized step (`α_up` / `α_down`): lite BEH spawns at `cpu_min` (`μ=0` until BEV), so dumping the full `A_req` gap creates dozens of idle replicas.
+Decide residual is the gap from current alloc `A` to `A_req = n·min + (ρ · r* · tick_sec) / θ_target`, where `r*` is `max(r_t, hats)`. Apply clips that gap to one reactive-sized step (`α_up` / `α_down`). BEH packs that leftover above minima so the new replica can serve on the next tick (apply order is resize then spawn, so there is no same-tick BEV of a new id).
 
 `sustained` is true when at least `sustained_tau` forecast steps sit at/above `θ_up` — that skips BEV and goes to BEH.
 
@@ -75,3 +76,5 @@ YAML leftover keys after the decide block are `reactive_local` params (`x_up_str
 - Training min–max is the full 12h series (same leakage as that repo).
 - No vicinity `Reserve` / lender forecast (still S4 lite).
 - Cooldown after a proactive apply is `cooldown_C` TTWs; cold-start reactive still uses `cooldown_ticks`.
+
+The first Alibaba TCN run dropped 69% because decide / BEV-down / min-BEH disagreed with `μ`. Fixes and later numbers: [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md).

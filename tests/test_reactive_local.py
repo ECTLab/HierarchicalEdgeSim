@@ -146,7 +146,8 @@ def test_ms_max_spawns_on_same_worker_when_server_has_room(tmp_path):
     spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
     assert spawns
     assert spawns[0].server_id == "c1-w1"
-    assert spawns[0].cpu_alloc_cores == 0.5
+    assert spawns[0].cpu_alloc_cores == 0.7
+    assert spawns[0].ram_alloc_mb == 384.0
     assert not any(getattr(a, "type", "") == "resize" for a in actions)
 
 

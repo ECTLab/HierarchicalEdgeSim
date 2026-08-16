@@ -19,7 +19,7 @@ Every decision tick, per microservice:
    - Leftover residual (or the full residual if **sustained**, skipping BEV) goes to **BEH**:
      - Prefer servers in the home cluster that already host the MS
      - Then other servers in that cluster by free CPU
-     - Spawn at MS minima until residual is covered or the cluster cannot fit another replica
+     - Spawn above MS minima: pack leftover headroom so the new replica has μ>0 (floors buy no throughput). Skip a server that can only fit the floor.
    - If residual remains → log-only `NeedVicinityHelpAction` (no vicinity protocol yet; S4).
 3. **Down**
    - BEV shrink toward minima, then **terminate coldest extra replicas** (never the last).

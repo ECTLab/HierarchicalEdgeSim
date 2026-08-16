@@ -91,6 +91,9 @@ class ProactiveAutoScaler:
                     sustained_tau=self.params.sustained_tau,
                     cpu_min_cores=spec.cpu_min_cores,
                     ram_min_mb=spec.ram_min_mb,
+                    n_replicas=max(1, len(obs["replicas"])),
+                    H_cpu=obs["sum_h_cpu"],
+                    H_ram=obs.get("sum_h_ram", 0.0),
                 )
                 if decision.direction is Direction.UP:
                     if decision.delta_cpu <= EPS and decision.delta_ram <= EPS:
@@ -121,7 +124,14 @@ class ProactiveAutoScaler:
                         continue
                     d_cpu, d_ram = _clip_step(d_cpu, d_ram, obs, ladder, up=False)
                     down_actions = ladder_down(
-                        env, ms_id, tau, obs, ladder, delta_cpu=d_cpu, delta_ram=d_ram
+                        env,
+                        ms_id,
+                        tau,
+                        obs,
+                        ladder,
+                        delta_cpu=d_cpu,
+                        delta_ram=d_ram,
+                        protect_last_serving=True,
                     )
                     actions.extend(down_actions)
                     if down_actions:
@@ -151,7 +161,16 @@ class ProactiveAutoScaler:
             elif st.d_streak >= ladder.y_down_streak:
                 d_cpu, d_ram = down_delta(obs, ladder)
                 actions.extend(
-                    ladder_down(env, ms_id, tau, obs, ladder, delta_cpu=d_cpu, delta_ram=d_ram)
+                    ladder_down(
+                        env,
+                        ms_id,
+                        tau,
+                        obs,
+                        ladder,
+                        delta_cpu=d_cpu,
+                        delta_ram=d_ram,
+                        protect_last_serving=True,
+                    )
                 )
 
         actions.extend(resolve_help(env, help_q, actions, tau))
@@ -183,10 +202,7 @@ def _clip_step(
     *,
     up: bool,
 ) -> tuple[float, float]:
-    """Lite BEH spawns at cpu_min; a full A_req gap would create dozens of μ=0 replicas.
-
-    Keep TCN's direction; apply at most one reactive-sized step per decision.
-    """
+    """Keep TCN's direction; apply at most one reactive-sized step per decision."""
     if up:
         cap_cpu = max(ladder.delta_cpu_min_cores, ladder.alpha_up * max(obs["sum_cpu_alloc"], EPS))
         cap_ram = max(ladder.delta_ram_min_mb, ladder.alpha_up * max(obs["sum_ram_alloc"], EPS))

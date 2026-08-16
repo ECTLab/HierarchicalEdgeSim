@@ -1,52 +1,52 @@
 # Alibaba MS_588 — Option A TCN vs reactive
 
-Recorded from the S7 integration runs (same numbers as the session canvas).
 721 one-minute ticks from Alibaba cluster-trace-microservices-v2021. Same world
 (4×8 cores, `tick_sec=60`). TCN is 60×2 → 5-step delta (`models/tcn_delta_v1`).
 
-Trace vs sum(incoming) matched on both runs (max abs diff 0). Physics is honest;
-the gap is policy + forecast, not a missing log.
+The first S7 integration run dropped **69%** under TCN vs **15%** under
+`reactive_local`. That was a control-path mismatch with the usage model, not a
+broken engine and not mainly the predictor. The diagnosis and the four fixes
+are in [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md).
 
-| | Drop rate | Served | Dropped | Lives logged | OK actions |
+Trace vs sum(incoming) matched on every run below (max abs diff 0). Incoming
+on all runs: 3,385,510.
+
+## Current pair (after control fixes)
+
+| | Drop rate | Served | Dropped | Lives | OK actions |
 |---|---|---|---|---|---|
-| `reactive_local` | **15.11%** | 2,874,064 | 511,446 | 2 | 51 |
-| proactive TCN | **69.11%** | 1,045,771 | 2,339,739 | 7 | 60 |
+| `reactive_local` `42_20260816T100437Z` | **15.44%** | 2,862,823 | 522,687 | 2 | 49 |
+| proactive TCN `42_20260816T102455Z` | **7.85%** | 3,119,652 | 265,858 | 7 | 74 |
 
-Incoming on both: 3,385,510.
+Reactive’s one BEH spawn is now packed above min (`0.61 / 384`), so this
+baseline is not identical to the first 15.11% recording.
 
-## Actions
+### Actions (current pair)
 
 | Kind | reactive_local | proactive TCN |
 |---|---|---|
-| BEV up | 24 | 35 |
-| BEV down | 25 | 14 |
+| BEV up | 23 | 38 |
+| BEV down | 24 | 25 |
 | BEH spawn | 1 | 6 |
 | BEH terminate | 1 | 5 |
 
-Reactive first grow at τ=27 (cold-start streak). One spawn, one terminate.
-Capacity stays on the home replica.
+## Ladder of TCN runs
 
-Proactive: same cold-start ups at τ=27 and 32. First TCN apply at τ=60 (window
-full). Hits `cpu_max` at τ=72 and spawns; a trough then BEV-downs the serving
-replica (τ=159–180).
-
-## Why TCN loses on this series
-
-The TCN still lags spikes and sits high on the baseline (asymmetric training).
-That turns into extra BEV-down after each burst and `cpu_min` BEH replicas that
-cannot serve until a later BEV. Reactive only grows on observed drops and
-shrinks on an 8-tick streak, so it holds capacity through the periodic 25–30k
-spikes.
-
-Full decide residual was clipped to one `α` step per decision. Without that
-clip, lite BEH spawned `remain/cpu_min` idle replicas (~80% drops, 300+ lives).
+| Run | Drop rate | Zero-serve ticks | Notes |
+|---|---|---|---|
+| `42_20260816T083509Z` | 69.11% | 331 | First Option A wiring. RAM floor + min BEH. |
+| `42_20260816T094113Z` | 45.29% | 0 | After decide-on-headroom + last-serving guard. |
+| `42_20260816T100507Z` | 14.15% | 0 | After BEH-above-min. Still 202 RAM-dead attractor ticks. |
+| `42_20260816T102455Z` | **7.85%** | 0 | After no CPU-weighted `μ=0` downs. |
 
 ## Run directories (local, gitignored)
 
-- Reactive: `results/alibaba_reactive_local/42_20260816T083130Z/analysis/demo_app/`
-- TCN: `results/alibaba_proactive/42_20260816T083509Z/analysis/demo_app/`
-- Comparison: `results/alibaba_proactive/42_20260816T083509Z/analysis/baseline_comparison.png`
+- Reactive: `results/alibaba_reactive_local/42_20260816T100437Z/analysis/demo_app/`
+- TCN: `results/alibaba_proactive/42_20260816T102455Z/analysis/demo_app/`
+- Comparison: `results/alibaba_proactive/42_20260816T102455Z/analysis/baseline_comparison.png`
 - TCN vs incoming: `…/analysis/demo_app/tcn_forecast.png`
+
+How to regenerate: [how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B6.
 
 ## What was copied from alibaba-trace
 

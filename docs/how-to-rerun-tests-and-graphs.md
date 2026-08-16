@@ -70,6 +70,9 @@ python3 -m venv .venv
 ### B6) Alibaba MS_588 — reactive_local vs Option A TCN
 
 Needs torch (the `alibaba-trace` venv works). `tick_sec=60`; 721 one-minute ticks.
+Diagnosis of the first 69% TCN run and the control-path fixes:
+[s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Latest recorded
+numbers: [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md).
 
 ```bash
 export PYTHONPATH=/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples

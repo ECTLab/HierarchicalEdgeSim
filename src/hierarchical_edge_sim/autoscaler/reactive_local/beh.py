@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView
+from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, replica_serves
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 from hierarchical_edge_sim.env.loans import get_loan
@@ -47,6 +47,41 @@ def n_new_replicas(
     return max(1, math.ceil(max(parts) - 1e-12))
 
 
+def packed_spawn_size(
+    *,
+    remain_cpu: float,
+    remain_ram: float,
+    spec: MicroserviceSpec,
+    free_cpu: float,
+    free_ram: float,
+    min_head_cpu: float,
+    min_head_ram: float,
+) -> tuple[float, float, float, float] | None:
+    """Size a spawn as floor + leftover headroom so μ>0, or None if it cannot serve."""
+    ram_modeled = spec.ram_per_request_mb > EPS
+    if free_cpu + EPS < spec.cpu_min_cores:
+        return None
+    if free_ram + EPS < spec.ram_min_mb:
+        return None
+    max_head_cpu = max(0.0, min(spec.cpu_max_cores - spec.cpu_min_cores, free_cpu - spec.cpu_min_cores))
+    max_head_ram = max(0.0, min(spec.ram_max_mb - spec.ram_min_mb, free_ram - spec.ram_min_mb))
+    head_cpu = min(max(0.0, remain_cpu), max_head_cpu)
+    head_ram = min(max(0.0, remain_ram), max_head_ram) if ram_modeled else 0.0
+    if head_cpu <= EPS:
+        head_cpu = min(max(0.0, min_head_cpu), max_head_cpu)
+    if ram_modeled and head_ram <= EPS:
+        head_ram = min(max(0.0, min_head_ram), max_head_ram)
+    if head_cpu <= EPS:
+        return None
+    if ram_modeled and head_ram <= EPS:
+        return None
+    cpu = spec.cpu_min_cores + head_cpu
+    ram = spec.ram_min_mb + head_ram if ram_modeled else spec.ram_min_mb
+    if cpu > free_cpu + EPS or ram > free_ram + EPS:
+        return None
+    return cpu, ram, head_cpu, head_ram
+
+
 def beh_up(
     *,
     env: Env,
@@ -57,13 +92,11 @@ def beh_up(
     remain_ram: float,
     tau: int,
     pending_resize: list,
+    min_head_cpu: float = 0.25,
+    min_head_ram: float = 128.0,
 ) -> tuple[list[SpawnAction], float, float]:
-    """Spawn at MS minima on home-cluster servers until residual is covered or full."""
-    ram_modeled = spec.ram_per_request_mb > EPS
-    n_new = n_new_replicas(
-        remain_cpu, remain_ram, spec.cpu_min_cores, spec.ram_min_mb, ram_modeled
-    )
-    if n_new <= 0:
+    """Pack leftover onto home-cluster spawns above minima so each new replica can serve."""
+    if remain_cpu <= EPS and remain_ram <= EPS:
         return ([], remain_cpu, remain_ram)
 
     free_cpu: dict[str, float] = {}
@@ -76,28 +109,36 @@ def beh_up(
 
     ranked = rank_servers_for_spawn(env, ms_id, cluster_id)
     actions: list[SpawnAction] = []
-    for _ in range(n_new):
+    while remain_cpu > EPS or remain_ram > EPS:
         placed = False
         for sid in ranked:
-            if free_cpu[sid] + EPS < spec.cpu_min_cores:
+            packed = packed_spawn_size(
+                remain_cpu=remain_cpu,
+                remain_ram=remain_ram,
+                spec=spec,
+                free_cpu=free_cpu[sid],
+                free_ram=free_ram[sid],
+                min_head_cpu=min_head_cpu,
+                min_head_ram=min_head_ram,
+            )
+            if packed is None:
                 continue
-            if free_ram[sid] + EPS < spec.ram_min_mb:
-                continue
+            cpu, ram, head_cpu, head_ram = packed
             actions.append(
                 SpawnAction(
                     type="spawn",
                     ms_id=ms_id,
                     server_id=sid,
-                    cpu_alloc_cores=spec.cpu_min_cores,
-                    ram_alloc_mb=spec.ram_min_mb,
+                    cpu_alloc_cores=cpu,
+                    ram_alloc_mb=ram,
                     reason="beh_spawn",
                     tau=tau,
                 )
             )
-            free_cpu[sid] -= spec.cpu_min_cores
-            free_ram[sid] -= spec.ram_min_mb
-            remain_cpu = max(0.0, remain_cpu - spec.cpu_min_cores)
-            remain_ram = max(0.0, remain_ram - spec.ram_min_mb)
+            free_cpu[sid] -= cpu
+            free_ram[sid] -= ram
+            remain_cpu = max(0.0, remain_cpu - head_cpu)
+            remain_ram = max(0.0, remain_ram - head_ram)
             placed = True
             break
         if not placed:
@@ -116,9 +157,16 @@ def beh_down(
     ram_modeled: bool,
     skip_ids: set[str],
     tau: int,
+    spec: MicroserviceSpec | None = None,
+    protect_last_serving: bool = False,
 ) -> list[TerminateAction]:
     """Terminate global loans, then vicinity loans, then coldest local (never the last)."""
     live = [r for r in replicas if r.container_id not in skip_ids]
+    serving_ids = (
+        {r.container_id for r in replicas if replica_serves(r, spec, ram_modeled)}
+        if protect_last_serving and spec is not None
+        else set()
+    )
 
     def _key(r: ReplicaView) -> tuple[int, int, float, float, str]:
         return (*_reclaim_key(env, r, owner_cluster_id, ms_id), r.q, -r.slack, r.container_id)
@@ -131,6 +179,8 @@ def beh_down(
             break
         if n_live - len(actions) <= 1:
             break
+        if protect_last_serving and len(serving_ids) == 1 and r.container_id in serving_ids:
+            continue
         actions.append(
             TerminateAction(
                 type="terminate",

@@ -41,20 +41,29 @@ def predict_and_decide(
     sustained_tau: int,
     cpu_min_cores: float = 0.0,
     ram_min_mb: float = 0.0,
+    n_replicas: int = 1,
+    H_cpu: float | None = None,
+    H_ram: float | None = None,
     eps: float = EPS,
 ) -> DecideResult:
     if tick_sec <= 0:
         raise ValueError("tick_sec must be > 0")
+    if n_replicas < 1:
+        raise ValueError("n_replicas must be >= 1")
     hats = [max(0.0, float(x)) for x in r_hat]
     r_t = max(0.0, float(r_t))
+    n = int(n_replicas)
+    head_cpu = float(H_cpu) if H_cpu is not None else max(0.0, float(A_cpu) - n * float(cpu_min_cores))
+    head_ram = float(H_ram) if H_ram is not None else max(0.0, float(A_ram) - n * float(ram_min_mb))
 
-    c_full_cpu = (A_cpu / max(rho_cpu, eps)) / tick_sec
+    # Floors buy no throughput (env/usage.py). Util and residual use headroom.
+    c_full_cpu = (head_cpu / max(rho_cpu, eps)) / tick_sec
     u_cpu_obs = r_t / max(c_full_cpu, eps)
     u_cpu_hats = [h / max(c_full_cpu, eps) for h in hats]
 
     ram_mode = rho_ram > eps
     if ram_mode:
-        c_full_ram = (A_ram / max(rho_ram, eps)) / tick_sec
+        c_full_ram = (head_ram / max(rho_ram, eps)) / tick_sec
         u_ram_obs = r_t / max(c_full_ram, eps)
         u_ram_hats = [h / max(c_full_ram, eps) for h in hats]
         u_rps = max(u_cpu_obs, u_ram_obs)
@@ -78,10 +87,10 @@ def predict_and_decide(
         sustained = sum(1 for u in u_hats if u >= theta_up) >= sustained_tau
 
     r_star = r_t if not hats else max(r_t, max(hats))
-    a_req_cpu = cpu_min_cores + (rho_cpu * r_star * tick_sec) / theta_target
+    a_req_cpu = n * cpu_min_cores + (rho_cpu * r_star * tick_sec) / theta_target
     delta_cpu = a_req_cpu - A_cpu
     if ram_mode:
-        a_req_ram = ram_min_mb + (rho_ram * r_star * tick_sec) / theta_target
+        a_req_ram = n * ram_min_mb + (rho_ram * r_star * tick_sec) / theta_target
         delta_ram = a_req_ram - A_ram
     else:
         delta_ram = 0.0

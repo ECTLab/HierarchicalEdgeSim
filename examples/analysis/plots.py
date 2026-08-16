@@ -92,6 +92,7 @@ def plot_cpu(container: ContainerSeries, out_path: Path) -> None:
         container.cpu_used,
         label="cpu usage (cores)",
         linewidth=2,
+        drawstyle="steps-post",
         zorder=3,
     )
     plt.plot(
@@ -121,6 +122,7 @@ def plot_ram(container: ContainerSeries, out_path: Path) -> None:
         container.ram_used,
         label="ram usage (MB)",
         linewidth=2,
+        drawstyle="steps-post",
         zorder=3,
     )
     plt.plot(

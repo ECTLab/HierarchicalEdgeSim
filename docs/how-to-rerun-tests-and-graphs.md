@@ -7,15 +7,24 @@ This guide shows how to:
 3. generate per-application analysis plots
 4. read the `reactive_local` 60-tick figures against `demo_60_reactive_local.yaml` (§7)
 
+Simulation outputs go under `results/` and are **gitignored**. Commit the
+configs, traces, model weights, and the numbers in
+[alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md); regenerate plots
+locally. Run ids are `{seed}_{UTC}`, so folder names will not match anyone
+else’s machine.
+
 ---
 
 ## 1) Setup
 
 ```bash
-# from the repository root
+# from the repository root (Python 3.14+; see pyproject.toml)
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev,plot]"
 ```
+
+Add `.[tcn]` (torch) only for §B6. `.mplconfig/` is also gitignored; set
+`MPLCONFIGDIR=$PWD/.mplconfig` if matplotlib cannot write a home cache.
 
 ---
 
@@ -69,22 +78,44 @@ python3 -m venv .venv
 
 ### B6) Alibaba MS_588 — reactive_local vs Option A TCN
 
-Needs torch (the `alibaba-trace` venv works). `tick_sec=60`; 721 one-minute ticks.
-Diagnosis of the first 69% TCN run and the control-path fixes:
-[s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Latest recorded
+721 one-minute ticks (`tick_sec=60`), seed 42. This is the S7 claim: same
+world, TCN vs `reactive_local`. Diagnosis:
+[s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Recorded
 numbers: [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md).
 
+Needs torch. Prefer the project extra; if that has no wheel for your Python,
+use any interpreter where `import torch` works and put `$PWD/src:$PWD/examples`
+on `PYTHONPATH`.
+
 ```bash
-export PYTHONPATH=/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples
+.venv/bin/pip install -e ".[dev,plot,tcn]"
 export MPLCONFIGDIR=$PWD/.mplconfig
-python3 examples/run_with_autoscaler.py configs/demo_alibaba_reactive_local.yaml
-python3 examples/run_with_autoscaler.py configs/demo_alibaba_proactive.yaml
-python3 examples/compare_trace_vs_log.py <reactive_run_dir>
-python3 examples/compare_trace_vs_log.py <proactive_run_dir>
-python3 examples/compare_reactive_baseline.py \
-  --run reactive_local <reactive_run_dir> \
-  --run proactive_tcn <proactive_run_dir>
+
+REACTIVE=$(.venv/bin/python examples/run_with_autoscaler.py configs/demo_alibaba_reactive_local.yaml | sed -n 's/^Run complete. Outputs written to: //p')
+PROACTIVE=$(.venv/bin/python examples/run_with_autoscaler.py configs/demo_alibaba_proactive.yaml | sed -n 's/^Run complete. Outputs written to: //p')
+.venv/bin/python examples/compare_trace_vs_log.py "$REACTIVE"
+.venv/bin/python examples/compare_trace_vs_log.py "$PROACTIVE"
+.venv/bin/python examples/compare_reactive_baseline.py \
+  --run reactive_local "$REACTIVE" \
+  --run proactive_tcn "$PROACTIVE"
 ```
+
+Outputs land in `results/alibaba_reactive_local/42_<UTC>/` and
+`results/alibaba_proactive/42_<UTC>/`. The UTC stamp is new every run; do
+**not** expect the folder names in the results doc. On current HEAD the
+physics and totals should match:
+
+| | Drop rate | Incoming | Served | Dropped |
+|---|---|---|---|---|
+| `reactive_local` | **15.44%** | 3,385,510 | 2,862,823 | 522,687 |
+| proactive TCN | **3.79%** | 3,385,510 | 3,257,244 | 128,266 |
+
+`trace_vs_log_requests.png` is the conservation check (trace = sum incoming;
+incoming = served + dropped). TCN should BEV-down about 10 times (hold-over-spike),
+not ~25.
+
+The 69% → 7.85% rows in the results doc are historical. HEAD only reproduces
+the current pair. Do not commit `results/`.
 
 ### C) Two clusters, one app per cluster (this guide's focus)
 

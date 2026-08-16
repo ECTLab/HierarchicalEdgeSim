@@ -61,6 +61,28 @@ python3 -m venv .venv
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_300_two_containers_reactive_local.yaml
 ```
 
+### B5) Same 60-tick local world — proactive persistence smoke (no torch)
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_proactive.yaml
+```
+
+### B6) Alibaba MS_588 — reactive_local vs Option A TCN
+
+Needs torch (the `alibaba-trace` venv works). `tick_sec=60`; 721 one-minute ticks.
+
+```bash
+export PYTHONPATH=/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples
+export MPLCONFIGDIR=$PWD/.mplconfig
+python3 examples/run_with_autoscaler.py configs/demo_alibaba_reactive_local.yaml
+python3 examples/run_with_autoscaler.py configs/demo_alibaba_proactive.yaml
+python3 examples/compare_trace_vs_log.py <reactive_run_dir>
+python3 examples/compare_trace_vs_log.py <proactive_run_dir>
+python3 examples/compare_reactive_baseline.py \
+  --run reactive_local <reactive_run_dir> \
+  --run proactive_tcn <proactive_run_dir>
+```
+
 ### C) Two clusters, one app per cluster (this guide's focus)
 
 ```bash

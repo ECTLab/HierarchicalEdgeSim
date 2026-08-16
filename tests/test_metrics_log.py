@@ -177,6 +177,36 @@ def test_terminated_container_history_is_flushed(tmp_path: Path):
     assert spawned.container_id not in env.world.containers
 
 
+def test_auto_respawn_keeps_retired_and_live_logs(tmp_path: Path):
+    from datetime import UTC, datetime
+
+    from hierarchical_edge_sim.env.api import Env
+
+    cfg = deepcopy(_tiny_dict(results_dir=str(tmp_path / "results")))
+    config_path = _write_tmp_config_tree(tmp_path, cfg, {"api.csv": VALID_TRACE})
+    env = Env.from_config(config_path)
+    first = env.spawn(ms_id="api", server_id="c1-w2")
+    assert first.ok
+    env.run(max_ticks=2, now_utc=datetime(2026, 8, 16, 8, 0, 0, tzinfo=UTC))
+    env.terminate(first.container_id)
+    second = env.spawn(ms_id="api", server_id="c1-w2")
+    assert second.ok
+    assert second.container_id != first.container_id
+    run_dir = write_run_outputs(
+        world=env.world,
+        world_spec=env.world_spec,
+        traces=env.traces,
+        run_id="respawn_logs",
+        retired_containers=env.retired_containers,
+    )
+    first_log = run_dir / "apps" / "demo_app" / "api" / f"{first.container_id}.log.csv"
+    second_log = run_dir / "apps" / "demo_app" / "api" / f"{second.container_id}.log.csv"
+    assert first_log.is_file()
+    assert second_log.is_file()
+    with first_log.open("r", encoding="utf-8", newline="") as f:
+        assert [r["time_unit"] for r in csv.DictReader(f)] == ["1", "2"]
+
+
 def test_meta_json_fields(tmp_path: Path):
     run_dir = _run_and_write(tmp_path)
     meta_path = run_dir / "apps" / "demo_app" / "api" / "c-api-1.meta.json"

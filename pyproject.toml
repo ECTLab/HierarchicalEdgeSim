@@ -19,6 +19,9 @@ dev = [
 plot = [
     "matplotlib>=3.8",
 ]
+tcn = [
+    "torch>=2.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -50,16 +50,31 @@ def write_run_outputs(
     )
     _write_actions_csv(run_dir=run_dir, action_log=action_log or [])
 
-    by_id = {c.id: c for c in (retired_containers or [])}
-    by_id.update(world.containers)
-    for container in sorted(by_id.values(), key=lambda c: c.id):
+    # Keep every life. Auto-ids are unique for the run; an explicit respawn of
+    # the same id must not overwrite the retired log (trace conservation).
+    to_write = list(retired_containers or []) + sorted(
+        world.containers.values(), key=lambda c: c.id
+    )
+    used_stems: set[str] = set()
+    for container in to_write:
         ms = world.microservices[container.microservice_id]
         server = world.servers[container.server_id]
         spec = ms_specs[container.microservice_id]
         container_dir = run_dir / "apps" / container.app_id / ms.id
         container_dir.mkdir(parents=True, exist_ok=True)
-        _write_container_meta(container_dir=container_dir, container=container, server_cluster_id=server.cluster_id, spec=spec)
-        _write_container_log(container_dir=container_dir, container_id=container.id, history=container.history)
+        stem = _unique_container_stem(container.id, used_stems)
+        _write_container_meta(
+            container_dir=container_dir,
+            container=container,
+            server_cluster_id=server.cluster_id,
+            spec=spec,
+            file_stem=stem,
+        )
+        _write_container_log(
+            container_dir=container_dir,
+            file_stem=stem,
+            history=container.history,
+        )
 
     return run_dir
 
@@ -127,12 +142,23 @@ def _write_actions_csv(*, run_dir: Path, action_log: list) -> None:
             )
 
 
+def _unique_container_stem(container_id: str, used_stems: set[str]) -> str:
+    stem = container_id
+    n = 2
+    while stem in used_stems:
+        stem = f"{container_id}__life{n}"
+        n += 1
+    used_stems.add(stem)
+    return stem
+
+
 def _write_container_meta(
     *,
     container_dir: Path,
     container,
     server_cluster_id: str,
     spec: MicroserviceSpec,
+    file_stem: str | None = None,
 ) -> None:
     payload = {
         "container_id": container.id,
@@ -151,12 +177,12 @@ def _write_container_meta(
         "final_cpu_alloc_cores": container.cpu_alloc_cores,
         "final_ram_alloc_mb": container.ram_alloc_mb,
     }
-    path = container_dir / f"{container.id}.meta.json"
+    path = container_dir / f"{file_stem or container.id}.meta.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _write_container_log(*, container_dir: Path, container_id: str, history) -> None:
-    path = container_dir / f"{container_id}.log.csv"
+def _write_container_log(*, container_dir: Path, file_stem: str, history) -> None:
+    path = container_dir / f"{file_stem}.log.csv"
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(

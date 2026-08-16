@@ -26,10 +26,15 @@ from .io import (
 from .plots import (
     plot_combined_requests,
     plot_cpu,
+    plot_forecast_vs_actual,
     plot_ladder_qos,
     plot_ram,
     plot_replica_sites,
+    plot_routing_split,
 )
+
+_MAX_REPLICA_RESOURCE_PLOTS = 8
+_MIN_TICKS_FOR_RESOURCE_PLOT = 2
 
 
 @dataclass(slots=True)
@@ -100,6 +105,8 @@ def analyze_run(
 
         for ms_id, ms_containers in by_ms.items():
             for c in ms_containers:
+                if not c.tau:
+                    continue
                 residual = max(abs(i - (s + d)) for i, s, d in zip(c.incoming, c.served, c.dropped))
                 if residual > 1e-9:
                     raise ValueError(
@@ -139,6 +146,24 @@ def analyze_run(
                 out_path=app_out / plot_name,
                 title=f"{app_id}/{ms_id}: Trace vs Logs",
             )
+            split_name = (
+                "routing_split.png" if len(by_ms) == 1 else f"routing_split_{ms_id}.png"
+            )
+            plot_routing_split(
+                tau=tau_trace,
+                containers=ms_containers,
+                out_path=app_out / split_name,
+                title=f"{app_id}/{ms_id}: incoming by replica",
+            )
+            _maybe_plot_tcn_forecast(
+                meta=meta,
+                tau=tau_trace,
+                incoming=incoming,
+                out_path=app_out / (
+                    "tcn_forecast.png" if len(by_ms) == 1 else f"tcn_forecast_{ms_id}.png"
+                ),
+                title=f"{app_id}/{ms_id}: TCN vs observed incoming",
+            )
 
             markers = action_markers(actions, ms_id=ms_id)
             qos_name = "ladder_qos.png" if len(by_ms) == 1 else f"ladder_qos_{ms_id}.png"
@@ -163,7 +188,7 @@ def analyze_run(
                 title=f"{app_id}/{ms_id}: replicas by site",
             )
 
-        for c in app_containers:
+        for c in _resource_plot_targets(app_containers):
             plot_cpu(c, app_out / f"{c.container_id}_cpu.png")
             plot_ram(c, app_out / f"{c.container_id}_ram.png")
 
@@ -181,3 +206,74 @@ def analyze_run(
         )
 
     return summaries
+
+
+def _resource_plot_targets(containers: list) -> list:
+    """Home / longest-lived replicas only — skip empty and one-tick spawn leftovers."""
+    live = [c for c in containers if len(c.tau) >= _MIN_TICKS_FOR_RESOURCE_PLOT]
+    if not live:
+        return []
+    ranked = sorted(live, key=lambda c: (len(c.tau), sum(c.incoming)), reverse=True)
+    return ranked[:_MAX_REPLICA_RESOURCE_PLOTS]
+
+
+def _maybe_plot_tcn_forecast(
+    *,
+    meta: dict,
+    tau: list[int],
+    incoming: list[float],
+    out_path: Path,
+    title: str,
+) -> None:
+    scaler = meta.get("autoscaler") or {}
+    params = scaler.get("params") or {}
+    if scaler.get("name") != "proactive_auto_scaler":
+        return
+    if params.get("predictor") != "tcn_delta":
+        return
+    try:
+        from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.tcn import (
+            TcnDeltaPredictor,
+        )
+        from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.window import (
+            count_to_rps,
+            rps_to_count,
+            time_window,
+        )
+    except ImportError:
+        return
+
+    model_dir = params.get("model_dir") or "models/tcn_delta_v1"
+    try:
+        predictor = TcnDeltaPredictor.from_model_dir(model_dir)
+    except Exception:
+        return
+
+    lookback = predictor.lookback
+    offset = int(params.get("time_tick_offset") or 0)
+    step1 = [float("nan")] * len(incoming)
+    step_h = [float("nan")] * len(incoming)
+    for i in range(lookback - 1, len(incoming)):
+        window = incoming[i - lookback + 1 : i + 1]
+        close_tick = (tau[i] - 1) + offset
+        ticks = time_window(close_tick, lookback)
+        hats = predictor.predict_horizon(
+            [count_to_rps(n, tick_sec=predictor.tick_sec) for n in window],
+            time_ticks=ticks,
+            counts=list(window),
+        )
+        if i + 1 < len(incoming):
+            step1[i + 1] = rps_to_count(hats[0], tick_sec=predictor.tick_sec)
+        if i + len(hats) < len(incoming):
+            step_h[i + len(hats)] = rps_to_count(hats[-1], tick_sec=predictor.tick_sec)
+        elif i + 1 < len(incoming):
+            step_h[i + 1] = rps_to_count(hats[-1], tick_sec=predictor.tick_sec)
+
+    plot_forecast_vs_actual(
+        tau=tau,
+        actual_counts=incoming,
+        pred_step1=step1,
+        pred_horizon=step_h,
+        out_path=out_path,
+        title=title,
+    )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -213,6 +213,10 @@ class Env:
     action_log: list[ActionLogRow] = field(default_factory=list)
     autoscaler_meta: dict[str, Any] | None = None
     retired_containers: list[Container] = field(default_factory=list)
+    used_container_ids: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        self.used_container_ids.update(self.world.containers)
 
     @classmethod
     def from_config(cls, config_path: str | Path) -> "Env":
@@ -730,6 +734,7 @@ class Env:
                 ram_alloc_mb=new_ram,
             ),
         )
+        self.used_container_ids.add(cid)
         return SpawnResult(
             ok=True,
             code=SpawnResultCode.OK,
@@ -999,7 +1004,7 @@ class Env:
         n = 1
         while True:
             cid = f"c-{ms_id}-{server_id}-{n}"
-            if cid not in self.world.containers:
+            if cid not in self.used_container_ids and cid not in self.world.containers:
                 return cid
             n += 1
 
@@ -1105,16 +1110,23 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     }
     params = getattr(autoscaler, "params", None)
     if params is not None:
-        if hasattr(params, "__dict__"):
-            meta["params"] = {
-                k: v for k, v in vars(params).items() if not k.startswith("_")
-            }
-        elif isinstance(params, dict):
-            meta["params"] = dict(params)
+        dumped = _params_to_plain(params)
+        if dumped is not None:
+            meta["params"] = dumped
     k = getattr(autoscaler, "decision_every_k_ticks", None)
     if k is not None:
         meta["decision_every_k_ticks"] = k
     return meta
+
+
+def _params_to_plain(params: Any) -> dict[str, Any] | None:
+    if isinstance(params, dict):
+        return dict(params)
+    if is_dataclass(params):
+        return asdict(params)
+    if hasattr(params, "__dict__"):
+        return {k: v for k, v in vars(params).items() if not k.startswith("_")}
+    return None
 
 
 def _microservice_spec_index(world_spec: WorldSpec) -> dict[str, MicroserviceSpec]:

@@ -171,6 +171,19 @@ def test_terminate_frees_capacity_for_respawn(tiny_config_path):
     assert again.container_id == "c-api-3"
 
 
+def test_auto_allocated_ids_are_not_reused_after_terminate(tiny_config_path):
+    env = Env.from_config(tiny_config_path)
+    first = env.spawn(ms_id="api", server_id="c1-w2")
+    assert first.ok
+    gone = env.terminate(first.container_id)
+    assert gone.ok
+    second = env.spawn(ms_id="api", server_id="c1-w2")
+    assert second.ok
+    assert second.container_id != first.container_id
+    assert first.container_id not in env.world.containers
+    assert second.container_id in env.world.containers
+
+
 def test_apply_actions_order_terminate_resize_spawn(tmp_path):
     env = Env.from_config(_write_two_server_config(tmp_path))
     # Start with two replicas so terminate is legal.

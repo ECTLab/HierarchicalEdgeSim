@@ -11,6 +11,9 @@ requests on 2.0 cores (μ=3,750), so the first minute already drops ~20k.
 
 How to regenerate: [how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B7.
 
+Overlay plots: [alibaba-story-plots.md](./alibaba-story-plots.md)
+(`results/alibaba_ms150_proactive/42_20260816T114309Z/analysis/story/overview.png`).
+
 ## Current pair
 
 | | Drop rate | Served | Dropped | Lives | OK actions |

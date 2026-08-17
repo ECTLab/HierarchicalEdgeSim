@@ -293,6 +293,62 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
     assert any(getattr(a, "reason", "") == "bev_up" for a in second)
 
 
+def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
+    env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0)
+    pred = _FixedPredictor(100.0)
+    scaler = build(
+        {
+            "feature_window": 2,
+            "horizon_H": 2,
+            "cooldown_C": 2,
+            "cooldown_ticks": 0,
+            "x_up_streak": 99,
+            "y_down_streak": 99,
+            "sustained_tau": 99,
+            "alpha_down": 1.0,
+        },
+        predictor=pred,
+    )
+    _push(env, 1, incoming=10.0, drop=0.0, q=0.1)
+    scaler.on_tick_end(env, 1)
+    _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
+    up = scaler.on_tick_end(env, 2)
+    assert any(getattr(a, "reason", "") == "bev_up" for a in up)
+    scaler.on_actions_applied(
+        [
+            ResizeResult(
+                ok=True,
+                code=ResizeResultCode.OK,
+                container_id="c-api-1",
+                cpu_alloc_cores=1.2,
+                ram_alloc_mb=512.0,
+            )
+        ]
+    )
+    pred.value = 0.01
+    _push(env, 3, incoming=5.0, drop=0.0, q=0.0)
+    assert not any(getattr(a, "reason", "") == "bev_down" for a in scaler.on_tick_end(env, 3))
+    _push(env, 4, incoming=5.0, drop=0.0, q=0.0)
+    assert not any(getattr(a, "reason", "") == "bev_down" for a in scaler.on_tick_end(env, 4))
+    _push(env, 5, incoming=5.0, drop=0.0, q=0.0)
+    first_down = scaler.on_tick_end(env, 5)
+    assert any(getattr(a, "reason", "") == "bev_down" for a in first_down)
+    scaler.on_actions_applied(
+        [
+            ResizeResult(
+                ok=True,
+                code=ResizeResultCode.OK,
+                container_id="c-api-1",
+                cpu_alloc_cores=0.8,
+                ram_alloc_mb=512.0,
+            )
+        ]
+    )
+    _push(env, 6, incoming=5.0, drop=0.0, q=0.0)
+    second_down = scaler.on_tick_end(env, 6)
+    assert any(getattr(a, "reason", "") == "bev_down" for a in second_down)
+
+
 def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
     scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_60_proactive.yaml")
     assert scaler is not None
@@ -309,6 +365,7 @@ def test_yaml_loads_alibaba_tcn(project_root: Path):
     assert scaler.params.feature_window == 60
     assert scaler.params.horizon_H == 5
     assert scaler.params.cooldown_C == 5
+    assert scaler.params.ladder.alpha_down == 1.0
 
 
 def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
@@ -322,6 +379,7 @@ def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
     assert scaler.params.predictor == "tcn_delta"
     assert scaler.params.model_dir == "models/tcn_delta_v1_ms150"
     assert scaler.params.cooldown_C == 5
+    assert scaler.params.ladder.alpha_down == 1.0
     pred = TcnDeltaPredictor.from_model_dir(project_root / scaler.params.model_dir)
     assert pred.load_min == 240.0
     assert pred.load_max == 40083.0

@@ -80,8 +80,9 @@ YAML leftover keys after the decide block are `reactive_local` params (`x_up_str
 - Global TCN from `alibaba-trace` (`tcn-only`), not a per-MS embedding and not LSTM.
 - Training min–max is the full 12h series (same leakage as that repo).
 - No vicinity `Reserve` / lender forecast (still S4 lite).
-- Cooldown after a proactive apply is `cooldown_C` TTWs and delays **scale-down
-  only** (Kubernetes HPA: scaleUp stabilization 0s, scaleDown 300s). Scale-up
-  follows the forecast immediately. Cold-start reactive still uses `cooldown_ticks`.
+- Cooldown after a proactive **Up** is `cooldown_C` TTWs and delays **scale-down
+  only** (Kubernetes HPA: scaleUp 0s, scaleDown 300s, then 100% per period).
+  Scale-up follows the forecast immediately. Alibaba TCN uses `α_down = 1.0`.
+  Cold-start reactive still uses `cooldown_ticks`.
 
 The first Alibaba TCN run dropped 69% because decide / BEV-down / min-BEH disagreed with `μ`. Fixes and later numbers: [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Why `hold_down_ticks` came out and how cooldown matches HPA: [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md).

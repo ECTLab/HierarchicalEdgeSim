@@ -1,11 +1,14 @@
 # S7 — Hold-over-spike out; Kubernetes-style up vs down cooldown
 
-**Status:** done (code + Alibaba re-run). Scale-down **stairs** (`α_down` + `cooldown_C`) are next, not in this change.  
+**Status:** done (code + Alibaba re-run), including faster scale-down (`α_down = 1.0`, cooldown armed on Up only).  
 **Branch:** `proactive-integration`  
 **Front-end:** [s7-proactive-front-end.md](./s7-proactive-front-end.md)  
 **Numbers:** [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md), [alibaba-tcn-ms150-results.md](./alibaba-tcn-ms150-results.md)
 
-The point of the TCN is: look a few minutes ahead, add cores **before** a spike, and **give them back** when the quiet stretch is coming. This note is what `hold_down_ticks` did instead, why that is not Kubernetes cooldown, what we changed, and what the new plots show.
+The point of the TCN is: look a few minutes ahead, add cores **before** a spike, and **give them back** when the quiet stretch is coming. This note is two steps:
+
+1. Remove `hold_down_ticks` (a 55-minute “you were hot” freeze) and match Kubernetes **up vs down** cooldown.
+2. Make shrink **fast** after that window (`α_down = 1.0`), so we do not walk down 10% stairs for half the valley.
 
 ---
 
@@ -44,63 +47,83 @@ Kubernetes HPA v2 `behavior` is **asymmetric**. Defaults ([HPA concept](https://
 
 Older docs also call the 5-minute down window `--horizontal-pod-autoscaler-downscale-stabilization` (default `5m`). KEDA’s `cooldownPeriod` (default 300s) is a related “wait before scale-to-zero,” not a 55-minute hot freeze.
 
-What we did **not** copy from HPA (on purpose, next change):
+What we did **not** copy from HPA (and then fixed for scale-down rate):
 
-- HPA’s down window is a **recommendation history**, not “after any apply, wait 5 min then bite 10%.”
-- Default scale-down **rate** after the window can be 100% of pods in 15s. Ours is still `α_down = 0.10` per apply, then `cooldown_C` again. That is why μ walks down **stairs**. Out of scope here.
+- HPA’s down window is a **recommendation history**. We approximate it as “no Down for `cooldown_C` after an **Up**.”
+- Default scale-down **rate** after that window is 100% of pods per 15s. Alibaba TCN now uses `α_down = 1.0` and does not re-arm cooldown on Down. See below.
 
 ---
 
-## How we tackled it
+## Step 1 — How we tackled `hold_down_ticks`
 
 Removed `hold_down_ticks`. If a YAML file still sets it, loading fails with an error so the old timer cannot sneak back in.
 
-`cooldown_C` is now **scale-down only**, like HPA’s 0s up / 300s down:
+`cooldown_C` is **scale-down only**, like HPA’s 0s up / 300s down, and it is armed **after Up**, not after Down:
 
 | After a successful apply | Scale-up | Scale-down |
 |---|---|---|
-| Before | Blocked for `cooldown_C` TTWs, unless “hot” bypass | Blocked for `cooldown_C`, **and** 55 min if hot |
-| Now | **Never** delayed by `cooldown_C` (forecast may grow immediately) | Blocked for `cooldown_C` TTWs |
+| Before (with hold) | Blocked unless “hot” | Blocked for `cooldown_C` **and** 55 min if hot |
+| After hold removal | Never delayed | Blocked for `cooldown_C` after **any** apply (10% stairs) |
+| **HEAD** | Never delayed | Blocked for `cooldown_C` after an **Up** only; `α_down = 1.0` |
 
 On Alibaba, 1 TTW = 1 minute, so `cooldown_C: 5` is the 300s down window. Cold-start (no hats yet) still uses the reactive `cooldown_ticks` on that path.
 
-Decide is unchanged: Up if observed or any hat ≥ `θ_up`; Down only if **both** observed and all hats ≤ `θ_down`. The forecast still drives direction. Cooldown only **spaces** downs.
+Decide is unchanged: Up if observed or any hat ≥ `θ_up`; Down only if **both** observed and all hats ≤ `θ_down`. The forecast still drives direction. Cooldown after Up only **delays the first shrink**.
 
 | File | Change |
 |---|---|
 | `proactive_auto_scaler/params.py` | Drop the field; reject leftover YAML |
-| `proactive_auto_scaler/policy.py` | `_next_down_ttw`; Up ignores it |
-| `configs/demo_alibaba_proactive.yaml` | No `hold_down_ticks`; comment on K8s windows |
+| `proactive_auto_scaler/policy.py` | `_next_down_ttw` on Up only; Down ignores it |
+| `configs/demo_alibaba_proactive.yaml` | No hold; `α_down: 1.0`; K8s comments |
 | `configs/demo_alibaba_ms150_proactive.yaml` | Same |
-| `tests/test_proactive_auto_scaler.py` | Down waits `cooldown_C`; Up does not |
+| `tests/test_proactive_auto_scaler.py` | Down waits after Up; Down may repeat; Up ignores cooldown |
 
 ---
 
-## What the re-run showed
+## Step 2 — Faster resource removal (the 10% stairs)
 
-Same worlds as §B6 / §B7. Conservation still holds (trace = incoming = served + dropped).
+After hold was gone, `serve_capacity.png` still walked down in **steps**: a small bite, a flat, another bite. That was **not** leftover `hold_down_ticks`. Two limits were still on:
 
-| | MS_588 drop | After τ≥61 | Mean TCN CPU (τ≥61) |
+1. **`α_down = 0.10`** — each Down could remove only 10% of current CPU.
+2. **`cooldown_C` after every apply, including Down** — the next shrink waited until `τ+6`. The action log was full of 6-minute gaps.
+
+Decide could already want the bottom of the stairs on the first quiet tick. The ladder only allowed one 10% step, then froze. That is a slow-motion hold: extra cores linger through most of the hour, so the next MS_588 spike does not start naked. Better drop numbers, wrong reason.
+
+Kubernetes HPA scale-down is: wait **5 minutes** (stabilization), then a policy of **100% of pods per 15s period** ([HPA behavior](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)). HEAD now matches that on the Alibaba TCN configs:
+
+- After an **Up**, `cooldown_C=5` still blocks Down for 5 minutes (do not strip on a one-minute dip).
+- Down does **not** restart that wait, so further shrinks can happen on the next ticks.
+- `α_down = 1.0` lets one Down take the full decide residual (100% policy; one tick ≈ HPA’s 15s period on this 1-minute world).
+
+`prefer_consolidate_down` still peels one replica vertically, then BEH may terminate extras on the **same** tick. On MS_588, shrink ticks are now ~60 minutes apart (one large cut per valley), not 6-minute 10% stairs.
+
+---
+
+## Numbers (same worlds, three TCN policies)
+
+Headline drop, then drop after τ≥61 in parentheses (TCN has hats). Mean CPU is TCN after warmup. Reactive is unchanged across these runs.
+
+| Policy | MS_588 drop (after τ≥61) | Mean TCN CPU | MS_150 drop (after τ≥61) |
 |---|---|---|---|
-| With hold (`42_20260816T104101Z`) | **3.79%** | 2.33% | 14.2 |
-| **HEAD** (`42_20260817T102407Z`) | **6.50%** | 5.31% | **8.63** |
-| Reactive (unchanged) | 15.44% | 15.11% | 3.24 |
+| Hold 55 min (`42_20260816T104101Z`) | 3.79% (2.33%) | 14.2 | 4.40% (0.14%) |
+| 10% stairs (`42_20260817T102407Z`) | 6.50% (5.31%) | 8.63 | 4.40% (0.14%) |
+| **HEAD, K8s rate** (`42_20260817T105250Z` / `…T105251Z`) | **7.48% (6.38%)** | **7.42** | **4.71% (0.49%)** |
+| Reactive | 15.44% (15.11%) | 3.24 | 5.51% (1.37%) |
 
-MS_150 stayed **4.40%** / **0.14%** after τ≥61. The 55-minute freeze was not what held that plateau (load and hats stay high).
+Conservation still holds (trace = incoming = served + dropped).
 
-The first TCN spike is still a miss (τ=81: hat ~7.4k vs 29.8k incoming, 6.1 cores vs oracle ~13.9). Later spikes start poorer without the floor (τ=501: μ 16.5k vs 27.2k incoming). That is the honest trade: fewer idle cores in the valley, more drops on bursts the 5-step TCN does not see.
-
-Story plots: `results/alibaba_proactive/42_20260817T102407Z/analysis/story/` (and the MS_150 twin). Start at `overview.png`.
+Story plots: `results/alibaba_proactive/42_20260817T105250Z/analysis/story/` and `results/alibaba_ms150_proactive/42_20260817T105251Z/analysis/story/`. Start at `overview.png`. The serve-capacity panel is the one that showed the stairs.
 
 ---
 
-## Next: the scale-down stairs
+## Why keep 100%, not the 10% cap
 
-On `serve_capacity.png` the green μ line does not drop in one move after a spike. It **steps**: a bite, a flat, a bite, a flat.
+The **100%** version is the better controller. The 10% version had better drop numbers for the wrong reason.
 
-That is **not** leftover `hold_down_ticks`. Two remaining limits:
+- **10% + wait after every shrink** is still “don’t give cores back quickly.” You do not need a predictor for that. It is a milder `hold_down_ticks`.
+- **100% after a 5-minute wait following Up** is what Kubernetes’s default scale-down **rate** is. If the forecast says quiet, go to the target.
+- The extra ~1 pp drop on MS_588 (6.50% → 7.48%) and MS_150 after warmup (0.14% → 0.49%) is the cost of arriving at the next burst closer to valley size. The 5-step TCN still misses the hourly spike; slower shrink was a bandage for that miss.
+- Mean TCN CPU after warmup: 14.2 (hold) → 8.63 (stairs) → **7.42** (HEAD).
 
-1. **`α_down = 0.10`** — each Down may remove only 10% of current total CPU (and maybe terminate one floor replica on the same tick).
-2. **`cooldown_C = 5`** — after that apply, the next Down is blocked until `τ+6`. The log is full of 6-minute gaps between shrinks.
+If the goal is a lower Alibaba headline with *this* TCN, 10% “wins.” If the goal is “the forecast drives size, and cooldown matches HPA,” keep 100%. Fix later drops with a longer horizon / better hats, not by dripping 10% for half the valley.
 
-The forecast can already want the bottom of the stairs on the first quiet tick; the ladder only allows one step, then waits. That family of rate-limit is reasonable (HPA has scale-down **policies** too). The **number** of steps is slower than default HPA (10% every 5 minutes vs a large cut after a 5-minute window). That is the follow-up: keep Kubernetes-style “don’t shrink on a one-minute dip,” without walking down a staircase for half the valley.

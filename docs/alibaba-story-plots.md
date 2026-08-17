@@ -30,10 +30,10 @@ On the machine that produced the recorded pair, the overview plots are:
 
 | Trace | Overview |
 |---|---|
-| MS_588 TCN | `results/alibaba_proactive/42_20260817T102407Z/analysis/story/overview.png` |
-| MS_588 reactive | `results/alibaba_reactive_local/42_20260817T102402Z/analysis/story/overview.png` |
-| MS_150 TCN | `results/alibaba_ms150_proactive/42_20260817T102408Z/analysis/story/overview.png` |
-| MS_150 reactive | `results/alibaba_ms150_reactive_local/42_20260817T102403Z/analysis/story/overview.png` |
+| MS_588 TCN | `results/alibaba_proactive/42_20260817T105250Z/analysis/story/overview.png` |
+| MS_588 reactive | `results/alibaba_reactive_local/42_20260817T105246Z/analysis/story/overview.png` |
+| MS_150 TCN | `results/alibaba_ms150_proactive/42_20260817T105251Z/analysis/story/overview.png` |
+| MS_150 reactive | `results/alibaba_ms150_reactive_local/42_20260817T105247Z/analysis/story/overview.png` |
 
 The two paths in a pair are the **same overlay** (reactive vs TCN on one figure),
 copied into both run directories so you can open either.
@@ -169,4 +169,4 @@ burst. Without `hold_down_ticks`, later spikes start lower: τ=501 TCN has 9.03
 cores (μ=16,475 vs 27,221 incoming) and drops 10.7k. Whole run 15.44% vs
 **6.50%**; after TCN is on (τ≥61) 15.11% vs **5.31%**. Mean TCN CPU after
 warmup is 8.63 (was 14.2 with the 55-minute hold). First hour is identical
-(no hats).
+(no hats). HEAD with `α_down=1.0` is **7.48%** / **6.38%** (mean CPU 7.42).

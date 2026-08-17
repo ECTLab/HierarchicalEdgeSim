@@ -136,8 +136,6 @@ class ProactiveAutoScaler:
                         protect_last_serving=True,
                     )
                     actions.extend(down_actions)
-                    if down_actions:
-                        self._pending_proactive_ttw[ms_id] = rec.ttw_t
                 continue
 
             # Cold start: history not full → reactive-only on this TTW close.
@@ -191,6 +189,9 @@ class ProactiveAutoScaler:
                 st.d_streak = 0
                 st.cooldown = self.params.ladder.cooldown_ticks
             for ms_id, ttw_t in self._pending_proactive_ttw.items():
+                # Armed on Up only (HPA: 300s down window after a high rec).
+                # Down itself does not restart the wait, so 100% cuts can
+                # continue each tick the way HPA's 15s scaleDown period does.
                 self._next_down_ttw[ms_id] = ttw_t + self.params.cooldown_C + 1
         self._pending_ms.clear()
         self._pending_proactive_ttw.clear()
@@ -204,7 +205,9 @@ def _clip_step(
     *,
     up: bool,
 ) -> tuple[float, float]:
-    """Keep TCN's direction; apply at most one reactive-sized step per decision."""
+    """Keep TCN's direction. Up is one α_up step. Down may take the full
+    residual up to α_down of current alloc (Kubernetes scaleDown 100% → 1.0).
+    """
     if up:
         cap_cpu = max(ladder.delta_cpu_min_cores, ladder.alpha_up * max(obs["sum_cpu_alloc"], EPS))
         cap_ram = max(ladder.delta_ram_min_mb, ladder.alpha_up * max(obs["sum_ram_alloc"], EPS))

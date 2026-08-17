@@ -108,11 +108,11 @@ Outputs land in `results/alibaba_reactive_local/42_<UTC>/` and
 | | Drop rate | Incoming | Served | Dropped |
 |---|---|---|---|---|
 | `reactive_local` | **15.44%** | 3,385,510 | 2,862,823 | 522,687 |
-| proactive TCN | **6.50%** | 3,385,510 | 3,165,404 | 220,106 |
+| proactive TCN | **7.48%** | 3,385,510 | 3,132,439 | 253,071 |
 
-After τ≥61: reactive **15.11%**, TCN **5.31%**. Conservation should hold
-(trace = incoming = served + dropped). TCN BEV-downs are ~27 (not the old ~10
-from `hold_down_ticks=55`).
+After τ≥61: reactive **15.11%**, TCN **6.38%**. Conservation should hold
+(trace = incoming = served + dropped). TCN BEV-downs are ~11 (one large cut
+per valley, not the old 10% stairs).
 
 `trace_vs_log_requests.png` is the conservation check. TCN plots shade τ=1…60
 (no hats) and annotate drop rate after τ=61.
@@ -153,11 +153,10 @@ Outputs land in `results/alibaba_ms150_reactive_local/42_<UTC>/` and
 | | Drop rate | Incoming | Served | Dropped |
 |---|---|---|---|---|
 | `reactive_local` | **5.51%** | 15,655,433 | 14,793,013 | 862,420 |
-| proactive TCN | **4.40%** | 15,655,433 | 14,966,340 | 689,093 |
+| proactive TCN | **4.71%** | 15,655,433 | 14,917,593 | 737,840 |
 
 The first 60 ticks are identical (TCN cold-start is reactive). After TCN is
-on (τ≥61), TCN drop is **0.14%** vs reactive **1.37%**. Removing
-`hold_down_ticks` did not change this pair.
+on (τ≥61), TCN drop is **0.49%** vs reactive **1.37%**.
 
 ### C) Two clusters, one app per cluster (this guide's focus)
 

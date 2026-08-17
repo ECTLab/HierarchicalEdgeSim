@@ -80,8 +80,9 @@ Add `.[tcn]` (torch) only for §B6. `.mplconfig/` is also gitignored; set
 
 721 one-minute ticks (`tick_sec=60`), seed 42. This is the S7 claim: same
 world, TCN vs `reactive_local`. Diagnosis:
-[s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Recorded
-numbers: [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md).
+[s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Cooldown
+(no 55-minute hold): [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md).
+Recorded numbers: [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md).
 
 Needs torch. Prefer the project extra; if that has no wheel for your Python,
 use any interpreter where `import torch` works and put `$PWD/src:$PWD/examples`
@@ -102,24 +103,24 @@ PROACTIVE=$(.venv/bin/python examples/run_with_autoscaler.py configs/demo_alibab
 
 Outputs land in `results/alibaba_reactive_local/42_<UTC>/` and
 `results/alibaba_proactive/42_<UTC>/`. The UTC stamp is new every run; do
-**not** expect the folder names in the results doc. On current HEAD the
-physics and totals should match:
+**not** expect the folder names in the results doc. On current HEAD:
 
 | | Drop rate | Incoming | Served | Dropped |
 |---|---|---|---|---|
 | `reactive_local` | **15.44%** | 3,385,510 | 2,862,823 | 522,687 |
-| proactive TCN | **3.79%** | 3,385,510 | 3,257,244 | 128,266 |
+| proactive TCN | **6.50%** | 3,385,510 | 3,165,404 | 220,106 |
 
-`trace_vs_log_requests.png` is the conservation check (trace = sum incoming;
-incoming = served + dropped). TCN should BEV-down about 10 times (hold-over-spike),
-not ~25. TCN plots shade τ=1…60 (no hats) and annotate drop rate after τ=61.
+After τ≥61: reactive **15.11%**, TCN **5.31%**. Conservation should hold
+(trace = incoming = served + dropped). TCN BEV-downs are ~27 (not the old ~10
+from `hold_down_ticks=55`).
 
-Overlay story plots (incoming vs μ, oracle/sweet CPU, hats, drops, replicas,
-`overview.png`): [alibaba-story-plots.md](./alibaba-story-plots.md). They land
-in each compared run’s `analysis/story/`.
+`trace_vs_log_requests.png` is the conservation check. TCN plots shade τ=1…60
+(no hats) and annotate drop rate after τ=61.
 
-The 69% → 7.85% rows in the results doc are historical. HEAD only reproduces
-the current pair. Do not commit `results/`.
+Overlay story plots: [alibaba-story-plots.md](./alibaba-story-plots.md).
+
+The 69% → 3.79% rows in the results doc are historical (including hold-over-spike).
+Do not commit `results/`.
 
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
 
@@ -155,7 +156,8 @@ Outputs land in `results/alibaba_ms150_reactive_local/42_<UTC>/` and
 | proactive TCN | **4.40%** | 15,655,433 | 14,966,340 | 689,093 |
 
 The first 60 ticks are identical (TCN cold-start is reactive). After TCN is
-on (τ≥61), TCN drop is **0.14%** vs reactive **1.37%**.
+on (τ≥61), TCN drop is **0.14%** vs reactive **1.37%**. Removing
+`hold_down_ticks` did not change this pair.
 
 ### C) Two clusters, one app per cluster (this guide's focus)
 

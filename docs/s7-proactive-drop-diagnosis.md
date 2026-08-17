@@ -137,13 +137,16 @@ can serve every spike; nothing is physically unservable.
 
 | Change | Where | Why |
 |---|---|---|
-| `hold_down_ticks` (TCN default 55) | `params.py`, `policy.py` | After `u_obs` or `û` ≥ `θ_up`, block Down so the next cycle keeps surge capacity. |
-| Cooldown does not block a *hot* UP | `policy.py` | The τ=76 HINT can grow; cooldown still suppresses lukewarm UPs. |
+| Cooldown does not block scale-up | `policy.py` | Kubernetes HPA: scaleUp stabilization 0s. `cooldown_C` delays Down only. |
 | Down keeps a serve sliver (`δ_cpu_min` / `δ_ram_min`) | `_safe_down_alloc` | Stops RAM≈258 + CPU 2.8 (μ=140) from taking a full routing share. |
 
-After this, TCN is **3.79%**. Remaining drops are almost entirely cold-start
-(τ=21 still 18k on 2.0 cores) plus the first minute of later spikes. Valley
-waste is gone. TCN weights were not retrained.
+`hold_down_ticks` (block Down for 55 min after hot) was added here and later
+**removed**. It is not Kubernetes CDT. HEAD uses `cooldown_C=5` for scale-down
+only (HPA default 300s). The **3.79%** figure is the held run, not HEAD.
+
+After the held run, remaining drops were almost entirely cold-start
+(τ=21 still 18k on 2.0 cores) plus the first minute of later spikes. TCN
+weights were not retrained.
 
 ---
 
@@ -159,8 +162,8 @@ gitignored `results/` and are not in git. Regenerate from HEAD:
 - Vicinity / BEG / cascade still spawn at MS minima (`place_minima_spawns`,
   `check_cascading_migration`). The Alibaba demo is single-cluster, so this
   did not affect the numbers above.
-- TCN still lags the 60-minute spike (5-step hats stay ~7–9k). Hold-over-spike
-  covers the *next* cycle; the first TCN spike (τ=81) and cold-start τ=21
-  still drop. Retrain / a longer horizon would be the next lever.
+- TCN still lags the 60-minute spike (5-step hats stay ~7–9k). The removed
+  hold-over-spike covered the *next* cycle without using the forecast.
+  Retrain / a longer horizon is the lever, not a 55-minute freeze.
 - `sustained_tau: 99` stays BEV-first so a biased horizon does not skip
   vertical packing.

@@ -22,8 +22,9 @@ class ProactiveAutoScalerParams:
     theta_down: float = 0.30
     theta_target: float = 0.60
     sustained_tau: int = 2
+    # Scale-down only. Kubernetes HPA default: scaleUp stabilization 0s,
+    # scaleDown 300s. On Alibaba (1 TTW = 1 min) cooldown_C=5 is that 5 min.
     cooldown_C: int = 3
-    hold_down_ticks: int = 0
     predictor: str = "persistence"
     model_dir: str = "models/tcn_delta_v1"
     time_tick_offset: int = 0
@@ -38,6 +39,11 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         data.pop("window_W", None)
 
     predictor = str(data.pop("predictor", "persistence"))
+    if "hold_down_ticks" in data:
+        raise ValueError(
+            "hold_down_ticks was removed; cooldown_C delays scale-down only "
+            "(Kubernetes HPA: scaleUp stabilization 0s, scaleDown 300s)"
+        )
     params = ProactiveAutoScalerParams(
         ttw_ticks=int(data.pop("ttw_ticks", 1)),
         feature_window=int(data.pop("feature_window", 60 if predictor == "tcn_delta" else 10)),
@@ -47,7 +53,6 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         theta_target=float(data.pop("theta_target", 0.60)),
         sustained_tau=int(data.pop("sustained_tau", 2)),
         cooldown_C=int(data.pop("cooldown_C", 5 if predictor == "tcn_delta" else 3)),
-        hold_down_ticks=int(data.pop("hold_down_ticks", 55 if predictor == "tcn_delta" else 0)),
         predictor=predictor,
         model_dir=str(data.pop("model_dir", "models/tcn_delta_v1")),
         time_tick_offset=int(data.pop("time_tick_offset", 0)),
@@ -63,8 +68,6 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         raise ValueError("sustained_tau must be >= 1")
     if params.cooldown_C < 0:
         raise ValueError("cooldown_C must be >= 0")
-    if params.hold_down_ticks < 0:
-        raise ValueError("hold_down_ticks must be >= 0")
     if not (0.0 < params.theta_down < params.theta_target < params.theta_up <= 1.0):
         raise ValueError("require 0 < theta_down < theta_target < theta_up <= 1")
     if params.predictor not in _PREDICTORS:

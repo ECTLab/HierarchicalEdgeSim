@@ -11,24 +11,31 @@ are in [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md).
 Trace vs sum(incoming) matched on every run below (max abs diff 0). Incoming
 on all runs: 3,385,510.
 
-## Current pair (after control fixes)
+## Current pair (no 55-minute hold)
+
+Scale-up is not delayed; `cooldown_C=5` delays scale-down only (Kubernetes HPA:
+0s up / 300s down). Why, and vs the old 55-minute hold:
+[s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md). Conservation holds
+(trace = incoming = served + dropped).
 
 | | Drop rate | Served | Dropped | Lives | OK actions |
 |---|---|---|---|---|---|
-| `reactive_local` `42_20260816T100437Z` | **15.44%** | 2,862,823 | 522,687 | 2 | 49 |
-| proactive TCN `42_20260816T104101Z` | **3.79%** | 3,257,244 | 128,266 | 9 | 57 |
+| `reactive_local` `42_20260817T102402Z` | **15.44%** | 2,862,823 | 522,687 | 2 | 49 |
+| proactive TCN `42_20260817T102407Z` | **6.50%** | 3,165,404 | 220,106 | 21 | 133 |
 
-Reactive’s one BEH spawn is now packed above min (`0.61 / 384`), so this
-baseline is not identical to the first 15.11% recording.
+After τ≥61 (TCN has hats): reactive **15.11%**, TCN **5.31%**. Mean CPU in that
+window: oracle 2.41, reactive 3.24, TCN 8.63 (was 14.2 with `hold_down_ticks=55`).
+
+Reactive’s one BEH spawn is packed above min (`0.61 / 384`).
 
 ### Actions (current pair)
 
 | Kind | reactive_local | proactive TCN |
 |---|---|---|
-| BEV up | 23 | 34 |
-| BEV down | 24 | 10 |
-| BEH spawn | 1 | 8 |
-| BEH terminate | 1 | 5 |
+| BEV up | 23 | 66 |
+| BEV down | 24 | 27 |
+| BEH spawn | 1 | 20 |
+| BEH terminate | 1 | 20 |
 
 ## Ladder of TCN runs
 
@@ -38,7 +45,8 @@ baseline is not identical to the first 15.11% recording.
 | `42_20260816T094113Z` | 45.29% | 0 | After decide-on-headroom + last-serving guard. |
 | `42_20260816T100507Z` | 14.15% | 0 | After BEH-above-min. Still 202 RAM-dead attractor ticks. |
 | `42_20260816T102455Z` | 7.85% | 0 | After no CPU-weighted `μ=0` downs. |
-| `42_20260816T104101Z` | **3.79%** | 0 | Hold-over-spike + hot-UP cooldown bypass + RAM sliver. |
+| `42_20260816T104101Z` | **3.79%** | 0 | Hold-over-spike (`hold_down_ticks=55`) + hot-UP cooldown bypass. Historical. |
+| `42_20260817T102407Z` | **6.50%** | 0 | HEAD: no hold. `cooldown_C=5` delays Down only. |
 
 ## Regenerating plots
 
@@ -55,8 +63,8 @@ Overlay of load, serve μ, forecast, and CPU given vs needed:
 TCN figures shade τ=1…60 (lookback, no hats; first apply at τ=61) and annotate
 drop rate on that post-warmup window as well as the whole run.
 
-The ladder rows before **3.79%** are historical (old control path). HEAD only
-reproduces the current pair.
+The drop rates in the current-pair table should match a fresh §B6 run. The
+**3.79%** row is historical (`hold_down_ticks=55`).
 
 ## What was copied from alibaba-trace
 

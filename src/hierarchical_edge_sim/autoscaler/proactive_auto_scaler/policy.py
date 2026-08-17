@@ -31,7 +31,6 @@ class _MsState:
     u_streak: int = 0
     d_streak: int = 0
     cooldown: int = 0
-    hold_down_until_tau: int = 0
 
 
 @dataclass(slots=True)
@@ -42,7 +41,7 @@ class ProactiveAutoScaler:
     _predictor: OneStepRpsPredictor | HorizonRpsPredictor = field(default_factory=PersistencePredictor)
     _sensing: ProactiveSensing | None = None
     _state: dict[str, _MsState] = field(default_factory=dict)
-    _next_allowed_ttw: dict[str, int] = field(default_factory=dict)
+    _next_down_ttw: dict[str, int] = field(default_factory=dict)
     _pending_ms: set[str] = field(default_factory=set)
     _pending_proactive_ttw: dict[str, int] = field(default_factory=dict)
 
@@ -94,18 +93,9 @@ class ProactiveAutoScaler:
                     H_cpu=obs["sum_h_cpu"],
                     H_ram=obs.get("sum_h_ram", 0.0),
                 )
-                hot = (
-                    decision.u_obs >= self.params.theta_up
-                    or decision.u_hat_max >= self.params.theta_up
-                )
-                if hot:
-                    st.hold_down_until_tau = max(
-                        st.hold_down_until_tau, tau + self.params.hold_down_ticks
-                    )
-                in_cd = rec.ttw_t < self._next_allowed_ttw.get(ms_id, 0)
+                # cooldown_C is scale-down only (K8s HPA: scaleUp window 0).
+                down_in_cd = rec.ttw_t < self._next_down_ttw.get(ms_id, 0)
                 if decision.direction is Direction.UP:
-                    if in_cd and not hot:
-                        continue
                     if decision.delta_cpu <= EPS and decision.delta_ram <= EPS:
                         continue
                     need_cpu, need_ram = _clip_step(
@@ -129,7 +119,7 @@ class ProactiveAutoScaler:
                     if ms_actions or leftover is not None:
                         self._pending_proactive_ttw[ms_id] = rec.ttw_t
                 elif decision.direction is Direction.DOWN:
-                    if in_cd or tau < st.hold_down_until_tau:
+                    if down_in_cd:
                         continue
                     d_cpu, d_ram = abs(decision.delta_cpu), abs(decision.delta_ram)
                     if d_cpu <= EPS and d_ram <= EPS:
@@ -154,9 +144,6 @@ class ProactiveAutoScaler:
             if st.cooldown > 0:
                 continue
             if st.u_streak >= ladder.x_up_streak:
-                st.hold_down_until_tau = max(
-                    st.hold_down_until_tau, tau + self.params.hold_down_ticks
-                )
                 need_cpu, need_ram = up_delta(obs, ladder)
                 ms_actions, leftover = ladder_up(
                     env,
@@ -174,8 +161,6 @@ class ProactiveAutoScaler:
                     help_q.append(leftover)
                     seq += 1
             elif st.d_streak >= ladder.y_down_streak:
-                if tau < st.hold_down_until_tau:
-                    continue
                 d_cpu, d_ram = down_delta(obs, ladder)
                 actions.extend(
                     ladder_down(
@@ -206,7 +191,7 @@ class ProactiveAutoScaler:
                 st.d_streak = 0
                 st.cooldown = self.params.ladder.cooldown_ticks
             for ms_id, ttw_t in self._pending_proactive_ttw.items():
-                self._next_allowed_ttw[ms_id] = ttw_t + self.params.cooldown_C + 1
+                self._next_down_ttw[ms_id] = ttw_t + self.params.cooldown_C + 1
         self._pending_ms.clear()
         self._pending_proactive_ttw.clear()
 

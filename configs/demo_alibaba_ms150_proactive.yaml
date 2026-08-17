@@ -1,7 +1,6 @@
 # Alibaba MS_150 transfer: same 4×8-core world as MS_588, Option A TCN.
 # Same global weights; scaler is MS_150's full-series min-max (240-40083).
 # MS_150 is ~4.6× heavier than MS_588 and is not 60-minute periodic.
-# hold_down_ticks=55 is the MS_588 controller transferred, not retuned.
 
 sim:
   tick_sec: 60.0
@@ -56,8 +55,8 @@ autoscaler:
     theta_down: 0.30
     theta_target: 0.60
     sustained_tau: 99
+    # Scale-down only (K8s HPA: scaleUp 0s, scaleDown 300s). 1 TTW = 1 min.
     cooldown_C: 5
-    hold_down_ticks: 55
     predictor: tcn_delta
     model_dir: models/tcn_delta_v1_ms150
     time_tick_offset: 0

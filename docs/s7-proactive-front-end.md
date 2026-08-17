@@ -4,7 +4,8 @@
 **Branch:** `proactive-integration`  
 **Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S7  
 **Depends on:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)  
-**Alibaba diagnosis:** [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md)
+**Alibaba diagnosis:** [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md)  
+**Cooldown (K8s-style, no 55-minute hold):** [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md)
 
 PredictAndDecide sits in front of the same AllocateResources path as `reactive_local` (BEV → BEH → vicinity → BEG, cost-ordered down + cascade). `reactive_local` stays the baseline scaler name.
 
@@ -79,6 +80,8 @@ YAML leftover keys after the decide block are `reactive_local` params (`x_up_str
 - Global TCN from `alibaba-trace` (`tcn-only`), not a per-MS embedding and not LSTM.
 - Training min–max is the full 12h series (same leakage as that repo).
 - No vicinity `Reserve` / lender forecast (still S4 lite).
-- Cooldown after a proactive apply is `cooldown_C` TTWs; cold-start reactive still uses `cooldown_ticks`.
+- Cooldown after a proactive apply is `cooldown_C` TTWs and delays **scale-down
+  only** (Kubernetes HPA: scaleUp stabilization 0s, scaleDown 300s). Scale-up
+  follows the forecast immediately. Cold-start reactive still uses `cooldown_ticks`.
 
-The first Alibaba TCN run dropped 69% because decide / BEV-down / min-BEH disagreed with `μ`. Fixes and later numbers: [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md).
+The first Alibaba TCN run dropped 69% because decide / BEV-down / min-BEH disagreed with `μ`. Fixes and later numbers: [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). Why `hold_down_ticks` came out and how cooldown matches HPA: [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md).

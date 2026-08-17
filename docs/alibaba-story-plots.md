@@ -30,10 +30,10 @@ On the machine that produced the recorded pair, the overview plots are:
 
 | Trace | Overview |
 |---|---|
-| MS_588 TCN | `results/alibaba_proactive/42_20260816T104101Z/analysis/story/overview.png` |
-| MS_588 reactive | `results/alibaba_reactive_local/42_20260816T100437Z/analysis/story/overview.png` |
-| MS_150 TCN | `results/alibaba_ms150_proactive/42_20260816T114309Z/analysis/story/overview.png` |
-| MS_150 reactive | `results/alibaba_ms150_reactive_local/42_20260816T114246Z/analysis/story/overview.png` |
+| MS_588 TCN | `results/alibaba_proactive/42_20260817T102407Z/analysis/story/overview.png` |
+| MS_588 reactive | `results/alibaba_reactive_local/42_20260817T102402Z/analysis/story/overview.png` |
+| MS_150 TCN | `results/alibaba_ms150_proactive/42_20260817T102408Z/analysis/story/overview.png` |
+| MS_150 reactive | `results/alibaba_ms150_reactive_local/42_20260817T102403Z/analysis/story/overview.png` |
 
 The two paths in a pair are the **same overlay** (reactive vs TCN on one figure),
 copied into both run directories so you can open either.
@@ -165,9 +165,8 @@ Cluster cap in these demos is 32 cores (4 × 8).
 At the worst minute (τ=81, 29,778 incoming): oracle ≈ 13.9 cores, sweet spot
 ≈ 22.9. Reactive gave 2.65 cores (μ=5,375) and dropped 24k. TCN gave 6.10 cores
 (μ=12,738) and dropped 17k. The TCN t+1 hat was 7,398 — it **missed** the
-burst. The win is `hold_down_ticks=55` (did not shrink in the valley), not
-foresight.
-
-Later spikes: TCN μ stays near the load (τ=501: μ=27,891 vs 27,221 incoming);
-reactive is still ~8k μ. Whole run 15.44% vs 3.79%; after TCN is on (τ≥61)
-15.11% vs 2.33%. First hour is identical (no hats).
+burst. Without `hold_down_ticks`, later spikes start lower: τ=501 TCN has 9.03
+cores (μ=16,475 vs 27,221 incoming) and drops 10.7k. Whole run 15.44% vs
+**6.50%**; after TCN is on (τ≥61) 15.11% vs **5.31%**. Mean TCN CPU after
+warmup is 8.63 (was 14.2 with the 55-minute hold). First hour is identical
+(no hats).

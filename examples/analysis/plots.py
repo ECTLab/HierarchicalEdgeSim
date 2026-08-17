@@ -416,3 +416,255 @@ def plot_baseline_comparison(
     ax_bar.grid(True, axis="y", alpha=0.3)
     _legend(ax_bar, ncol=3)
     _save(fig, out_path)
+
+
+_STORY_COLORS = {
+    "incoming": "#222222",
+    "oracle": "#1f77b4",
+    "sweet": "#ff7f0e",
+    "hat1": "#1f77b4",
+    "hat5": "#ff7f0e",
+    "reactive_local": "#d62728",
+    "proactive_tcn": "#2ca02c",
+}
+
+
+def _story_color(label: str, fallback_index: int) -> str:
+    if label in _STORY_COLORS:
+        return _STORY_COLORS[label]
+    cycle = ("#d62728", "#2ca02c", "#1f77b4", "#ff7f0e", "#9467bd", "#8c564b")
+    return cycle[fallback_index % len(cycle)]
+
+
+def plot_story_serve_capacity(
+    *,
+    tau: list[int],
+    incoming: list[float],
+    mu_by_label: list[tuple[str, list[float]]],
+    out_path: Path,
+    title: str,
+    cold_start_until: int | None = None,
+) -> None:
+    fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
+    ax.plot(tau, incoming, label="incoming (trace)", color=_STORY_COLORS["incoming"], linewidth=2.2)
+    for i, (label, mu) in enumerate(mu_by_label):
+        ax.plot(
+            tau,
+            mu,
+            label=f"{label} serve μ",
+            color=_story_color(label, i),
+            linewidth=1.8,
+            drawstyle="steps-post",
+        )
+    ax.set_xlabel("time_unit")
+    ax.set_ylabel("requests / min")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    _legend(ax, ncol=2)
+    _ylim_from_zero(ax)
+    _save(fig, out_path)
+
+
+def plot_story_cpu(
+    *,
+    tau: list[int],
+    cpu_oracle: list[float],
+    cpu_sweet: list[float],
+    cpu_by_label: list[tuple[str, list[float]]],
+    out_path: Path,
+    title: str,
+    cold_start_until: int | None = None,
+) -> None:
+    fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
+    ax.plot(
+        tau,
+        cpu_oracle,
+        label="CPU to serve all (oracle)",
+        color=_STORY_COLORS["oracle"],
+        linewidth=1.8,
+    )
+    ax.plot(
+        tau,
+        cpu_sweet,
+        label="CPU at 60% target (sweet spot)",
+        color=_STORY_COLORS["sweet"],
+        linewidth=1.6,
+        linestyle="--",
+    )
+    for i, (label, cpu) in enumerate(cpu_by_label):
+        ax.plot(
+            tau,
+            cpu,
+            label=f"{label} provided",
+            color=_story_color(label, i),
+            linewidth=1.8,
+            drawstyle="steps-post",
+        )
+    ax.set_xlabel("time_unit")
+    ax.set_ylabel("CPU cores")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    _legend(ax, ncol=2)
+    _ylim_from_zero(ax)
+    _save(fig, out_path)
+
+
+def plot_story_dropped(
+    *,
+    tau: list[int],
+    dropped_by_label: list[tuple[str, list[float]]],
+    out_path: Path,
+    title: str,
+    cold_start_until: int | None = None,
+) -> None:
+    fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
+    for i, (label, dropped) in enumerate(dropped_by_label):
+        ax.plot(tau, dropped, label=f"{label} dropped", color=_story_color(label, i), linewidth=1.8)
+    ax.set_xlabel("time_unit")
+    ax.set_ylabel("dropped requests")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    _legend(ax)
+    _ylim_from_zero(ax)
+    _save(fig, out_path)
+
+
+def plot_story_replicas(
+    *,
+    tau: list[int],
+    replicas_by_label: list[tuple[str, list[float]]],
+    out_path: Path,
+    title: str,
+    cold_start_until: int | None = None,
+) -> None:
+    fig, ax = plt.subplots(figsize=(11, 5))
+    _draw_cold_start_span(ax, cold_start_until)
+    for i, (label, replicas) in enumerate(replicas_by_label):
+        ax.plot(
+            tau,
+            replicas,
+            label=f"{label} replicas",
+            color=_story_color(label, i),
+            linewidth=1.8,
+            drawstyle="steps-post",
+        )
+    ax.set_xlabel("time_unit")
+    ax.set_ylabel("live replicas")
+    ax.set_title(title)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.grid(True, alpha=0.3)
+    _legend(ax)
+    _ylim_from_zero(ax)
+    _save(fig, out_path)
+
+
+def plot_story_overview(
+    *,
+    tau: list[int],
+    incoming: list[float],
+    mu_by_label: list[tuple[str, list[float]]],
+    cpu_oracle: list[float],
+    cpu_sweet: list[float],
+    cpu_by_label: list[tuple[str, list[float]]],
+    hat1: list[float] | None,
+    hat5: list[float] | None,
+    dropped_by_label: list[tuple[str, list[float]]],
+    replicas_by_label: list[tuple[str, list[float]]],
+    out_path: Path,
+    title: str,
+    cold_start_until: int | None = None,
+) -> None:
+    n_rows = 5 if hat1 is not None else 4
+    fig, axes = plt.subplots(
+        n_rows,
+        1,
+        figsize=(11, 3.1 * n_rows),
+        sharex=True,
+        gridspec_kw={"hspace": 0.18},
+    )
+    ax_mu, ax_cpu, *rest = axes
+    if hat1 is not None:
+        ax_hat, ax_drop, ax_rep = rest
+    else:
+        ax_hat = None
+        ax_drop, ax_rep = rest
+
+    _draw_cold_start_span(ax_mu, cold_start_until)
+    ax_mu.plot(tau, incoming, label="incoming (trace)", color=_STORY_COLORS["incoming"], linewidth=2.0)
+    for i, (label, mu) in enumerate(mu_by_label):
+        ax_mu.plot(
+            tau,
+            mu,
+            label=f"{label} serve μ",
+            color=_story_color(label, i),
+            linewidth=1.6,
+            drawstyle="steps-post",
+        )
+    ax_mu.set_ylabel("requests / min")
+    ax_mu.set_title(title)
+    ax_mu.grid(True, alpha=0.3)
+    _legend(ax_mu, ncol=2)
+    _ylim_from_zero(ax_mu)
+
+    _draw_cold_start_span(ax_cpu, cold_start_until, legend=False)
+    ax_cpu.plot(tau, cpu_oracle, label="CPU to serve all (oracle)", color=_STORY_COLORS["oracle"], linewidth=1.6)
+    ax_cpu.plot(
+        tau,
+        cpu_sweet,
+        label="CPU at 60% target",
+        color=_STORY_COLORS["sweet"],
+        linewidth=1.4,
+        linestyle="--",
+    )
+    for i, (label, cpu) in enumerate(cpu_by_label):
+        ax_cpu.plot(
+            tau,
+            cpu,
+            label=f"{label} provided",
+            color=_story_color(label, i),
+            linewidth=1.6,
+            drawstyle="steps-post",
+        )
+    ax_cpu.set_ylabel("CPU cores")
+    ax_cpu.grid(True, alpha=0.3)
+    _legend(ax_cpu, ncol=2)
+    _ylim_from_zero(ax_cpu)
+
+    if ax_hat is not None and hat1 is not None and hat5 is not None:
+        _draw_cold_start_span(ax_hat, cold_start_until, legend=False)
+        ax_hat.plot(tau, incoming, label="incoming", color=_STORY_COLORS["incoming"], linewidth=2.0)
+        ax_hat.plot(tau, hat1, label="TCN t+1", color=_STORY_COLORS["hat1"], linewidth=1.5)
+        ax_hat.plot(tau, hat5, label="TCN t+5", color=_STORY_COLORS["hat5"], linewidth=1.3, linestyle="--")
+        ax_hat.set_ylabel("requests / min")
+        ax_hat.grid(True, alpha=0.3)
+        _legend(ax_hat, ncol=3)
+        _ylim_from_zero(ax_hat)
+
+    _draw_cold_start_span(ax_drop, cold_start_until, legend=False)
+    for i, (label, dropped) in enumerate(dropped_by_label):
+        ax_drop.plot(tau, dropped, label=f"{label} dropped", color=_story_color(label, i), linewidth=1.6)
+    ax_drop.set_ylabel("dropped")
+    ax_drop.grid(True, alpha=0.3)
+    _legend(ax_drop)
+    _ylim_from_zero(ax_drop)
+
+    _draw_cold_start_span(ax_rep, cold_start_until, legend=False)
+    for i, (label, replicas) in enumerate(replicas_by_label):
+        ax_rep.plot(
+            tau,
+            replicas,
+            label=f"{label} replicas",
+            color=_story_color(label, i),
+            linewidth=1.6,
+            drawstyle="steps-post",
+        )
+    ax_rep.set_xlabel("time_unit")
+    ax_rep.set_ylabel("replicas")
+    ax_rep.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax_rep.grid(True, alpha=0.3)
+    _legend(ax_rep)
+    _ylim_from_zero(ax_rep)
+    _save(fig, out_path)

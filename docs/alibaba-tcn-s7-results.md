@@ -48,6 +48,10 @@ stamps; the drop rates should match this table.
 
 How to regenerate: [how-to-rerun-tests-and-graphs.md](./how-to-rerun-tests-and-graphs.md) §B6.
 
+Overlay of load, serve μ, forecast, and CPU given vs needed:
+[alibaba-story-plots.md](./alibaba-story-plots.md)
+(`analysis/story/overview.png` in each run dir).
+
 TCN figures shade τ=1…60 (lookback, no hats; first apply at τ=61) and annotate
 drop rate on that post-warmup window as well as the whole run.
 

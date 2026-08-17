@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
         out = labeled[0][1].resolve() / "analysis" / "baseline_comparison.png"
     path = compare_runs(labeled, out_path=out, app_id=args.app, ms_id=args.ms)
     print(f"wrote {path}")
+    story = path.parent / "story"
+    if story.is_dir():
+        print(f"story plots: {story}")
     return 0
 
 

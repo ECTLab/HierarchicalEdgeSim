@@ -13,6 +13,7 @@ from .aggregate import (
 )
 from .io import cold_start_until_tau, find_container_logs, load_run_meta, read_actions, read_container_log
 from .plots import plot_baseline_comparison
+from .story import write_story_plots
 
 
 def compare_runs(
@@ -79,5 +80,12 @@ def compare_runs(
         ),
         cold_start_until=until,
         drop_windows=drop_windows or None,
+    )
+    write_story_plots(
+        resolved,
+        out_dir=out_path.parent / "story",
+        app_id=chosen_app,
+        ms_id=chosen_ms,
+        cold_start_until=until,
     )
     return out_path

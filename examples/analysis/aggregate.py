@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from dataclasses import dataclass
+from math import ceil
+
 from .io import ActionRow, ContainerSeries
 
 
@@ -49,6 +52,75 @@ def sum_aligned(
     if not parts:
         return [0.0] * len(tau_full)
     return sum_series(parts)
+
+
+@dataclass(frozen=True, slots=True)
+class MsPhysics:
+    cpu_min: float
+    cpu_max: float
+    ram_min: float
+    rho_cpu: float
+    rho_ram: float
+    theta_target: float = 0.60
+
+
+def ms_physics_from_meta(meta: dict, app_id: str, ms_id: str) -> MsPhysics:
+    theta = 0.60
+    scaler = meta.get("autoscaler") or {}
+    params = scaler.get("params") or {}
+    if params.get("theta_target") is not None:
+        theta = float(params["theta_target"])
+    for app in meta.get("config", {}).get("apps", []):
+        if app.get("id") != app_id:
+            continue
+        for ms in app.get("microservices", []):
+            if ms.get("id") != ms_id:
+                continue
+            return MsPhysics(
+                cpu_min=float(ms["cpu_min_cores"]),
+                cpu_max=float(ms["cpu_max_cores"]),
+                ram_min=float(ms["ram_min_mb"]),
+                rho_cpu=float(ms["cpu_per_request_cores"]),
+                rho_ram=float(ms["ram_per_request_mb"]),
+                theta_target=theta,
+            )
+    raise KeyError(f"no microservice spec for app={app_id} ms={ms_id}")
+
+
+def replica_serve_mu(cpu_alloc: float, ram_alloc: float, spec: MsPhysics) -> float:
+    mu_cpu = max(0.0, float(cpu_alloc) - spec.cpu_min) / spec.rho_cpu
+    mu_ram = max(0.0, float(ram_alloc) - spec.ram_min) / spec.rho_ram
+    return min(mu_cpu, mu_ram)
+
+
+def serve_mu_series(
+    tau_full: list[int],
+    containers: list[ContainerSeries],
+    spec: MsPhysics,
+) -> list[float]:
+    parts: list[list[float]] = []
+    for container in containers:
+        mu = [
+            replica_serve_mu(cpu, ram, spec)
+            for cpu, ram in zip(container.cpu_capacity, container.ram_capacity)
+        ]
+        parts.append(series_on_tau(tau_full, container.tau, mu))
+    if not parts:
+        return [0.0] * len(tau_full)
+    return sum_series(parts)
+
+
+def packed_cpu_cores(incoming: float, spec: MsPhysics, *, theta: float = 1.0) -> float:
+    """Least packed CPU that can serve ``incoming`` at utilization ``theta``.
+
+    n = ceil(need_μ / μ_max) replicas at cpu_max; floors buy no throughput.
+    """
+    need_mu = float(incoming) / float(theta) if theta > 0.0 else 0.0
+    mu_max = max(0.0, spec.cpu_max - spec.cpu_min) / spec.rho_cpu
+    if need_mu <= 0.0:
+        return spec.cpu_min
+    n = max(1, int(ceil(need_mu / mu_max))) if mu_max > 0.0 else 1
+    return n * spec.cpu_min + need_mu * spec.rho_cpu
 
 
 def group_containers_by_app(containers: list[ContainerSeries]) -> dict[str, list[ContainerSeries]]:

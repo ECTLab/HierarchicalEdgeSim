@@ -19,10 +19,13 @@ from analysis.aggregate import (  # noqa: E402
     action_markers,
     app_owner_cluster_id,
     classify_site,
+    packed_cpu_cores,
     replica_counts_by_site,
+    replica_serve_mu,
     series_on_tau,
     sum_aligned,
     sum_tau_window,
+    MsPhysics,
 )
 from analysis.io import (  # noqa: E402
     ActionRow,
@@ -98,6 +101,20 @@ def test_sum_tau_window_inclusive():
     assert sum_tau_window(tau, vals, start=1, end=60) == 100.0
     assert sum_tau_window(tau, vals, start=3, end=4) == 70.0
     assert sum_tau_window(tau, vals, start=5, end=10) == 0.0
+
+
+def test_packed_cpu_and_serve_mu_match_alibaba_physics():
+    spec = MsPhysics(
+        cpu_min=0.5,
+        cpu_max=4.0,
+        ram_min=256.0,
+        rho_cpu=0.0004,
+        rho_ram=0.02,
+        theta_target=0.60,
+    )
+    assert replica_serve_mu(2.0, 1024.0, spec) == 3750.0
+    assert abs(packed_cpu_cores(29778.0, spec, theta=1.0) - 13.9112) < 1e-6
+    assert replica_serve_mu(0.5, 256.0, spec) == 0.0
 
 
 def test_cold_start_until_tau_from_meta():
@@ -283,3 +300,7 @@ def test_compare_runs_writes_png(tmp_path: Path):
     out = tmp_path / "baseline_comparison.png"
     compare_runs([("off", run_a), ("local", run_b)], out_path=out)
     assert out.is_file()
+    story = out.parent / "story"
+    assert (story / "serve_capacity.png").is_file()
+    assert (story / "cpu_needed_vs_provided.png").is_file()
+    assert (story / "overview.png").is_file()

@@ -114,6 +114,10 @@ physics and totals should match:
 incoming = served + dropped). TCN should BEV-down about 10 times (hold-over-spike),
 not ~25. TCN plots shade τ=1…60 (no hats) and annotate drop rate after τ=61.
 
+Overlay story plots (incoming vs μ, oracle/sweet CPU, hats, drops, replicas,
+`overview.png`): [alibaba-story-plots.md](./alibaba-story-plots.md). They land
+in each compared run’s `analysis/story/`.
+
 The 69% → 7.85% rows in the results doc are historical. HEAD only reproduces
 the current pair. Do not commit `results/`.
 

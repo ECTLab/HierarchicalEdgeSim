@@ -6,7 +6,7 @@ from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
 from hierarchical_edge_sim.env.config import EPS
 
 from .help import HelpRequest
-from .place import place_minima_spawns, snapshot_free, subtract_pending
+from .place import place_packed_spawns, snapshot_free, subtract_pending
 
 __all__ = ["HelpRequest", "leftover_to_help_action", "schedule_vicinity_help"]
 
@@ -36,7 +36,7 @@ def schedule_vicinity_help(
         subtract_pending(env, pending + spawns, free_cpu, free_ram)
         for req in queued:
             ranked = _rank_neighbor_servers(env, members, req.home_cluster_id, free_cpu)
-            placed, req.remain_cpu, req.remain_ram = place_minima_spawns(
+            placed, req.remain_cpu, req.remain_ram = place_packed_spawns(
                 env,
                 req,
                 ranked_servers=ranked,

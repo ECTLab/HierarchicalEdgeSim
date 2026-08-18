@@ -83,6 +83,23 @@ def test_distribute_down_may_hit_floor_when_delta_exceeds_room():
     assert actions[0].ram_alloc_mb == 256.0
 
 
+def test_distribute_down_skips_ram_only_shrink_that_does_not_cut_mu():
+    """CPU already at the 0.01 quantum vs target; shaving RAM cannot reduce μ."""
+    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
+    actions = distribute_down(
+        env=None,  # type: ignore[arg-type]
+        ms_id="api",
+        spec=_spec(),
+        params=params,
+        replicas=[_view("c-api-1", cpu=0.58, ram=490.88)],
+        delta_cpu=0.003,
+        delta_ram=0.15,
+        tau=334,
+        reason="bev_down",
+    )
+    assert actions == []
+
+
 class _Srv:
     cluster_id = "c1"
 

@@ -16,7 +16,7 @@ On an up tick, after local BEV→BEH and the vicinity round:
 1. Unresolved `HelpRequest`s go to `schedule_beg` (paper BEG, lite).
 2. The root ranks candidates: `C \ ({home} ∪ V_home)`, most free CPU first, then cluster id. That is the S5 stand-in for the paper’s load–distance score `L + γ·d` (no distances in the sim yet).
 3. Concurrent BEG in the same window is serialized: requests stay FCFS (`seq`, then `ms_id`); each placement updates the free snapshot before the next.
-4. Spawn at MS minima on the chosen cluster’s servers (free CPU, then id). `reason="beg_spawn"`, `loan_tier="global"`, `actor_cluster_id=home`.
+4. Spawn above MS minima on the chosen cluster’s servers (free CPU, then id), same packing as BEH. `reason="beg_spawn"`, `loan_tier="global"`, `actor_cluster_id=home`.
 5. `apply_actions` grants the global loan (same S4 grant path; failed spawn rolls back).
 6. Still leftover → log-only `NeedGlobalHelpAction` (paper `LogUnmetDemand`).
 

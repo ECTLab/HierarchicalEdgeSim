@@ -138,6 +138,7 @@ def test_vicinity_full_spawns_on_outside_cluster_with_global_loan(tmp_path):
     assert spawn.reason == "beg_spawn"
     assert spawn.loan_tier == "global"
     assert spawn.actor_cluster_id == "c1"
+    assert spawn.cpu_alloc_cores is not None and spawn.cpu_alloc_cores > 0.5
     assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
     assert not any(isinstance(a, NeedGlobalHelpAction) for a in actions)
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
@@ -164,6 +165,7 @@ def test_beg_skips_home_vicinity_even_when_neighbor_has_more_free(tmp_path):
     assert len(spawns) == 1
     assert spawns[0].server_id == "c3-w1"
     assert spawns[0].loan_tier == "global"
+    assert spawns[0].cpu_alloc_cores is not None and spawns[0].cpu_alloc_cores > 0.5
 
 
 def test_beg_exhausted_logs_need_global_help(tmp_path):

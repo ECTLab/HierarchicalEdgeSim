@@ -15,3 +15,5 @@ class HelpRequest:
     remain_ram: float
     cpu_min: float
     ram_min: float
+    min_head_cpu: float = 0.25
+    min_head_ram: float = 128.0

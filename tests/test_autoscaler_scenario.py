@@ -178,6 +178,24 @@ def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_ro
     assert "vicinity_spawn" in reasons
     assert "beg_spawn" in reasons
     assert "beh_terminate" in reasons
+    remote_spawns = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK" and r.reason in {"vicinity_spawn", "beg_spawn"}
+    ]
+    assert remote_spawns
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in remote_spawns)
+    ram_dust = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK"
+        and r.action_type == "resize"
+        and "down" in r.reason
+        and r.cpu_old is not None
+        and r.cpu_new is not None
+        and r.cpu_old == r.cpu_new
+    ]
+    assert ram_dust == [], "BEV-down must not shave RAM after CPU quantum already holds μ"
 
     last_term = max(
         r.tau for r in env.action_log if r.reason == "beh_terminate" and r.result_code == "OK"

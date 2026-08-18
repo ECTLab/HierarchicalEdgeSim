@@ -78,7 +78,7 @@ only 16% sat on ≥15k spike ticks (reactive puts ~64% of its drops on spikes).
 |---|---|---|---|
 | 1 | Decide on serving headroom `H = Σ(A − min)`, not `ΣA` | `proactive_auto_scaler/decide.py`, `aggregate_ms` | `H ≈ 0` + load is saturated (Up). Residual is `A_req = n·min + (ρ · r* · tick_sec) / θ_target`, so the tight resource grows. `q_ms` is 1 when a modeled resource has no headroom and incoming > 0. |
 | 2 | Surplus scale-down (do not walk the last replica through μ=0) | `down_delta` / `beh_down` | Target `μ = Λ / (1-θ_free)`. Release only surplus; extras die only if remaining μ still covers that target. |
-| 3 | BEH packs leftover **above** min; BEV-up will not apply a resize that still has `μ = 0` | `beh.packed_spawn_size`, `distribute_up` | New replicas must take routed load on the next tick. Vicinity / BEG / cascade still place at minima. |
+| 3 | BEH / vicinity / BEG pack leftover **above** min; BEV-up will not apply a resize that still has `μ = 0` | `beh.packed_spawn_size`, `place_packed_spawns`, `distribute_up` | New replicas must take routed load on the next tick. Cascade-home still places at minima (swap into just-freed floor room). |
 | 4 | Coupled CPU/RAM surplus | `down_delta` | Idle RAM must not justify killing CPU the load still needs. |
 
 TCN / hold-over-spike was **not** done. After (1)–(3) TCN already beat reactive
@@ -156,9 +156,7 @@ gitignored `results/` and are not in git. Regenerate from HEAD:
 
 ## Still open
 
-- Vicinity / BEG / cascade still spawn at MS minima (`place_minima_spawns`,
-  `check_cascading_migration`). The Alibaba demo is single-cluster, so this
-  did not affect the numbers above.
+- Cascade-home still spawns at MS minima (`check_cascading_migration`): the tick only proved floor room was freed. Vicinity / BEG now use `packed_spawn_size`.
 - TCN still lags the 60-minute spike (5-step hats stay ~7–9k). The removed
   hold-over-spike covered the *next* cycle without using the forecast.
   Retrain / a longer horizon is the lever, not a 55-minute freeze.

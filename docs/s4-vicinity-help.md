@@ -33,7 +33,7 @@ Why keep the named leader at all? So later stages (heartbeat timeout → skip vi
 1. Group requests by `env.vicinity_of(home)`.
 2. For each vicinity, sort by `(seq, ms_id)` — **FCFS, one round**.
 3. Snapshot free CPU/RAM on all member servers; subtract this tick’s pending resize/spawn/terminate so two requests cannot over-commit the same worker.
-4. For each request, spawn at MS minima on **non-home** members only (home already tried BEH). Member order is YAML `members:`; within a cluster, servers by free CPU then id.
+4. For each request, spawn **above MS minima** on **non-home** members only (same `packed_spawn_size` as BEH so μ>0 on the next tick). Skip a worker that can only fit the floor. Member order is YAML `members:`; within a cluster, servers by free CPU then id.
 5. Each spawn is `reason="vicinity_spawn"`, `loan_tier="vicinity"`, `actor_cluster_id=home`. `apply_actions` grants the loan on the neighbor worker (and drops it if spawn fails).
 6. If residual remains, S5 BEG consumes it (`NeedGlobalHelpAction` if BEG also fails).
 
@@ -83,8 +83,9 @@ Scaler name stays `reactive_local` (roadmap: grow this plugin rather than a sibl
 
 `tests/test_vicinity_help.py`:
 
-- Home saturated, neighbor free → spawn on neighbor + vicinity loan
-- Two MS, one neighbor slot → FCFS first `ms_id` wins; second escalates (S5: `need_global_help` when no outside cluster)
+- Home saturated, neighbor free → spawn on neighbor **above min** + vicinity loan
+- Neighbor that can only fit the floor → no spawn (would be μ=0)
+- Two MS, one packed neighbor slot → FCFS first `ms_id` wins; second escalates (S5: `need_global_help` when no outside cluster)
 - Vicinity also full and no outside cluster → `need_global_help` logged, no loan
 - Scale-down prefers the borrowed replica and drops the loan
 - Failed foreign spawn with `loan_tier` does not leave a loan

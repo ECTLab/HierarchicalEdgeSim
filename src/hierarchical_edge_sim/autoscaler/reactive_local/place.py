@@ -1,11 +1,11 @@
-"""Shared minima spawn packing for vicinity help and BEG."""
+"""Shared packed spawn placement for vicinity help and BEG."""
 
 from __future__ import annotations
 
 from hierarchical_edge_sim.env.api import Env, SpawnAction
 from hierarchical_edge_sim.env.config import EPS
 
-from .beh import n_new_replicas
+from .beh import packed_spawn_size
 from .help import HelpRequest
 
 
@@ -37,7 +37,7 @@ def rank_servers_in_clusters(
     return ranked
 
 
-def place_minima_spawns(
+def place_packed_spawns(
     env: Env,
     req: HelpRequest,
     *,
@@ -48,35 +48,46 @@ def place_minima_spawns(
     reason: str,
     loan_tier: str,
 ) -> tuple[list[SpawnAction], float, float]:
+    """Place leftover demand as serving replicas (floor + headroom), same as BEH.
+
+    Skip a server that can only fit the deployment floor: routing gives it no
+    load until a later BEV-up, and a floor-full worker never gets that up.
+    """
     spec = env.get_ms_spec(req.ms_id)
-    ram_modeled = spec.ram_per_request_mb > EPS
-    n_new = n_new_replicas(req.remain_cpu, req.remain_ram, req.cpu_min, req.ram_min, ram_modeled)
     actions: list[SpawnAction] = []
     remain_cpu, remain_ram = req.remain_cpu, req.remain_ram
-    for _ in range(n_new):
+    while remain_cpu > EPS or remain_ram > EPS:
         placed = False
         for sid in ranked_servers:
-            if free_cpu.get(sid, 0.0) + EPS < req.cpu_min:
+            packed = packed_spawn_size(
+                remain_cpu=remain_cpu,
+                remain_ram=remain_ram,
+                spec=spec,
+                free_cpu=free_cpu.get(sid, 0.0),
+                free_ram=free_ram.get(sid, 0.0),
+                min_head_cpu=req.min_head_cpu,
+                min_head_ram=req.min_head_ram,
+            )
+            if packed is None:
                 continue
-            if free_ram.get(sid, 0.0) + EPS < req.ram_min:
-                continue
+            cpu, ram, head_cpu, head_ram = packed
             actions.append(
                 SpawnAction(
                     type="spawn",
                     ms_id=req.ms_id,
                     server_id=sid,
-                    cpu_alloc_cores=req.cpu_min,
-                    ram_alloc_mb=req.ram_min,
+                    cpu_alloc_cores=cpu,
+                    ram_alloc_mb=ram,
                     reason=reason,
                     tau=tau,
                     actor_cluster_id=req.home_cluster_id,
                     loan_tier=loan_tier,
                 )
             )
-            free_cpu[sid] -= req.cpu_min
-            free_ram[sid] -= req.ram_min
-            remain_cpu = max(0.0, remain_cpu - req.cpu_min)
-            remain_ram = max(0.0, remain_ram - req.ram_min)
+            free_cpu[sid] -= cpu
+            free_ram[sid] -= ram
+            remain_cpu = max(0.0, remain_cpu - head_cpu)
+            remain_ram = max(0.0, remain_ram - head_ram)
             placed = True
             break
         if not placed:

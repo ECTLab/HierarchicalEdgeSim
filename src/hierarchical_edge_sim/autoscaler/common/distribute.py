@@ -124,6 +124,7 @@ def distribute_down(
     if not replicas or (delta_cpu <= EPS and delta_ram <= EPS):
         return []
 
+    ram_modeled = spec.ram_per_request_mb > EPS
     max_room = max((r.room_down_cpu for r in replicas), default=0.0) or 1.0
     w1, w2, w3 = params.shrink_weights
 
@@ -152,6 +153,10 @@ def distribute_down(
         new_ram = quantize_resource(max(spec.ram_min_mb, r.ram_alloc - take_ram))
         if abs(new_cpu - r.cpu_alloc) <= EPS and abs(new_ram - r.ram_alloc) <= EPS:
             continue
+        old_mu = alloc_mu(r.cpu_alloc, r.ram_alloc, spec, ram_modeled)
+        new_mu = alloc_mu(new_cpu, new_ram, spec, ram_modeled)
+        if new_mu + EPS >= old_mu:
+            continue
         actions.append(
             ResizeAction(
                 type="resize",
@@ -179,16 +184,21 @@ def alloc_serves(cpu_alloc: float, ram_alloc: float, spec: MicroserviceSpec, ram
     return True
 
 
-def replica_mu(replica: ReplicaView, spec: MicroserviceSpec, ram_modeled: bool) -> float:
-    """Serving capacity of one replica (req/tick). Binding resource is the min."""
+def alloc_mu(cpu_alloc: float, ram_alloc: float, spec: MicroserviceSpec, ram_modeled: bool) -> float:
+    """Serving capacity of one alloc (req/tick). Binding resource is the min."""
     if spec.cpu_per_request_cores <= EPS:
         mu_cpu = 0.0
     else:
-        mu_cpu = max(0.0, replica.cpu_alloc - spec.cpu_min_cores) / spec.cpu_per_request_cores
+        mu_cpu = max(0.0, cpu_alloc - spec.cpu_min_cores) / spec.cpu_per_request_cores
     if not ram_modeled or spec.ram_per_request_mb <= EPS:
         return mu_cpu
-    mu_ram = max(0.0, replica.ram_alloc - spec.ram_min_mb) / spec.ram_per_request_mb
+    mu_ram = max(0.0, ram_alloc - spec.ram_min_mb) / spec.ram_per_request_mb
     return min(mu_cpu, mu_ram)
+
+
+def replica_mu(replica: ReplicaView, spec: MicroserviceSpec, ram_modeled: bool) -> float:
+    """Serving capacity of one replica (req/tick). Binding resource is the min."""
+    return alloc_mu(replica.cpu_alloc, replica.ram_alloc, spec, ram_modeled)
 
 
 def leftover_from_need_horizontal(actions: list) -> tuple[float, float]:

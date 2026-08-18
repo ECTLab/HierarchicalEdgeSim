@@ -202,7 +202,8 @@ def test_home_saturated_spawns_on_neighbor_with_vicinity_loan(tmp_path):
     assert spawn.reason == "vicinity_spawn"
     assert spawn.loan_tier == "vicinity"
     assert spawn.actor_cluster_id == "c1"
-    assert spawn.cpu_alloc_cores == 0.5
+    assert spawn.cpu_alloc_cores is not None and spawn.cpu_alloc_cores > 0.5
+    assert spawn.ram_alloc_mb is not None and spawn.ram_alloc_mb > 256.0
     assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
     assert not any(isinstance(a, NeedGlobalHelpAction) for a in actions)
 
@@ -215,7 +216,7 @@ def test_home_saturated_spawns_on_neighbor_with_vicinity_loan(tmp_path):
 
 
 def test_fcfs_one_neighbor_slot_second_ms_still_needs_help(tmp_path):
-    env = _write_vicinity_world(tmp_path, two_ms=True, c2_cpu=0.5, c2_ram=256.0)
+    env = _write_vicinity_world(tmp_path, two_ms=True, c2_cpu=0.75, c2_ram=384.0)
     scaler = _up_scaler()
     _push_drops(env, 1, "api")
     _push_drops(env, 1, "ingest")
@@ -249,6 +250,16 @@ def test_vicinity_full_logs_need_global_help(tmp_path):
         for row in env.action_log
     )
     assert env.get_server("c2-w1").loans == []
+
+
+def test_neighbor_floor_only_does_not_spawn_zero_mu_replica(tmp_path):
+    env = _write_vicinity_world(tmp_path, c2_cpu=0.5, c2_ram=256.0)
+    scaler = _up_scaler()
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
+    helps = [a for a in actions if isinstance(a, NeedGlobalHelpAction)]
+    assert len(helps) == 1
 
 
 def test_scale_down_prefers_borrowed_replica(tmp_path):

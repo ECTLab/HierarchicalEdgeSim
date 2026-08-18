@@ -8,7 +8,7 @@ from hierarchical_edge_sim.env.config import EPS
 from .help import HelpRequest
 from .place import (
     cluster_free_cpu,
-    place_minima_spawns,
+    place_packed_spawns,
     rank_servers_in_clusters,
     snapshot_free,
     subtract_pending,
@@ -37,7 +37,7 @@ def schedule_beg(
         load = {cid: cluster_free_cpu(env, cid, free_cpu) for cid in clusters}
         candidates = env.root.rank_beg_candidates(req.home_cluster_id, load)
         ranked = rank_servers_in_clusters(env, candidates, free_cpu)
-        placed, req.remain_cpu, req.remain_ram = place_minima_spawns(
+        placed, req.remain_cpu, req.remain_ram = place_packed_spawns(
             env,
             req,
             ranked_servers=ranked,

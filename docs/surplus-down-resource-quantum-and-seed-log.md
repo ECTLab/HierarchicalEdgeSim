@@ -2,9 +2,9 @@
 
 **Status:** landed on `code-review`  
 **Date:** 2026-08-18  
-**Related:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md), [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md), [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md)
+**Related:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md), [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md), [s4-vicinity-help.md](./s4-vicinity-help.md), [s5-global-help.md](./s5-global-help.md)
 
-This note covers why scale-down still walked the last replica onto `μ = 0`, why `actions.csv` started mid-run, why CPU/RAM values were long floats, and what replaced those behaviors.
+This note covers why scale-down still walked the last replica onto `μ = 0`, why `actions.csv` started mid-run, why CPU/RAM values were long floats, and the two process holes the triangle plots then showed (remote spawns at μ=0, RAM-dust downs).
 
 ---
 
@@ -117,19 +117,78 @@ So `0.5769…` becomes **0.58** in memory, in later ticks, and on disk.
 
 ---
 
+## 4. Triangle plots: remote μ=0 spawns and RAM-dust downs
+
+After v1, `compare_trace_vs_log.py` on the triangle run was conservation-clean, but two policy holes were visible in `actions.csv` / `ladder_qos.png`.
+
+### Problem A — vicinity / BEG spawned at the floor
+
+Local BEH already packed leftover **above** `cpu_min` so a new replica has μ>0 on the next tick. Vicinity and BEG still called `place_minima_spawns` and placed at `cpu_min` / `ram_min` (`0.50` / `256`).
+
+Routing is CPU-headroom weighted. Headroom 0 ⇒ share 0, so the new replica took **no** load until a later BEV-up (~5 ticks). Those windows are the red spikes on `ladder_qos` (91 drops, 0.27%, max 6 in a tick). On a worker whose cap **is** the floor, BEV-up can never grow it — a permanent μ=0 replica.
+
+### Solution A — same packer as BEH
+
+`place_packed_spawns` uses `packed_spawn_size`: `alloc = MS floor + leftover headroom`, quantized. A server that can only fit the floor is skipped. `HelpRequest` carries `min_head_cpu` / `min_head_ram` from `delta_*_min` so the sliver matches YAML.
+
+The first remote spawn is **not** a hardcoded `0.70` / `358.40`. At τ=18 home is full (seed 1.0 / 512), so the whole UP delta is leftover. `up_delta` is
+
+`Δ = min( max(D·ρ, δ_min), α_up · current alloc )`
+
+`α_up=0.20` on the seed is tighter than `δ_min` (0.25 / 128):
+
+| | Formula | Value |
+|---|---|---|
+| CPU leftover | `0.20 × 1.0` | 0.20 cores |
+| RAM leftover | `0.20 × 512` | 102.40 MB |
+| packed CPU | `0.50 + 0.20` | **0.70** |
+| packed RAM | `256 + 102.40` | **358.40** |
+
+Later BEG rows can land on the same pair because BEV first spends the last 0.05 cores filling `0.95 → 1.00`, leftover `δ_min − 0.05 = 0.20` (and the matching RAM). BEV-up then walks `0.70 → 0.95 → 1.00`.
+
+**Cascade-home** still places at minima: that tick only proved floor room was freed, so packing more might not fit.
+
+### Problem B — RAM dust after the CPU quantum
+
+Hold target is `μ_tgt = Λ / (1−θ_free)`. For Λ=5, `θ_free=0.35`: `μ_tgt ≈ 7.69`. Quantized last alloc `0.58` cores ⇒ μ=8. Leftover surplus ≈ 0.31 req/tick:
+
+- `Δ_cpu = 0.0031` cores → round keeps **0.58**
+- `Δ_ram = 0.15` MB → RAM still moves (`490.88 → 489.53` …)
+
+CPU is binding, so shaving RAM does not reduce μ and the surplus never finishes. `actions.csv` repeated `bev_down` `0.58 → 0.58` until τ=400.
+
+### Solution B — skip a down resize that does not cut μ
+
+`distribute_down` compares `alloc_mu` before and after the quantized targets. If serving μ would not fall, skip. Coupled surplus still shrinks RAM when that **is** the binding resource.
+
+### Triangle result (`42_20260818T105820Z`)
+
+| | v1 (floor spawn) | v2 (packed + μ-skip) |
+|---|---|---|
+| First remote spawn | `0.50` / `256` (μ=0 until BEV-up) | `0.70` / `358.40` (serves next tick) |
+| Dropped | 91 (0.27%) | 27 (0.08%) |
+| RAM-dust downs | nine `0.58 → 0.58` rows | none; last down τ=326 to `0.58` / `490.88` |
+| Hold | μ=8, usage 0.55 | same; RAM stays `490.88` |
+
+---
+
 ## How to verify
 
 ```bash
 python3 -m pytest tests/ -q
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_beg.yaml
+# then: python3 examples/compare_trace_vs_log.py results/triangle_beg/<run_id>
 ```
 
 In the new `results/triangle_beg/<run_id>/`:
 
 - `actions.csv` starts with `tau=0`, `reason=seed`, `c-api-0`, `cpu_new=1.00`, `ram_new=512.00`
-- CPU/RAM columns are two decimals (`0.50`, `0.58`, `490.73`), not long floats
+- CPU/RAM columns are two decimals (`0.70`, `0.58`, `358.40`), not long floats
 - After the last `beh_terminate`, the seed is not resized onto `cpu_min` and does not bounce UP
+- Vicinity / BEG spawns have `cpu_new > 0.50` (they serve on the next tick)
+- No `bev_down` rows with `cpu_old == cpu_new` (no RAM-dust tail)
 - `apps/demo_app/api/c-api-0.log.csv` still has usage from τ=1 through the horizon
+- `analysis/demo_app/ladder_qos.png` drop callout should be ~0.08% after v2
 
 Older `triangle_beg` folders from before this working set still start at τ=18 and show unquantized values.
 
@@ -140,3 +199,4 @@ Older `triangle_beg` folders from before this working set still start at τ=18 a
 | Version | Date | Note |
 |---|---|---|
 | v1 | 2026-08-18 | Surplus down; drop protect/up_mode; 0.01 resource quantum; seed action at τ=0; triangle BEG demo |
+| v2 | 2026-08-18 | Vicinity/BEG packed spawns; skip BEV-down that does not reduce μ |

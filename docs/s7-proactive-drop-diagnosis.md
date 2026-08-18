@@ -77,16 +77,13 @@ only 16% sat on ≥15k spike ticks (reactive puts ~64% of its drops on spikes).
 | # | Change | Where | Why |
 |---|---|---|---|
 | 1 | Decide on serving headroom `H = Σ(A − min)`, not `ΣA` | `proactive_auto_scaler/decide.py`, `aggregate_ms` | `H ≈ 0` + load is saturated (Up). Residual is `A_req = n·min + (ρ · r* · tick_sec) / θ_target`, so the tight resource grows. `q_ms` is 1 when a modeled resource has no headroom and incoming > 0. |
-| 2 | Do not BEV-down / terminate the last serving replica onto a floor | `distribute_down` / `beh_down` via `protect_last_serving` (proactive only) | A replica serves iff both resources sit strictly above min. The τ=159–180 shrink is what zeroed `μ`. |
+| 2 | Surplus scale-down (do not walk the last replica through μ=0) | `down_delta` / `beh_down` | Target `μ = Λ / (1-θ_free)`. Release only surplus; extras die only if remaining μ still covers that target. |
 | 3 | BEH packs leftover **above** min; BEV-up will not apply a resize that still has `μ = 0` | `beh.packed_spawn_size`, `distribute_up` | New replicas must take routed load on the next tick. Vicinity / BEG / cascade still place at minima. |
-| 4 | Do not leave any replica at `μ = 0` with CPU headroom | `_safe_down_alloc` when `protect_last_serving` | Routing would send it load it cannot serve. Idle (CPU at floor) is allowed; a CPU-weighted zombie is not. |
+| 4 | Coupled CPU/RAM surplus | `down_delta` | Idle RAM must not justify killing CPU the load still needs. |
 
 TCN / hold-over-spike was **not** done. After (1)–(3) TCN already beat reactive
 on the spikes. The remaining TCN-worse ticks were the RAM-dead attractors, which
-(4) removed.
-
-Reactive `distribute_down` is unchanged (flag off). Proactive cold-start and
-TCN downs both pass `protect_last_serving=True`.
+(4) removed via surplus down (the old `protect_last_serving` floor clamp is gone).
 
 ---
 
@@ -138,7 +135,7 @@ can serve every spike; nothing is physically unservable.
 | Change | Where | Why |
 |---|---|---|
 | Cooldown does not block scale-up | `policy.py` | Kubernetes HPA: scaleUp stabilization 0s. `cooldown_C` delays Down only. |
-| Down keeps a serve sliver (`δ_cpu_min` / `δ_ram_min`) | `_safe_down_alloc` | Stops RAM≈258 + CPU 2.8 (μ=140) from taking a full routing share. |
+| Down sizes from surplus of serving capacity | `down_delta` | Stops RAM≈258 + CPU 2.8 (μ=140) from taking a full routing share. |
 
 `hold_down_ticks` (block Down for 55 min after hot) was added here and later
 **removed**. It is not Kubernetes CDT. HEAD uses `cooldown_C=5` for scale-down

@@ -34,10 +34,18 @@ class Container:
     history: list[ContainerTickRecord] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        from .config import quantize_resource
+
+        self.cpu_alloc_cores = quantize_resource(self.cpu_alloc_cores)
+        self.ram_alloc_mb = quantize_resource(self.ram_alloc_mb)
         if self.initial_cpu_alloc_cores is None:
             self.initial_cpu_alloc_cores = self.cpu_alloc_cores
+        else:
+            self.initial_cpu_alloc_cores = quantize_resource(self.initial_cpu_alloc_cores)
         if self.initial_ram_alloc_mb is None:
             self.initial_ram_alloc_mb = self.ram_alloc_mb
+        else:
+            self.initial_ram_alloc_mb = quantize_resource(self.initial_ram_alloc_mb)
 
     def append_history(self, record: ContainerTickRecord) -> None:
         """Append a single tick record to in-memory history."""

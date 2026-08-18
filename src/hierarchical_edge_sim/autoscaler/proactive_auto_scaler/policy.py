@@ -133,7 +133,6 @@ class ProactiveAutoScaler:
                         ladder,
                         delta_cpu=d_cpu,
                         delta_ram=d_ram,
-                        protect_last_serving=True,
                     )
                     actions.extend(down_actions)
                 continue
@@ -169,7 +168,6 @@ class ProactiveAutoScaler:
                         ladder,
                         delta_cpu=d_cpu,
                         delta_ram=d_ram,
-                        protect_last_serving=True,
                     )
                 )
 

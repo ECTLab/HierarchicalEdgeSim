@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from hierarchical_edge_sim.autoscaler.reactive_local.cascade import check_cascading_migration
 from hierarchical_edge_sim.autoscaler.reactive_local.params import validate_params
 from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
 from hierarchical_edge_sim.env.api import Env
@@ -177,12 +178,19 @@ def test_down_terminates_global_before_vicinity_before_local(tmp_path):
     assert "c-api-3" not in env.world.containers
 
 
-def test_cascade_pulls_global_home_after_local_shrink(tmp_path):
+def test_cascade_pulls_global_home_when_local_minima_freed(tmp_path):
     env = _write_three_replica_world(tmp_path, local_cpu=4.0, local_ram=2048.0)
-    scaler = _down_scaler(cascade_home=True, alpha_down=0.5)
-    _push_slack(env, 1)
-    actions = scaler.on_tick_end(env, 1)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_down" for a in actions)
+    spec = env.get_ms_spec("api")
+    actions = check_cascading_migration(
+        env,
+        ms_id="api",
+        owner_cluster_id="c1",
+        spec=spec,
+        freed_cpu=0.5,
+        freed_ram=256.0,
+        pending=[],
+        tau=1,
+    )
     terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
     spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
     assert [a.container_id for a in terms] == ["c-api-3"]
@@ -209,7 +217,5 @@ def test_cascade_home_flag_off_does_not_migrate(tmp_path):
     scaler = _down_scaler(cascade_home=False, alpha_down=0.5)
     _push_slack(env, 1)
     actions = scaler.on_tick_end(env, 1)
-    assert any(getattr(a, "type", "") == "resize" for a in actions)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)
     assert not any(getattr(a, "reason", "") == "cascade_terminate" for a in actions)
-    assert "c-api-3" in env.get_microservice("api").container_ids

@@ -81,7 +81,6 @@ autoscaler:
 | `alpha_down` | `0.10` | Shrink more gently than grow |
 | `delta_cpu_min_cores` | `0.25` | Meaningful step vs `cpu_min=0.5` |
 | `delta_ram_min_mb` | `128` | Paired with CPU growth under `ram_per_request_mb=0.5` |
-| `up_mode` | `deficit` | Size UP from aggregate dropped demand |
 | `prefer_consolidate_down` | `true` | Prefer shrinking cold replicas first |
 | `grow_weights` | `{drop: 0.5, util: 0.3, room: 0.2}` | Prefer hot + roomy hosts |
 | `shrink_weights` | `{slack: 0.5, no_drop: 0.3, room: 0.2}` | Prefer cold replicas |
@@ -105,7 +104,6 @@ autoscaler:
     alpha_down: 0.10
     delta_cpu_min_cores: 0.25
     delta_ram_min_mb: 128
-    up_mode: deficit
     prefer_consolidate_down: true
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

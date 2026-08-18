@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 import yaml
 
 from hierarchical_edge_sim.autoscaler.common.load import load_autoscaler_from_yaml
-from hierarchical_edge_sim.autoscaler.reactive_local.params import validate_params
+from hierarchical_edge_sim.autoscaler.reactive_local.allocate import down_delta
+from hierarchical_edge_sim.autoscaler.reactive_local.params import ReactiveLocalParams, validate_params
 from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
 from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
 from hierarchical_edge_sim.env.models import ContainerTickRecord
@@ -237,3 +239,53 @@ def test_yaml_loads_reactive_local(tmp_path):
     assert scaler.name == "reactive_local"
     assert scaler.params.sustained_up_streak == 4
     _ = env
+
+
+def _surplus_obs(**kwargs: Any) -> dict[str, Any]:
+    obs: dict[str, Any] = {
+        "Lambda": 5.0,
+        "spec": SimpleNamespace(cpu_per_request_cores=0.01, ram_per_request_mb=0.5),
+        "replicas": [object()],
+        "sum_cpu_alloc": 1.0,
+        "sum_ram_alloc": 512.0,
+        "sum_h_cpu": 0.5,
+        "sum_h_ram": 256.0,
+    }
+    obs.update(kwargs)
+    return obs
+
+
+def test_surplus_last_replica_does_not_take_delta_min_past_target():
+    params = ReactiveLocalParams(theta_free=0.35)
+    # Λ=5, q_tgt=0.65 → μ_tgt ≈ 7.69. Matching headroom on CPU and RAM → hold.
+    h_cpu = 5.0 * 0.01 / 0.65
+    h_ram = 5.0 * 0.5 / 0.65
+    cpu, ram = down_delta(_surplus_obs(sum_h_cpu=h_cpu, sum_h_ram=h_ram), params)
+    assert cpu == pytest.approx(0.0)
+    assert ram == pytest.approx(0.0)
+
+
+def test_surplus_last_replica_rate_caps_oversized_headroom():
+    params = ReactiveLocalParams(theta_free=0.35)
+    cpu, _ = down_delta(_surplus_obs(sum_h_cpu=0.5), params)
+    assert cpu == pytest.approx(0.25)
+
+
+def test_surplus_tiny_overshoot_is_the_surplus_not_delta_min():
+    params = ReactiveLocalParams(theta_free=0.35)
+    extra_mu = 4.0
+    cpu, ram = down_delta(
+        _surplus_obs(
+            sum_h_cpu=5.0 * 0.01 / 0.65 + extra_mu * 0.01,
+            sum_h_ram=5.0 * 0.5 / 0.65 + extra_mu * 0.5,
+        ),
+        params,
+    )
+    assert cpu == pytest.approx(extra_mu * 0.01)
+    assert ram == pytest.approx(extra_mu * 0.5)
+
+
+def test_surplus_extras_at_floor_still_get_a_terminate_token():
+    params = ReactiveLocalParams(theta_free=0.35)
+    cpu, _ = down_delta(_surplus_obs(replicas=[object(), object()], sum_h_cpu=0.0), params)
+    assert cpu == pytest.approx(0.25)

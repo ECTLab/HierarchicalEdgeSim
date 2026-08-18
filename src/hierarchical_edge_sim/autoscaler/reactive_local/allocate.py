@@ -135,35 +135,79 @@ def reactive_pressure(obs: dict, params: ReactiveLocalParams) -> tuple[bool, boo
 
 def up_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     spec = obs["spec"]
-    if params.up_mode == "deficit":
-        need_cpu = obs["D"] * spec.cpu_per_request_cores
-        need_ram = obs["D"] * spec.ram_per_request_mb
-        delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-        if spec.ram_per_request_mb > EPS:
-            delta_ram = min(
-                max(need_ram, params.delta_ram_min_mb),
-                params.alpha_up * max(obs["sum_ram_alloc"], EPS),
-            )
-        else:
-            delta_ram = 0.0
-    else:
-        delta_cpu = max(params.delta_cpu_min_cores, params.alpha_up * obs["sum_cpu_alloc"])
-        delta_ram = (
-            max(params.delta_ram_min_mb, params.alpha_up * obs["sum_ram_alloc"])
-            if spec.ram_per_request_mb > EPS
-            else 0.0
+    need_cpu = obs["D"] * spec.cpu_per_request_cores
+    need_ram = obs["D"] * spec.ram_per_request_mb
+    delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
+    if spec.ram_per_request_mb > EPS:
+        delta_ram = min(
+            max(need_ram, params.delta_ram_min_mb),
+            params.alpha_up * max(obs["sum_ram_alloc"], EPS),
         )
+    else:
+        delta_ram = 0.0
     return delta_cpu, delta_ram
 
 
 def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
+    """MS-wide CPU/RAM to release this down tick (surplus of serving capacity).
+
+    Target ``μ = Λ / (1-θ_free)`` and release only ``max(0, μ − μ_tgt)``
+    converted through per-request costs. CPU and RAM stay coupled so idle RAM
+    cannot justify killing CPU that the load still needs. Never take ``Δ_min``
+    past that surplus — that overshoot is what drove the last replica through
+    ``μ = 0``. Extra replicas that add no μ still get a rate-cap token so BEH
+    can terminate them.
+    """
     spec = obs["spec"]
-    delta_cpu = max(params.delta_cpu_min_cores, params.alpha_down * obs["sum_cpu_alloc"])
     ram_modeled = spec.ram_per_request_mb > EPS
-    delta_ram = (
-        max(params.delta_ram_min_mb, params.alpha_down * obs["sum_ram_alloc"]) if ram_modeled else 0.0
+    cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
+    load = float(obs.get("Lambda") or 0.0)
+    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
+    mu_tgt = load / q_tgt
+    mu = _fleet_mu(obs, ram_modeled)
+    surplus_mu = max(0.0, mu - mu_tgt)
+    n_replicas = len(obs.get("replicas") or [])
+    delta_cpu = surplus_mu * spec.cpu_per_request_cores
+    delta_ram = surplus_mu * spec.ram_per_request_mb if ram_modeled else 0.0
+    if n_replicas <= 1:
+        return (
+            min(delta_cpu, cap_cpu) if delta_cpu > EPS else 0.0,
+            min(delta_ram, cap_ram) if delta_ram > EPS else 0.0,
+        )
+    if surplus_mu > EPS:
+        return delta_cpu, delta_ram
+    # Borrowed replicas at cpu_min add no μ; still allow BEH to reclaim them.
+    if mu <= EPS:
+        return cap_cpu, cap_ram
+    return 0.0, 0.0
+
+
+def _fleet_mu(obs: dict, ram_modeled: bool) -> float:
+    spec = obs["spec"]
+    if spec.cpu_per_request_cores <= EPS:
+        mu_cpu = 0.0
+    else:
+        mu_cpu = float(obs.get("sum_h_cpu") or 0.0) / spec.cpu_per_request_cores
+    if not ram_modeled:
+        return mu_cpu
+    mu_ram = float(obs.get("sum_h_ram") or 0.0) / spec.ram_per_request_mb
+    return min(mu_cpu, mu_ram)
+
+
+def _down_rate_cap(obs: dict, params: ReactiveLocalParams, ram_modeled: bool) -> tuple[float, float]:
+    cap_cpu = max(params.delta_cpu_min_cores, params.alpha_down * max(obs["sum_cpu_alloc"], EPS))
+    cap_ram = (
+        max(params.delta_ram_min_mb, params.alpha_down * max(obs["sum_ram_alloc"], EPS))
+        if ram_modeled
+        else 0.0
     )
-    return delta_cpu, delta_ram
+    return cap_cpu, cap_ram
+
+
+def target_mu(obs: dict, params: ReactiveLocalParams) -> float:
+    load = float(obs.get("Lambda") or 0.0)
+    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
+    return load / q_tgt
 
 
 def ladder_up(
@@ -237,28 +281,32 @@ def ladder_down(
     *,
     delta_cpu: float,
     delta_ram: float,
-    protect_last_serving: bool = False,
 ) -> list[Any]:
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     ram_modeled = spec.ram_per_request_mb > EPS
-    bev = distribute_down(
-        env=env,
-        ms_id=ms_id,
-        spec=spec,
-        params=params,
-        replicas=replicas,
-        delta_cpu=delta_cpu,
-        delta_ram=delta_ram,
-        tau=tau,
-        reason="bev_down",
-        protect_last_serving=protect_last_serving,
-        min_serve_cpu=params.delta_cpu_min_cores if protect_last_serving else 0.0,
-        min_serve_ram=params.delta_ram_min_mb if protect_last_serving else 0.0,
-    )
-    granted_cpu, granted_ram = _granted_down(replicas, bev)
-    remain_cpu = max(0.0, delta_cpu - granted_cpu)
-    remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
+    cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
+    n_replicas = len(replicas)
+    # Extras: reclaim replica count first. Do not BEV-shrink the seed in the
+    # same tick as a terminate — that is what left μ too small and bounced UP.
+    if n_replicas > 1:
+        bev: list[Any] = []
+        remain_cpu, remain_ram = delta_cpu, delta_ram
+    else:
+        bev = distribute_down(
+            env=env,
+            ms_id=ms_id,
+            spec=spec,
+            params=params,
+            replicas=replicas,
+            delta_cpu=min(delta_cpu, cap_cpu),
+            delta_ram=min(delta_ram, cap_ram) if ram_modeled else 0.0,
+            tau=tau,
+            reason="bev_down",
+        )
+        granted_cpu, granted_ram = _granted_down(replicas, bev)
+        remain_cpu = max(0.0, delta_cpu - granted_cpu)
+        remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
     skip_ids = {a.container_id for a in bev}
     owner = home_cluster_id(env, ms_id)
     terms = beh_down(
@@ -272,7 +320,7 @@ def ladder_down(
         skip_ids=skip_ids,
         tau=tau,
         spec=spec,
-        protect_last_serving=protect_last_serving,
+        mu_tgt=target_mu(obs, params),
     )
     actions: list[Any] = [*bev, *terms]
     if params.cascade_home:

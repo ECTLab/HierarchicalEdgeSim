@@ -201,12 +201,15 @@ def test_actions_csv_written(tiny_config_path, tmp_path):
     )
     run_dir = env.run(max_ticks=1, now_utc=datetime(2026, 1, 1, tzinfo=UTC), autoscaler=fake)
     rows = list(csv.DictReader((run_dir / "actions.csv").open(encoding="utf-8")))
-    assert len(rows) == 1
-    assert rows[0]["action_type"] == "resize"
-    assert rows[0]["result_code"] == "OK"
+    assert [r["reason"] for r in rows] == ["seed", "up"]
+    assert rows[0]["tau"] == "0"
+    assert rows[0]["action_type"] == "spawn"
+    assert rows[0]["container_id"] == "c-api-1"
+    assert rows[1]["action_type"] == "resize"
+    assert rows[1]["result_code"] == "OK"
 
 
-def test_actions_csv_header_only_when_empty(tiny_config_path, tmp_path):
+def test_actions_csv_includes_seed_when_no_scaler(tiny_config_path, tmp_path):
     env = Env.from_config(tiny_config_path)
     env.world_spec = replace(
         env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "results"))
@@ -215,4 +218,10 @@ def test_actions_csv_header_only_when_empty(tiny_config_path, tmp_path):
     path = run_dir / "actions.csv"
     assert path.is_file()
     rows = list(csv.DictReader(path.open(encoding="utf-8")))
-    assert rows == []
+    assert len(rows) == 1
+    assert rows[0]["tau"] == "0"
+    assert rows[0]["action_type"] == "spawn"
+    assert rows[0]["reason"] == "seed"
+    assert rows[0]["container_id"] == "c-api-1"
+    assert rows[0]["cpu_new"] == "1.00"
+    assert rows[0]["ram_new"] == "512.00"

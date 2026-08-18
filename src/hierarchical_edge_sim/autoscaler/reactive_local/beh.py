@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 
-from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, replica_serves
+from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, replica_mu
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
-from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
+from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec, quantize_resource
 from hierarchical_edge_sim.env.loans import get_loan
 from hierarchical_edge_sim.env.models import LoanTier
 
@@ -75,8 +75,10 @@ def packed_spawn_size(
         return None
     if ram_modeled and head_ram <= EPS:
         return None
-    cpu = spec.cpu_min_cores + head_cpu
-    ram = spec.ram_min_mb + head_ram if ram_modeled else spec.ram_min_mb
+    cpu = quantize_resource(spec.cpu_min_cores + head_cpu)
+    ram = quantize_resource(spec.ram_min_mb + head_ram if ram_modeled else spec.ram_min_mb)
+    head_cpu = quantize_resource(cpu - spec.cpu_min_cores)
+    head_ram = quantize_resource(ram - spec.ram_min_mb) if ram_modeled else 0.0
     if cpu > free_cpu + EPS or ram > free_ram + EPS:
         return None
     return cpu, ram, head_cpu, head_ram
@@ -158,18 +160,19 @@ def beh_down(
     skip_ids: set[str],
     tau: int,
     spec: MicroserviceSpec | None = None,
-    protect_last_serving: bool = False,
+    mu_tgt: float | None = None,
 ) -> list[TerminateAction]:
     """Terminate global loans, then vicinity loans, then coldest local (never the last)."""
     live = [r for r in replicas if r.container_id not in skip_ids]
-    serving_ids = (
-        {r.container_id for r in replicas if replica_serves(r, spec, ram_modeled)}
-        if protect_last_serving and spec is not None
-        else set()
+    fleet_mu = (
+        sum(replica_mu(r, spec, ram_modeled) for r in replicas)
+        if mu_tgt is not None and spec is not None
+        else 0.0
     )
 
-    def _key(r: ReplicaView) -> tuple[int, int, float, float, str]:
-        return (*_reclaim_key(env, r, owner_cluster_id, ms_id), r.q, -r.slack, r.container_id)
+    def _key(r: ReplicaView) -> tuple[int, int, float, float, float, str]:
+        mu = replica_mu(r, spec, ram_modeled) if spec is not None else 0.0
+        return (*_reclaim_key(env, r, owner_cluster_id, ms_id), mu, r.q, -r.slack, r.container_id)
 
     ranked = sorted(live, key=_key)
     actions: list[TerminateAction] = []
@@ -179,8 +182,11 @@ def beh_down(
             break
         if n_live - len(actions) <= 1:
             break
-        if protect_last_serving and len(serving_ids) == 1 and r.container_id in serving_ids:
-            continue
+        if mu_tgt is not None and spec is not None:
+            extra_mu = replica_mu(r, spec, ram_modeled)
+            if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
+                continue
+            fleet_mu = max(0.0, fleet_mu - extra_mu)
         actions.append(
             TerminateAction(
                 type="terminate",

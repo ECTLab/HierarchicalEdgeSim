@@ -75,7 +75,15 @@ class ReactiveLocalAutoscaler:
             elif st.d_streak >= self.params.y_down_streak:
                 d_cpu, d_ram = down_delta(obs, self.params)
                 actions.extend(
-                    ladder_down(env, ms_id, tau, obs, self.params, delta_cpu=d_cpu, delta_ram=d_ram)
+                    ladder_down(
+                        env,
+                        ms_id,
+                        tau,
+                        obs,
+                        self.params,
+                        delta_cpu=d_cpu,
+                        delta_ram=d_ram,
+                    )
                 )
 
         actions.extend(resolve_help(env, help_q, actions, tau))

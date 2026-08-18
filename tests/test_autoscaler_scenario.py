@@ -50,6 +50,7 @@ def test_demo_config_loads_scaler(project_root: Path):
         "demo_60_two_containers_reactive.yaml",
         "demo_60_reactive_local.yaml",
         "demo_60_proactive.yaml",
+        "demo_400_triangle_beg.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
@@ -134,3 +135,71 @@ def test_final_scenario_long_determinism(tmp_path, project_root: Path):
         p1 = next((run1 / "apps").rglob(log_name))
         p2 = next((run2 / "apps").rglob(log_name))
         assert p1.read_text(encoding="utf-8") == p2.read_text(encoding="utf-8")
+
+
+def test_triangle_trace_matches_yaml_hold(project_root: Path):
+    path = project_root / "traces" / "demo" / "api_400_triangle.csv"
+    rows = path.read_text(encoding="utf-8").strip().splitlines()
+    assert rows[0] == "time_unit,requests"
+    data = rows[1:]
+    assert len(data) == 400
+    vals = []
+    for i, line in enumerate(data, start=1):
+        tu, req = line.split(",")
+        assert int(tu) == i
+        vals.append(int(req))
+    assert vals[0] == 40
+    assert vals[199] == 180
+    assert vals[319] == 5
+    assert all(v == 5 for v in vals[320:])
+    assert all(vals[i] <= vals[i + 1] for i in range(199))
+    assert all(vals[i] >= vals[i + 1] for i in range(200, 319))
+
+
+def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_root: Path):
+    from dataclasses import replace
+
+    cfg = project_root / "configs" / "demo_400_triangle_beg.yaml"
+    env = Env.from_config(cfg)
+    env.world_spec = replace(
+        env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "triangle"))
+    )
+    scaler = load_autoscaler_from_yaml(cfg)
+    env.run(autoscaler=scaler, now_utc=datetime(2026, 8, 18, tzinfo=UTC))
+
+    live = env.list_containers()
+    assert live == ["c-api-0"]
+    seed = env.get_container("c-api-0")
+    assert seed.server_id == "c1-w1"
+    # Surplus keeps μ > 0: alloc stays strictly above the deployment floor.
+    assert seed.cpu_alloc_cores > 0.5
+
+    reasons = [row.reason for row in env.action_log if row.result_code == "OK"]
+    assert "vicinity_spawn" in reasons
+    assert "beg_spawn" in reasons
+    assert "beh_terminate" in reasons
+
+    last_term = max(
+        r.tau for r in env.action_log if r.reason == "beh_terminate" and r.result_code == "OK"
+    )
+    later_up = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK"
+        and r.tau > last_term
+        and r.action_type == "resize"
+        and "up" in r.reason
+    ]
+    assert later_up == [], "last replica must not bounce UP after extras are gone"
+    later_floor = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK"
+        and r.tau > last_term
+        and r.action_type == "resize"
+        and "down" in r.reason
+        and r.container_id == "c-api-0"
+        and r.cpu_new is not None
+        and r.cpu_new <= 0.5
+    ]
+    assert later_floor == [], "surplus must not walk the last replica onto μ=0"

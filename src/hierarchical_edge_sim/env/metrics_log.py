@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .config import MicroserviceSpec, WorldSpec
+from .config import MicroserviceSpec, WorldSpec, format_resource, quantize_resource
 from .traces import TraceStore
 from .world import World
 
@@ -133,10 +133,10 @@ def _write_actions_csv(*, run_dir: Path, action_log: list) -> None:
                     row.action_type,
                     row.container_id,
                     row.reason,
-                    row.cpu_old if row.cpu_old is not None else "",
-                    row.cpu_new if row.cpu_new is not None else "",
-                    row.ram_old if row.ram_old is not None else "",
-                    row.ram_new if row.ram_new is not None else "",
+                    row.cpu_old if row.cpu_old is None else format_resource(row.cpu_old),
+                    row.cpu_new if row.cpu_new is None else format_resource(row.cpu_new),
+                    row.ram_old if row.ram_old is None else format_resource(row.ram_old),
+                    row.ram_new if row.ram_new is None else format_resource(row.ram_new),
                     row.result_code,
                 ]
             )
@@ -172,10 +172,10 @@ def _write_container_meta(
         "ram_max_mb": spec.ram_max_mb,
         "cpu_per_request_cores": spec.cpu_per_request_cores,
         "ram_per_request_mb": spec.ram_per_request_mb,
-        "initial_cpu_alloc_cores": container.initial_cpu_alloc_cores,
-        "initial_ram_alloc_mb": container.initial_ram_alloc_mb,
-        "final_cpu_alloc_cores": container.cpu_alloc_cores,
-        "final_ram_alloc_mb": container.ram_alloc_mb,
+        "initial_cpu_alloc_cores": quantize_resource(container.initial_cpu_alloc_cores or 0.0),
+        "initial_ram_alloc_mb": quantize_resource(container.initial_ram_alloc_mb or 0.0),
+        "final_cpu_alloc_cores": quantize_resource(container.cpu_alloc_cores),
+        "final_ram_alloc_mb": quantize_resource(container.ram_alloc_mb),
     }
     path = container_dir / f"{file_stem or container.id}.meta.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -201,10 +201,10 @@ def _write_container_log(*, container_dir: Path, file_stem: str, history) -> Non
             writer.writerow(
                 [
                     rec.tau,
-                    rec.cpu_alloc_cores,
-                    rec.ram_alloc_mb,
-                    rec.cpu_usage_cores,
-                    rec.ram_usage_mb,
+                    format_resource(rec.cpu_alloc_cores),
+                    format_resource(rec.ram_alloc_mb),
+                    format_resource(rec.cpu_usage_cores),
+                    format_resource(rec.ram_usage_mb),
                     rec.lambda_in,
                     rec.lambda_served,
                     rec.lambda_dropped,

@@ -98,3 +98,11 @@ def test_zero_headroom_serves_nothing():
     assert rec.ram_usage_mb == pytest.approx(spec.ram_min_mb)
     assert rec.q_cpu == pytest.approx(0.0)
     assert rec.q_ram == pytest.approx(0.0)
+
+
+def test_apply_tick_quantizes_cpu_ram_usage_to_two_decimals():
+    spec = _tiny_spec()
+    c = _container()
+    rec = apply_tick(c, lambda_in=1.0 / 3.0, spec=spec, tau=1)
+    assert rec.cpu_usage_cores == 0.50
+    assert rec.ram_usage_mb == 256.17

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .config import EPS, MicroserviceSpec
+from .config import EPS, MicroserviceSpec, quantize_resource
 from .models import Container, ContainerTickRecord
 
 
@@ -30,13 +30,17 @@ def apply_tick(
     lambda_served = min(lambda_in, mu)
     lambda_dropped = lambda_in - lambda_served
 
-    cpu_usage_cores = min(
-        container.cpu_alloc_cores,
-        spec.cpu_min_cores + lambda_served * spec.cpu_per_request_cores,
+    cpu_usage_cores = quantize_resource(
+        min(
+            container.cpu_alloc_cores,
+            spec.cpu_min_cores + lambda_served * spec.cpu_per_request_cores,
+        )
     )
-    ram_usage_mb = min(
-        container.ram_alloc_mb,
-        spec.ram_min_mb + lambda_served * spec.ram_per_request_mb,
+    ram_usage_mb = quantize_resource(
+        min(
+            container.ram_alloc_mb,
+            spec.ram_min_mb + lambda_served * spec.ram_per_request_mb,
+        )
     )
 
     q_cpu = (lambda_served * spec.cpu_per_request_cores) / max(cpu_serve_cores, EPS)

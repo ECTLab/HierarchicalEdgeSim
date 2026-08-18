@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hierarchical_edge_sim.env.config import load_yaml, to_world_spec
+from hierarchical_edge_sim.env.config import load_yaml, quantize_resource, to_world_spec
 
 _MINIMAL_CONFIG = {
     "sim": {"tick_sec": 1.0, "results_dir": "results/", "seed": 42},
@@ -135,3 +135,10 @@ def test_load_yaml_rejects_non_finite_numeric_field(tmp_path, bad_value):
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="finite"):
         load_yaml(path)
+
+
+def test_quantize_resource_two_decimals():
+    assert quantize_resource(0.5769230769230769) == 0.58
+    assert quantize_resource(0.5) == 0.5
+    assert quantize_resource(512) == 512.0
+    assert quantize_resource(0.001) == 0.0

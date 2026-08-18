@@ -10,6 +10,19 @@ from typing import Any
 import yaml
 
 EPS = 1e-9
+RESOURCE_DECIMALS = 2
+
+
+def quantize_resource(value: float) -> float:
+    """Snap CPU cores / RAM MB to two decimal places (simulator quantum)."""
+    return round(float(value), RESOURCE_DECIMALS)
+
+
+def format_resource(value: float | None) -> str:
+    """CSV/log form of a quantized CPU/RAM quantity; empty if missing."""
+    if value is None:
+        return ""
+    return f"{quantize_resource(value):.{RESOURCE_DECIMALS}f}"
 
 
 @dataclass(frozen=True, slots=True)

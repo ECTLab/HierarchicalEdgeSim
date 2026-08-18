@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml
+from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml, quantize_resource
 from .engine import EngineState, run_ticks, tick
 from .loans import add_loan, count_ms_on_server, drop_loan, has_loan
 from .metrics_log import make_run_id, write_run_outputs
@@ -217,6 +217,7 @@ class Env:
 
     def __post_init__(self) -> None:
         self.used_container_ids.update(self.world.containers)
+        self._log_seed_containers()
 
     @classmethod
     def from_config(cls, config_path: str | Path) -> "Env":
@@ -551,8 +552,8 @@ class Env:
 
         container = self.world.containers[container_id]
         spec = self.get_ms_spec(container.microservice_id)
-        new_cpu = container.cpu_alloc_cores if cpu_alloc_cores is None else float(cpu_alloc_cores)
-        new_ram = container.ram_alloc_mb if ram_alloc_mb is None else float(ram_alloc_mb)
+        new_cpu = container.cpu_alloc_cores if cpu_alloc_cores is None else quantize_resource(float(cpu_alloc_cores))
+        new_ram = container.ram_alloc_mb if ram_alloc_mb is None else quantize_resource(float(ram_alloc_mb))
 
         if cpu_alloc_cores is None and ram_alloc_mb is None:
             return ResizeResult(
@@ -662,8 +663,8 @@ class Env:
             )
 
         spec = self.get_ms_spec(ms_id)
-        new_cpu = spec.cpu_min_cores if cpu_alloc_cores is None else float(cpu_alloc_cores)
-        new_ram = spec.ram_min_mb if ram_alloc_mb is None else float(ram_alloc_mb)
+        new_cpu = quantize_resource(spec.cpu_min_cores if cpu_alloc_cores is None else float(cpu_alloc_cores))
+        new_ram = quantize_resource(spec.ram_min_mb if ram_alloc_mb is None else float(ram_alloc_mb))
         cid = container_id if container_id else self._allocate_container_id(ms_id, server_id)
 
         if cid in self.world.containers:
@@ -839,9 +840,13 @@ class Env:
                         container_id=getattr(action, "cluster_id", "") or "",
                         reason=getattr(action, "reason", action_type),
                         cpu_old=None,
-                        cpu_new=getattr(action, "residual_cpu_cores", None),
+                        cpu_new=quantize_resource(float(getattr(action, "residual_cpu_cores", 0.0) or 0.0))
+                        if getattr(action, "residual_cpu_cores", None) is not None
+                        else None,
                         ram_old=None,
-                        ram_new=getattr(action, "residual_ram_mb", None),
+                        ram_new=quantize_resource(float(getattr(action, "residual_ram_mb", 0.0) or 0.0))
+                        if getattr(action, "residual_ram_mb", None) is not None
+                        else None,
                         result_code="LOGGED",
                     )
                 )
@@ -1007,6 +1012,26 @@ class Env:
             if cid not in self.used_container_ids and cid not in self.world.containers:
                 return cid
             n += 1
+
+    def _log_seed_containers(self) -> None:
+        """Record YAML-placed replicas so actions.csv starts at world init (τ=0)."""
+        for cid in sorted(self.world.containers):
+            container = self.world.containers[cid]
+            self.action_log.append(
+                ActionLogRow(
+                    tau=0,
+                    autoscaler_name="",
+                    ms_id=container.microservice_id,
+                    action_type="spawn",
+                    container_id=container.id,
+                    reason="seed",
+                    cpu_old=None,
+                    cpu_new=container.cpu_alloc_cores,
+                    ram_old=None,
+                    ram_new=container.ram_alloc_mb,
+                    result_code="OK",
+                )
+            )
 
     def _log_resize_attempt(
         self,

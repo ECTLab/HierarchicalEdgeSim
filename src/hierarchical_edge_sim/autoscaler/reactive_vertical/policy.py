@@ -189,22 +189,14 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     if intent == "UP":
-        if params.up_mode == "deficit":
-            deficit = obs["D"]
-            need_cpu = deficit * spec.cpu_per_request_cores
-            need_ram = deficit * spec.ram_per_request_mb
-            delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-            if spec.ram_per_request_mb > EPS:
-                delta_ram = min(max(need_ram, params.delta_ram_min_mb), params.alpha_up * max(obs["sum_ram_alloc"], EPS))
-            else:
-                delta_ram = 0.0
+        deficit = obs["D"]
+        need_cpu = deficit * spec.cpu_per_request_cores
+        need_ram = deficit * spec.ram_per_request_mb
+        delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
+        if spec.ram_per_request_mb > EPS:
+            delta_ram = min(max(need_ram, params.delta_ram_min_mb), params.alpha_up * max(obs["sum_ram_alloc"], EPS))
         else:
-            delta_cpu = max(params.delta_cpu_min_cores, params.alpha_up * obs["sum_cpu_alloc"])
-            delta_ram = (
-                max(params.delta_ram_min_mb, params.alpha_up * obs["sum_ram_alloc"])
-                if spec.ram_per_request_mb > EPS
-                else 0.0
-            )
+            delta_ram = 0.0
         delta_cpu = min(delta_cpu, obs["room_up_cpu"]) if obs["room_up_cpu"] > 0 else delta_cpu
         delta_ram = min(delta_ram, obs["room_up_ram"]) if obs["room_up_ram"] > 0 else delta_ram
         return distribute_up(

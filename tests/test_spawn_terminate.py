@@ -225,7 +225,9 @@ def test_apply_actions_order_terminate_resize_spawn(tmp_path):
     assert env.get_container("c-api-1").cpu_alloc_cores == 1.5
     assert "c-api-2" not in env.world.containers
     assert "c-api-3" in env.world.containers
-    assert [row.action_type for row in env.action_log] == ["terminate", "resize", "spawn"]
+    assert [row.action_type for row in env.action_log] == ["spawn", "terminate", "resize", "spawn"]
+    assert env.action_log[0].reason == "seed"
+    assert env.action_log[0].tau == 0
 
 
 def test_apply_actions_spawn_duplicate_id_in_batch(tiny_config_path):

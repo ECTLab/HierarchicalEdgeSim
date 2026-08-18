@@ -19,7 +19,6 @@ class ReactiveLocalParams:
     alpha_down: float = 0.10
     delta_cpu_min_cores: float = 0.25
     delta_ram_min_mb: float = 128.0
-    up_mode: str = "deficit"
     prefer_consolidate_down: bool = True
     grow_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
     shrink_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
@@ -67,7 +66,6 @@ def validate_params(raw: dict[str, Any]) -> ReactiveLocalParams:
         alpha_down=float(data.pop("alpha_down", 0.10)),
         delta_cpu_min_cores=float(data.pop("delta_cpu_min_cores", 0.25)),
         delta_ram_min_mb=float(data.pop("delta_ram_min_mb", 128.0)),
-        up_mode=str(data.pop("up_mode", "deficit")),
         prefer_consolidate_down=bool(data.pop("prefer_consolidate_down", True)),
         grow_weights=grow,
         shrink_weights=shrink,
@@ -88,6 +86,4 @@ def validate_params(raw: dict[str, Any]) -> ReactiveLocalParams:
         raise ValueError("theta_high must be in (0, 1]")
     if params.alpha_up <= 0 or params.alpha_down <= 0:
         raise ValueError("alpha_up/alpha_down must be > 0")
-    if params.up_mode not in {"deficit", "multiplicative"}:
-        raise ValueError("up_mode must be 'deficit' or 'multiplicative'")
     return params

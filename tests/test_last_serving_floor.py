@@ -1,4 +1,4 @@
-"""Last serving replica must keep μ>0 under proactive BEV-down / BEH-down."""
+"""BEH-down prefers μ=0 extras; never the last replica."""
 
 from __future__ import annotations
 
@@ -47,24 +47,7 @@ def _view(
     )
 
 
-def test_distribute_down_refuses_floor_on_last_serving():
-    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
-    actions = distribute_down(
-        env=None,  # type: ignore[arg-type]
-        ms_id="api",
-        spec=_spec(),
-        params=params,
-        replicas=[_view("c-api-1", cpu=0.56, ram=312.0)],
-        delta_cpu=1.0,
-        delta_ram=200.0,
-        tau=180,
-        reason="bev_down",
-        protect_last_serving=True,
-    )
-    assert actions == []
-
-
-def test_distribute_down_still_shrinks_above_floor():
+def test_distribute_down_shrinks_above_floor():
     params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
     actions = distribute_down(
         env=None,  # type: ignore[arg-type]
@@ -76,63 +59,13 @@ def test_distribute_down_still_shrinks_above_floor():
         delta_ram=128.0,
         tau=159,
         reason="bev_down",
-        protect_last_serving=True,
     )
     assert len(actions) == 1
     assert actions[0].cpu_alloc_cores == 3.6
     assert actions[0].ram_alloc_mb == 1152.0
 
 
-def test_distribute_down_keeps_ram_serve_sliver():
-    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
-    actions = distribute_down(
-        env=None,  # type: ignore[arg-type]
-        ms_id="api",
-        spec=_spec(),
-        params=params,
-        replicas=[
-            _view("c-api-1", cpu=4.0, ram=1280.0),
-            _view("c-other", cpu=2.78, ram=384.0, slack=1.0),
-        ],
-        delta_cpu=1.0,
-        delta_ram=200.0,
-        tau=480,
-        reason="bev_down",
-        protect_last_serving=True,
-        min_serve_cpu=0.25,
-        min_serve_ram=128.0,
-    )
-    assert actions
-    for action in actions:
-        assert action.ram_alloc_mb >= 384.0 - 1e-9
-        assert action.cpu_alloc_cores >= 0.75 - 1e-9
-
-
-def test_distribute_down_refuses_ram_floor_while_cpu_headroom_remains():
-    """Routing is CPU-weighted; RAM-at-floor + CPU>min steals load and drops it."""
-    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
-    actions = distribute_down(
-        env=None,  # type: ignore[arg-type]
-        ms_id="api",
-        spec=_spec(),
-        params=params,
-        replicas=[
-            _view("c-api-1", cpu=4.0, ram=1280.0),
-            _view("c-other", cpu=4.0, ram=384.0, slack=1.0),
-        ],
-        delta_cpu=1.0,
-        delta_ram=200.0,
-        tau=171,
-        reason="bev_down",
-        protect_last_serving=True,
-    )
-    assert actions
-    for action in actions:
-        assert action.ram_alloc_mb > 256.0
-        assert action.cpu_alloc_cores > 0.5
-
-
-def test_distribute_down_unprotected_may_hit_floor():
+def test_distribute_down_may_hit_floor_when_delta_exceeds_room():
     params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
     actions = distribute_down(
         env=None,  # type: ignore[arg-type]
@@ -144,7 +77,6 @@ def test_distribute_down_unprotected_may_hit_floor():
         delta_ram=200.0,
         tau=180,
         reason="bev_down",
-        protect_last_serving=False,
     )
     assert len(actions) == 1
     assert actions[0].cpu_alloc_cores == 0.5
@@ -161,7 +93,7 @@ class _Env:
         return _Srv()
 
 
-def test_beh_down_skips_last_serving_when_others_are_at_floor():
+def test_beh_down_terminates_floor_extra_before_serving():
     spec = _spec()
     serving = _view("c-api-1", cpu=3.19, ram=400.0, slack=1.0, drop=0.0)
     idle = _view("c-api-2", cpu=0.5, ram=256.0, slack=1.0, drop=0.0)
@@ -176,6 +108,6 @@ def test_beh_down_skips_last_serving_when_others_are_at_floor():
         skip_ids=set(),
         tau=300,
         spec=spec,
-        protect_last_serving=True,
+        mu_tgt=1.0,
     )
     assert [a.container_id for a in terms] == ["c-api-2"]

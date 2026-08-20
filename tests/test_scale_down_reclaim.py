@@ -169,6 +169,7 @@ def test_down_terminates_global_before_vicinity_before_local(tmp_path):
     actions = scaler.on_tick_end(env, 1)
     terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
     assert [a.container_id for a in terms] == ["c-api-3"]
+    assert terms[0].reason == "beg_terminate"
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert results[0].ok
     assert not has_loan(env.get_server("c3-w1"), "c1", "api")

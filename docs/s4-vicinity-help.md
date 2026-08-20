@@ -34,7 +34,7 @@ Why keep the named leader at all? So later stages (heartbeat timeout → skip vi
 2. For each vicinity, sort by `(seq, ms_id)` — **FCFS, one round**.
 3. Snapshot free CPU/RAM on all member servers; subtract this tick’s pending resize/spawn/terminate so two requests cannot over-commit the same worker.
 4. For each request, spawn **above MS minima** on **non-home** members only (same `packed_spawn_size` as BEH so μ>0 on the next tick). Skip a worker that can only fit the floor. Member order is YAML `members:`; within a cluster, servers by free CPU then id.
-5. Each spawn is `reason="vicinity_spawn"`, `loan_tier="vicinity"`, `actor_cluster_id=home`. `apply_actions` grants the loan on the neighbor worker (and drops it if spawn fails).
+5. Each spawn is `reason="vicinity_spawn"`, `loan_tier="vicinity"`, `actor_cluster_id=home`. `apply_actions` grants the loan on the neighbor worker (and drops it if spawn fails). Later reclaim of that replica is `vicinity_terminate` (S6).
 6. If residual remains, S5 BEG consumes it (`NeedGlobalHelpAction` if BEG also fails).
 
 Borrowed replicas live in the same `World` the app owner already reads (routing, metrics, later terminate). No mirror/status RPC.

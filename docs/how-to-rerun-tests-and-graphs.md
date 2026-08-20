@@ -253,6 +253,19 @@ RUN_DIR=$(.venv/bin/python examples/run_env_only.py configs/demo_60_two_clusters
 # then: python examples/compare_trace_vs_log.py <RUN_DIR>
 ```
 
+Those 60-tick traces climb/oscillate; they do **not** hold at a quiet Λ, so they
+do not prove surplus reclaim. For that, use the four 400-tick triangle slices
+(same load, four topologies). Why four, and what each must/must-not do:
+[triangle-ladder-scenarios.md](./triangle-ladder-scenarios.md).
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_beh.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_vicinity.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_skip_beg.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_beg.yaml
+# then: python examples/compare_trace_vs_log.py <RUN_DIR>
+```
+
 ### Same-trace comparison (off / vertical / local)
 
 Use the 300-tick phased pair plus `demo_300_two_containers_reactive_local.yaml`:
@@ -304,7 +317,7 @@ Two stacked panels, shared time axis. Do **not** put requests and CPU cores on o
 - **Top (requests):** incoming and dropped on the same axis. The gap is served load. Drops track the three load peaks; they fall after the BEH spawn (`τ=19` in the worked run) and return on later peaks because the scaler is reactive.
 - **Bottom (CPU cores):** sum of replica allocs as a step series. BEV is the small stairs; BEH is the jump when a new replica appears (1.73 → 2.5 when the spawn at `cpu_min` 0.5 becomes live). BEV-down is the later dip.
 
-Marker families: `BEV up` / `BEV down` / `BEH spawn` / `BEH terminate` / vicinity / BEG / cascade / escalate. A marker at `τ` and a step at `τ+1` is the apply delay, not a logging bug.
+Marker families: `BEV up` / `BEV down` / `BEH spawn` / `BEH terminate` / vicinity / vicinity terminate / BEG / BEG terminate / cascade / escalate. A marker at `τ` and a step at `τ+1` is the apply delay, not a logging bug. Scale-in reasons follow the loan rung (`beg_terminate`, `vicinity_terminate`, `beh_terminate`); they are not all `beh_terminate`.
 
 ### `trace_vs_log_requests.png` — is the env honest?
 

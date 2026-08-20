@@ -51,6 +51,9 @@ def test_demo_config_loads_scaler(project_root: Path):
         "demo_60_reactive_local.yaml",
         "demo_60_proactive.yaml",
         "demo_400_triangle_beg.yaml",
+        "demo_400_triangle_beh.yaml",
+        "demo_400_triangle_vicinity.yaml",
+        "demo_400_triangle_skip_beg.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
@@ -157,27 +160,14 @@ def test_triangle_trace_matches_yaml_hold(project_root: Path):
 
 
 def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_root: Path):
-    from dataclasses import replace
-
-    cfg = project_root / "configs" / "demo_400_triangle_beg.yaml"
-    env = Env.from_config(cfg)
-    env.world_spec = replace(
-        env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / "triangle"))
-    )
-    scaler = load_autoscaler_from_yaml(cfg)
-    env.run(autoscaler=scaler, now_utc=datetime(2026, 8, 18, tzinfo=UTC))
-
-    live = env.list_containers()
-    assert live == ["c-api-0"]
-    seed = env.get_container("c-api-0")
-    assert seed.server_id == "c1-w1"
-    # Surplus keeps μ > 0: alloc stays strictly above the deployment floor.
-    assert seed.cpu_alloc_cores > 0.5
-
-    reasons = [row.reason for row in env.action_log if row.result_code == "OK"]
+    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_beg.yaml", "beg")
+    _assert_triangle_hold(env)
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
     assert "vicinity_spawn" in reasons
     assert "beg_spawn" in reasons
-    assert "beh_terminate" in reasons
+    assert "beg_terminate" in reasons
+    assert "vicinity_terminate" in reasons
+    assert "beh_terminate" not in reasons
     remote_spawns = [
         r
         for r in env.action_log
@@ -185,6 +175,31 @@ def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_ro
     ]
     assert remote_spawns
     assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in remote_spawns)
+
+
+def _run_triangle(project_root: Path, tmp_path: Path, name: str, stamp: str) -> Env:
+    from dataclasses import replace
+
+    cfg = project_root / "configs" / name
+    env = Env.from_config(cfg)
+    env.world_spec = replace(
+        env.world_spec, sim=replace(env.world_spec.sim, results_dir=str(tmp_path / stamp))
+    )
+    scaler = load_autoscaler_from_yaml(cfg)
+    env.run(autoscaler=scaler, now_utc=datetime(2026, 8, 20, tzinfo=UTC))
+    return env
+
+
+def _assert_triangle_hold(env: Env, *, expect_seed: bool = True) -> None:
+    live = env.list_containers()
+    assert len(live) == 1
+    cid = live[0]
+    leftover = env.get_container(cid)
+    assert env.get_server(leftover.server_id).cluster_id == "c1"
+    assert leftover.cpu_alloc_cores > 0.5
+    if expect_seed:
+        assert cid == "c-api-0"
+        assert leftover.server_id == "c1-w1"
     ram_dust = [
         r
         for r in env.action_log
@@ -196,10 +211,14 @@ def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_ro
         and r.cpu_old == r.cpu_new
     ]
     assert ram_dust == [], "BEV-down must not shave RAM after CPU quantum already holds μ"
-
-    last_term = max(
-        r.tau for r in env.action_log if r.reason == "beh_terminate" and r.result_code == "OK"
-    )
+    terms = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK"
+        and r.reason in {"beh_terminate", "vicinity_terminate", "beg_terminate"}
+    ]
+    assert terms, "surplus reclaim must terminate extras before the hold"
+    last_term = max(r.tau for r in terms)
     later_up = [
         r
         for r in env.action_log
@@ -216,8 +235,56 @@ def test_triangle_beg_reclaims_to_one_local_without_chatter(tmp_path, project_ro
         and r.tau > last_term
         and r.action_type == "resize"
         and "down" in r.reason
-        and r.container_id == "c-api-0"
+        and r.container_id == cid
         and r.cpu_new is not None
         and r.cpu_new <= 0.5
     ]
     assert later_floor == [], "surplus must not walk the last replica onto μ=0"
+
+
+def test_triangle_beh_stays_in_cluster(tmp_path, project_root: Path):
+    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_beh.yaml", "beh")
+    _assert_triangle_hold(env, expect_seed=False)
+    leftover = env.get_container(env.list_containers()[0])
+    assert leftover.server_id == "c1-w2"
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "beh_spawn" in reasons
+    assert "beh_terminate" in reasons
+    assert "vicinity_spawn" not in reasons
+    assert "beg_spawn" not in reasons
+    assert "vicinity_terminate" not in reasons
+    assert "beg_terminate" not in reasons
+    extras = [r for r in env.action_log if r.reason == "beh_spawn" and r.result_code == "OK"]
+    assert extras
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in extras)
+    assert all("c1-w2" in (r.container_id or "") for r in extras)
+
+
+def test_triangle_vicinity_never_begs(tmp_path, project_root: Path):
+    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_vicinity.yaml", "vic")
+    _assert_triangle_hold(env)
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "vicinity_spawn" in reasons
+    assert "vicinity_terminate" in reasons
+    assert "beg_spawn" not in reasons
+    assert "beh_spawn" not in reasons
+    assert "beg_terminate" not in reasons
+    assert "beh_terminate" not in reasons
+    spawns = [r for r in env.action_log if r.reason == "vicinity_spawn" and r.result_code == "OK"]
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in spawns)
+    assert all("c2-w1" in (r.container_id or "") for r in spawns)
+
+
+def test_triangle_floor_neighbor_skips_to_beg(tmp_path, project_root: Path):
+    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_skip_beg.yaml", "skip")
+    _assert_triangle_hold(env)
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "beg_spawn" in reasons
+    assert "beg_terminate" in reasons
+    assert "vicinity_spawn" not in reasons
+    assert "vicinity_terminate" not in reasons
+    assert "beh_terminate" not in reasons
+    spawns = [r for r in env.action_log if r.reason == "beg_spawn" and r.result_code == "OK"]
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in spawns)
+    assert all("c3-w1" in (r.container_id or "") for r in spawns)
+    assert all("c2-w1" not in (r.container_id or "") for r in spawns)

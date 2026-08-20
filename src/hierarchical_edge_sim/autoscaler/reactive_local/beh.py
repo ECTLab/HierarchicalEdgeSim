@@ -162,7 +162,11 @@ def beh_down(
     spec: MicroserviceSpec | None = None,
     mu_tgt: float | None = None,
 ) -> list[TerminateAction]:
-    """Terminate global loans, then vicinity loans, then coldest local (never the last)."""
+    """Terminate global loans, then vicinity loans, then coldest local (never the last).
+
+    Reason follows the loan rung: ``beg_terminate``, ``vicinity_terminate``, or
+    ``beh_terminate``. Unknown remotes (no loan row) are global, same as rank.
+    """
     live = [r for r in replicas if r.container_id not in skip_ids]
     fleet_mu = (
         sum(replica_mu(r, spec, ram_modeled) for r in replicas)
@@ -187,18 +191,28 @@ def beh_down(
             if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
                 continue
             fleet_mu = max(0.0, fleet_mu - extra_mu)
+        tier, _ = _reclaim_key(env, r, owner_cluster_id, ms_id)
         actions.append(
             TerminateAction(
                 type="terminate",
                 ms_id=ms_id,
                 container_id=r.container_id,
-                reason="beh_terminate",
+                reason=_reclaim_terminate_reason(tier),
                 tau=tau,
             )
         )
         remain_cpu = max(0.0, remain_cpu - r.cpu_alloc)
         remain_ram = max(0.0, remain_ram - r.ram_alloc)
     return actions
+
+
+def _reclaim_terminate_reason(tier: int) -> str:
+    """Stamp terminate with the same rung as spawn: BEG / vicinity / local BEH."""
+    if tier == 2:
+        return "beh_terminate"
+    if tier == 1:
+        return "vicinity_terminate"
+    return "beg_terminate"
 
 
 def _reclaim_key(

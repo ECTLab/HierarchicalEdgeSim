@@ -184,7 +184,7 @@ In the new `results/triangle_beg/<run_id>/`:
 
 - `actions.csv` starts with `tau=0`, `reason=seed`, `c-api-0`, `cpu_new=1.00`, `ram_new=512.00`
 - CPU/RAM columns are two decimals (`0.70`, `0.58`, `358.40`), not long floats
-- After the last `beh_terminate`, the seed is not resized onto `cpu_min` and does not bounce UP
+- After the last extra terminate (`beg_terminate` / `vicinity_terminate` / `beh_terminate`), the leftover replica is not resized onto `cpu_min` and does not bounce UP
 - Vicinity / BEG spawns have `cpu_new > 0.50` (they serve on the next tick)
 - No `bev_down` rows with `cpu_old == cpu_new` (no RAM-dust tail)
 - `apps/demo_app/api/c-api-0.log.csv` still has usage from τ=1 through the horizon

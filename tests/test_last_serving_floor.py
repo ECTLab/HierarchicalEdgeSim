@@ -6,6 +6,7 @@ from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, dist
 from hierarchical_edge_sim.autoscaler.reactive_local.beh import beh_down
 from hierarchical_edge_sim.autoscaler.reactive_local.params import ReactiveLocalParams
 from hierarchical_edge_sim.env.config import MicroserviceSpec
+from hierarchical_edge_sim.env.models import LoanRecord, LoanTier
 
 
 def _spec() -> MicroserviceSpec:
@@ -31,6 +32,7 @@ def _view(
     ram_min: float = 256.0,
     slack: float = 0.9,
     drop: float = 0.0,
+    server_id: str = "c1-w1",
 ) -> ReplicaView:
     return ReplicaView(
         container_id=cid,
@@ -43,7 +45,7 @@ def _view(
         room_up_ram=max(0.0, 4096.0 - ram),
         room_down_cpu=max(0.0, cpu - cpu_min),
         room_down_ram=max(0.0, ram - ram_min),
-        server_id="c1-w1",
+        server_id=server_id,
     )
 
 
@@ -128,3 +130,53 @@ def test_beh_down_terminates_floor_extra_before_serving():
         mu_tgt=1.0,
     )
     assert [a.container_id for a in terms] == ["c-api-2"]
+    assert terms[0].reason == "beh_terminate"
+
+
+class _LoanSrv:
+    def __init__(self, cluster_id: str, loans: list[LoanRecord] | None = None) -> None:
+        self.cluster_id = cluster_id
+        self.loans = list(loans or [])
+
+
+class _TieredEnv:
+    def __init__(self) -> None:
+        self._servers = {
+            "c1-w1": _LoanSrv("c1"),
+            "c2-w1": _LoanSrv(
+                "c2",
+                [LoanRecord(borrower_cluster_id="c1", ms_id="api", tier=LoanTier.VICINITY, ts=1)],
+            ),
+            "c3-w1": _LoanSrv(
+                "c3",
+                [LoanRecord(borrower_cluster_id="c1", ms_id="api", tier=LoanTier.GLOBAL, ts=1)],
+            ),
+        }
+
+    def get_server(self, sid: str) -> _LoanSrv:
+        return self._servers[sid]
+
+
+def test_beh_down_reason_follows_loan_tier():
+    spec = _spec()
+    terms = beh_down(
+        env=_TieredEnv(),  # type: ignore[arg-type]
+        replicas=[
+            _view("c-api-1", cpu=1.0, ram=512.0, server_id="c1-w1"),
+            _view("c-api-2", cpu=0.5, ram=256.0, server_id="c2-w1"),
+            _view("c-api-3", cpu=0.5, ram=256.0, server_id="c3-w1"),
+        ],
+        ms_id="api",
+        owner_cluster_id="c1",
+        remain_cpu=8.0,
+        remain_ram=2048.0,
+        ram_modeled=True,
+        skip_ids=set(),
+        tau=10,
+        spec=spec,
+        mu_tgt=1.0,
+    )
+    assert [(a.container_id, a.reason) for a in terms] == [
+        ("c-api-3", "beg_terminate"),
+        ("c-api-2", "vicinity_terminate"),
+    ]

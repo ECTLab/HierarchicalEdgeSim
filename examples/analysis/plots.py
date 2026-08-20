@@ -21,7 +21,9 @@ _FAMILY_STYLE = {
     "BEH spawn": {"color": "#ff7f0e", "linestyle": "--"},
     "BEH terminate": {"color": "#ffbb78", "linestyle": ":"},
     "vicinity": {"color": "#2ca02c", "linestyle": "-."},
+    "vicinity terminate": {"color": "#98df8a", "linestyle": ":"},
     "BEG": {"color": "#d62728", "linestyle": "-."},
+    "BEG terminate": {"color": "#ff9896", "linestyle": ":"},
     "cascade": {"color": "#9467bd", "linestyle": ":"},
     "escalate": {"color": "#7f7f7f", "linestyle": ":"},
 }

@@ -222,12 +222,16 @@ def test_replica_counts_by_site_and_action_markers():
             ActionRow(3, "reactive_local", "other", "spawn", "x", "beg_spawn", "OK"),
             ActionRow(4, "reactive_local", "api", "resize", "c-home", "bev_up", "OK"),
             ActionRow(5, "reactive_local", "api", "resize", "c-home", "bev_down", "OK"),
+            ActionRow(6, "reactive_local", "api", "terminate", "c-v", "vicinity_terminate", "OK"),
+            ActionRow(7, "reactive_local", "api", "terminate", "c-g", "beg_terminate", "OK"),
         ],
         ms_id="api",
     )
     assert markers["vicinity"] == [2]
     assert markers["BEV up"] == [4]
     assert markers["BEV down"] == [5]
+    assert markers["vicinity terminate"] == [6]
+    assert markers["BEG terminate"] == [7]
     assert "BEG" not in markers
 
 

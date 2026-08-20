@@ -13,13 +13,13 @@ Scale-up walks BEV → BEH → vicinity → BEG. Scale-down never leaves the hom
 
 `beh_down` ranks extra replicas:
 
-1. **Global** loans (older `LoanRecord.ts` first)
-2. **Vicinity** loans (older ts first)
-3. **Local** replicas (lowest `q`, then slack, then id)
+1. **Global** loans (older `LoanRecord.ts` first) → `beg_terminate`
+2. **Vicinity** loans (older ts first) → `vicinity_terminate`
+3. **Local** replicas (lowest `q`, then slack, then id) → `beh_terminate`
 
 Never terminate the last replica. Down still does not emit vicinity/BEG help.
 
-Unknown remote (no loan row) is treated as global so it is still released before local.
+Unknown remote (no loan row) is treated as global so it is still released before local (`beg_terminate`). `cascade_terminate` is a migrate-home, not this reclaim path.
 
 ---
 
@@ -66,4 +66,5 @@ S7 proactive PredictAndDecide on this same allocate path. Paper load–distance.
 
 | Version | Date | Note |
 |---|---|---|
+| v2 | 2026-08-20 | Reclaim stamps `beg_terminate` / `vicinity_terminate` / `beh_terminate` |
 | v1 | 2026-08-15 | Global→vicinity→local reclaim; cascade-home with flag |

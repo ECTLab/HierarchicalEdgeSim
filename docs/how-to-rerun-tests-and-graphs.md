@@ -302,7 +302,7 @@ Single cluster `c1`, two workers (`c1-w1`, `c1-w2`). One app / one MS (`demo_app
 | Initial replica | `c-api-1` on `c1-w1` at 1.0 core / 512 MB |
 | MS bounds | `cpu_min` 0.5, `cpu_max` 2.0, `ram_min` 256 |
 | Cost | `cpu_per_request` 0.01, `ram_per_request` 0.5 |
-| Streaks | `x_up_streak` 3, `sustained_up_streak` 6, `y_down_streak` 8, `cooldown` 5 |
+| Streaks | `x_up_streak` 3, `sustained_up_streak` 6, `y_down_streak` 8, `cooldown` 5 (glossary: [reactive-local-params.md](./reactive-local-params.md)) |
 
 Serving capacity per replica is `μ = min((cpu_alloc − cpu_min) / 0.01, (ram_alloc − ram_min) / 0.5)`. CPU is the bottleneck. Routing is CPU-headroom weighted: a replica at `cpu_min` has headroom 0 and receives no share until BEV grows it (equal-share only if *every* replica is at min).
 

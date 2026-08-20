@@ -7,6 +7,8 @@
 
 S2 adds a **policy** that uses S1 mutations. `reactive_vertical` stays as a BEV-only baseline. The new scaler is `reactive_local`.
 
+Shared `autoscaler.params` (streaks, θ, α, δ, weights): [reactive-local-params.md](./reactive-local-params.md).
+
 ---
 
 ## Behavior

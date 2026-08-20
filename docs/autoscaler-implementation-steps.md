@@ -85,6 +85,8 @@ autoscaler:
 | `grow_weights` | `{drop: 0.5, util: 0.3, room: 0.2}` | Prefer hot + roomy hosts |
 | `shrink_weights` | `{slack: 0.5, no_drop: 0.3, room: 0.2}` | Prefer cold replicas |
 
+Plain-language “when / how big / which replica”: [reactive-local-params.md](./reactive-local-params.md).
+
 Full YAML snippet for demos/tests:
 
 ```yaml

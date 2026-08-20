@@ -1,6 +1,6 @@
 # μ-matched CPU/RAM scale
 
-**Status:** uncommitted on `code-review` until this note lands with the code  
+**Status:** landed on `code-review`  
 **Date:** 2026-08-20  
 **Proof run:** `results/triangle_beg/42_20260820T115435Z`  
 **Related:** [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md) (v3), [triangle-ladder-scenarios.md](./triangle-ladder-scenarios.md), [reactive-local-params.md](./reactive-local-params.md)

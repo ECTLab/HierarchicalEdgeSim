@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from hierarchical_edge_sim.autoscaler.common.load import load_autoscaler_from_yaml
-from hierarchical_edge_sim.autoscaler.reactive_local.allocate import down_delta
+from hierarchical_edge_sim.autoscaler.reactive_local.allocate import down_delta, up_delta
 from hierarchical_edge_sim.autoscaler.reactive_local.params import ReactiveLocalParams, validate_params
 from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
 from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
@@ -149,7 +149,7 @@ def test_ms_max_spawns_on_same_worker_when_server_has_room(tmp_path):
     assert spawns
     assert spawns[0].server_id == "c1-w1"
     assert spawns[0].cpu_alloc_cores == 0.7
-    assert spawns[0].ram_alloc_mb == 384.0
+    assert spawns[0].ram_alloc_mb == 266.0
     assert not any(getattr(a, "type", "") == "resize" for a in actions)
 
 
@@ -253,6 +253,17 @@ def _surplus_obs(**kwargs: Any) -> dict[str, Any]:
     }
     obs.update(kwargs)
     return obs
+
+
+def test_up_delta_ram_follows_cpu_mu_not_fat_alloc():
+    params = ReactiveLocalParams(alpha_up=0.20, delta_cpu_min_cores=0.25, delta_ram_min_mb=128.0)
+    cpu, ram = up_delta(
+        _surplus_obs(D=80.0, sum_cpu_alloc=1.0, sum_ram_alloc=512.0),
+        params,
+    )
+    # α_up · 1.0 = 0.20 cores → 20 req; RAM is 20 × 0.5 MB, not α_up · 512.
+    assert cpu == pytest.approx(0.20)
+    assert ram == pytest.approx(10.0)
 
 
 def test_surplus_last_replica_does_not_take_delta_min_past_target():

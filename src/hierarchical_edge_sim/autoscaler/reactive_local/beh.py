@@ -64,21 +64,40 @@ def packed_spawn_size(
     if free_ram + EPS < spec.ram_min_mb:
         return None
     max_head_cpu = max(0.0, min(spec.cpu_max_cores - spec.cpu_min_cores, free_cpu - spec.cpu_min_cores))
-    max_head_ram = max(0.0, min(spec.ram_max_mb - spec.ram_min_mb, free_ram - spec.ram_min_mb))
-    head_cpu = min(max(0.0, remain_cpu), max_head_cpu)
-    head_ram = min(max(0.0, remain_ram), max_head_ram) if ram_modeled else 0.0
-    if head_cpu <= EPS:
-        head_cpu = min(max(0.0, min_head_cpu), max_head_cpu)
-    if ram_modeled and head_ram <= EPS:
-        head_ram = min(max(0.0, min_head_ram), max_head_ram)
-    if head_cpu <= EPS:
+    max_head_ram = (
+        max(0.0, min(spec.ram_max_mb - spec.ram_min_mb, free_ram - spec.ram_min_mb))
+        if ram_modeled
+        else 0.0
+    )
+    rho_cpu = spec.cpu_per_request_cores
+    rho_ram = spec.ram_per_request_mb
+    step_mu = 0.0
+    if rho_cpu > EPS and remain_cpu > EPS:
+        step_mu = remain_cpu / rho_cpu
+    if ram_modeled and rho_ram > EPS and remain_ram > EPS:
+        mu_r = remain_ram / rho_ram
+        step_mu = min(step_mu, mu_r) if step_mu > EPS else mu_r
+    if step_mu <= EPS and rho_cpu > EPS and min_head_cpu > EPS:
+        step_mu = min_head_cpu / rho_cpu
+    if step_mu <= EPS:
         return None
-    if ram_modeled and head_ram <= EPS:
+    if rho_cpu > EPS:
+        step_mu = min(step_mu, max_head_cpu / rho_cpu)
+    if ram_modeled and rho_ram > EPS:
+        step_mu = min(step_mu, max_head_ram / rho_ram)
+    if step_mu <= EPS:
         return None
+    head_cpu = step_mu * rho_cpu
+    head_ram = step_mu * rho_ram if ram_modeled else 0.0
     cpu = quantize_resource(spec.cpu_min_cores + head_cpu)
     ram = quantize_resource(spec.ram_min_mb + head_ram if ram_modeled else spec.ram_min_mb)
     head_cpu = quantize_resource(cpu - spec.cpu_min_cores)
     head_ram = quantize_resource(ram - spec.ram_min_mb) if ram_modeled else 0.0
+    if head_cpu <= EPS:
+        return None
+    if ram_modeled and head_ram <= EPS:
+        return None
+    _ = min_head_ram
     if cpu > free_cpu + EPS or ram > free_ram + EPS:
         return None
     return cpu, ram, head_cpu, head_ram
@@ -141,6 +160,8 @@ def beh_up(
             free_ram[sid] -= ram
             remain_cpu = max(0.0, remain_cpu - head_cpu)
             remain_ram = max(0.0, remain_ram - head_ram)
+            if remain_cpu <= EPS:
+                remain_ram = 0.0
             placed = True
             break
         if not placed:

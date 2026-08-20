@@ -11,8 +11,9 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
     leftover_from_need_horizontal,
     strip_need_horizontal,
 )
+from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
 from hierarchical_edge_sim.env.api import Env
-from hierarchical_edge_sim.env.config import EPS
+from hierarchical_edge_sim.env.config import EPS, quantize_resource
 
 from .beg import leftover_to_global_help, schedule_beg
 from .beh import beh_down, beh_up, home_cluster_id
@@ -133,52 +134,58 @@ def reactive_pressure(obs: dict, params: ReactiveLocalParams) -> tuple[bool, boo
     return u_pressure, d_pressure
 
 
-def up_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
-    spec = obs["spec"]
-    need_cpu = obs["D"] * spec.cpu_per_request_cores
-    need_ram = obs["D"] * spec.ram_per_request_mb
-    delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-    if spec.ram_per_request_mb > EPS:
-        delta_ram = min(
-            max(need_ram, params.delta_ram_min_mb),
-            params.alpha_up * max(obs["sum_ram_alloc"], EPS),
-        )
-    else:
-        delta_ram = 0.0
-    return delta_cpu, delta_ram
-
-
 def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
-    """MS-wide CPU/RAM to release this down tick (surplus of serving capacity).
+    """MS-wide CPU/RAM to release this down tick.
 
-    Target ``μ = Λ / (1-θ_free)`` and release only ``max(0, μ − μ_tgt)``
-    converted through per-request costs. CPU and RAM stay coupled so idle RAM
-    cannot justify killing CPU that the load still needs. Never take ``Δ_min``
-    past that surplus — that overshoot is what drove the last replica through
-    ``μ = 0``. Extra replicas that add no μ still get a rate-cap token so BEH
-    can terminate them.
+    Size each resource's serving headroom to ``μ_tgt · ρ``. Idle RAM (or CPU)
+    above that is surplus even when the other resource still binds. Last replica
+    is rate-capped; extras still get a token so BEH can terminate floor replicas.
     """
     spec = obs["spec"]
     ram_modeled = spec.ram_per_request_mb > EPS
-    cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
+    rho_cpu = spec.cpu_per_request_cores
+    rho_ram = spec.ram_per_request_mb
     load = float(obs.get("Lambda") or 0.0)
     q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
     mu_tgt = load / q_tgt
     mu = _fleet_mu(obs, ram_modeled)
-    surplus_mu = max(0.0, mu - mu_tgt)
     n_replicas = len(obs.get("replicas") or [])
-    delta_cpu = surplus_mu * spec.cpu_per_request_cores
-    delta_ram = surplus_mu * spec.ram_per_request_mb if ram_modeled else 0.0
+    h_cpu_tgt = mu_tgt * rho_cpu if rho_cpu > EPS else 0.0
+    h_ram_tgt = mu_tgt * rho_ram if ram_modeled and rho_ram > EPS else 0.0
+    delta_cpu = max(0.0, float(obs.get("sum_h_cpu") or 0.0) - h_cpu_tgt)
+    delta_ram = max(0.0, float(obs.get("sum_h_ram") or 0.0) - h_ram_tgt) if ram_modeled else 0.0
     if n_replicas <= 1:
-        return (
-            min(delta_cpu, cap_cpu) if delta_cpu > EPS else 0.0,
-            min(delta_ram, cap_ram) if delta_ram > EPS else 0.0,
+        return _cap_last_replica_down(
+            obs, params, ram_modeled, delta_cpu, delta_ram, rho_cpu, rho_ram
         )
-    if surplus_mu > EPS:
-        return delta_cpu, delta_ram
-    # Borrowed replicas at cpu_min add no μ; still allow BEH to reclaim them.
     if mu <= EPS:
+        cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
         return cap_cpu, cap_ram
+    if delta_cpu > EPS or delta_ram > EPS:
+        return delta_cpu, delta_ram
+    return 0.0, 0.0
+
+
+def _cap_last_replica_down(
+    obs: dict,
+    params: ReactiveLocalParams,
+    ram_modeled: bool,
+    delta_cpu: float,
+    delta_ram: float,
+    rho_cpu: float,
+    rho_ram: float,
+) -> tuple[float, float]:
+    cap_cpu, cap_ram_idle = _down_rate_cap(obs, params, ram_modeled)
+    cpu_moves = rho_cpu > EPS and quantize_resource(delta_cpu) > EPS
+    if cpu_moves:
+        cap_mu = cap_cpu / rho_cpu
+        cap_ram_pair = cap_mu * rho_ram if ram_modeled else 0.0
+        return (
+            min(delta_cpu, cap_cpu),
+            min(delta_ram, cap_ram_pair) if ram_modeled and delta_ram > EPS else 0.0,
+        )
+    if ram_modeled and delta_ram > EPS:
+        return 0.0, min(delta_ram, cap_ram_idle)
     return 0.0, 0.0
 
 
@@ -305,6 +312,7 @@ def ladder_down(
             delta_ram=min(delta_ram, cap_ram) if ram_modeled else 0.0,
             tau=tau,
             reason="bev_down",
+            mu_tgt=target_mu(obs, params),
         )
         granted_cpu, granted_ram = _granted_down(replicas, bev)
         remain_cpu = max(0.0, delta_cpu - granted_cpu)

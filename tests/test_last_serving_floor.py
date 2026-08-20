@@ -86,7 +86,7 @@ def test_distribute_down_may_hit_floor_when_delta_exceeds_room():
 
 
 def test_distribute_down_skips_ram_only_shrink_that_does_not_cut_mu():
-    """CPU already at the 0.01 quantum vs target; shaving RAM cannot reduce μ."""
+    """CPU already at the 0.01 quantum vs target; 0.15 MB RAM dust must not chatter."""
     params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.0)
     actions = distribute_down(
         env=None,  # type: ignore[arg-type]
@@ -100,6 +100,25 @@ def test_distribute_down_skips_ram_only_shrink_that_does_not_cut_mu():
         reason="bev_down",
     )
     assert actions == []
+
+
+def test_distribute_down_trims_idle_ram_in_delta_min_chunks():
+    params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.35)
+    actions = distribute_down(
+        env=None,  # type: ignore[arg-type]
+        ms_id="api",
+        spec=_spec(),
+        params=params,
+        replicas=[_view("c-api-1", cpu=0.58, ram=490.88)],
+        delta_cpu=0.0,
+        delta_ram=128.0,
+        tau=334,
+        reason="bev_down",
+        mu_tgt=7.69,
+    )
+    assert len(actions) == 1
+    assert actions[0].cpu_alloc_cores == 0.58
+    assert actions[0].ram_alloc_mb == 362.88
 
 
 class _Srv:

@@ -32,7 +32,7 @@ def test_packed_spawn_uses_leftover_headroom():
         min_head_cpu=0.25,
         min_head_ram=128.0,
     )
-    assert out == (0.7, 384.0, 0.2, 128.0)
+    assert out == (0.7, 266.0, 0.2, 10.0)
 
 
 def test_packed_spawn_adds_sliver_on_the_other_resource():
@@ -48,9 +48,9 @@ def test_packed_spawn_adds_sliver_on_the_other_resource():
     assert out is not None
     cpu, ram, head_cpu, head_ram = out
     assert cpu == 0.9
-    assert ram == 384.0
+    assert ram == 276.0
     assert head_cpu == 0.4
-    assert head_ram == 128.0
+    assert head_ram == 20.0
 
 
 def test_packed_spawn_refuses_floor_only_server():
@@ -128,5 +128,5 @@ def test_distribute_up_grows_ram_when_that_is_the_dead_resource():
     )
     resizes = [a for a in actions if getattr(a, "type", "") == "resize"]
     assert len(resizes) == 1
-    assert resizes[0].cpu_alloc_cores == 3.69
-    assert resizes[0].ram_alloc_mb == 384.0
+    assert resizes[0].cpu_alloc_cores == 3.19
+    assert resizes[0].ram_alloc_mb == 281.0

@@ -3,7 +3,7 @@
 **Status:** configs on `code-review`  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
-**Related:** [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md), [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)
+**Related:** [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md), [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md), [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)
 
 The original triangle demo (`demo_400_triangle_beg.yaml`) is one topology: one
 tiny home worker, one tiny neighbor, one fat BEG worker. That is the **full
@@ -27,7 +27,7 @@ enough for surplus reclaim.
 | `demo_400_triangle_skip_beg.yaml` | Floor skip → BEG | c1 filled; c2=0.4 (below min); fat c3 outside v1 | `beg_spawn` / `beg_terminate` on c3, no spawn on c2 | `vicinity_*` |
 | `demo_400_triangle_beg.yaml` | Full ladder | c1 1.0 + c2 1.0 + fat c3 | vicinity then BEG (spawn **and** terminate) | local `beh_spawn` / `beh_terminate` |
 
-Every slice: reclaim to **one** live replica in cluster `c1`, last alloc `> cpu_min`, no UP after the last extra terminate, no `bev_down` with `cpu_old == cpu_new`. Packed remote/local extras spawn above the floor (`cpu_new>0.50`).
+Every slice: reclaim to **one** live replica in cluster `c1`, last alloc `> cpu_min`, leftover RAM near `ram_min + μ · ρ_ram` (not `ram_max`), no UP after the last extra terminate. Packed extras spawn above the floor (`cpu_new>0.50`) with RAM matched to that μ, not `α_up · seed RAM`.
 
 BEH-only is the exception on *which* replica survives. Vicinity and BEG extras are a cheaper loan tier, so they die first and `c-api-0` on `c1-w1` remains. In-cluster extras are the same tier as the seed; among equal μ the ranker is `(q, -slack, container_id)`, so `c-api-0` can be reclaimed and the leftover sits on the fat sibling (`c1-w2`). That still satisfies LAST_REPLICA and surplus hold. Do not treat it as a keep-seed failure.
 
@@ -74,7 +74,9 @@ Alibaba regression (ρ=0.0004, 0.01 alloc quantum): `configs/demo_alibaba_reacti
 
 ## Recorded runs (seed 42)
 
-Every slice dropped **27 / 33412 (0.08%)**. Conservation holds (`trace = incoming = served + dropped`). Same QoS; the ladders differ only in *where* the three extras sit. Last leftover alloc is **0.58** cores / **490.88** MB (surplus hold at Λ=5, not the μ=0 floor).
+Every slice dropped **27 / 33412 (0.08%)** on the pre-μ-match runs. Conservation holds. After μ-matched scale, extras pack at **0.70 / 266** (not 358.40) and BEV-up RAM stops at **281** (`ram_min + 50 × 0.5`). The YAML seed can still start at 512; surplus down idle-trims leftover RAM to **259.85** (`ram_min + μ_tgt × ρ_ram`).
+
+Recorded full-ladder run after this change: `results/triangle_beg/42_20260820T115435Z`. Re-run the other three slices to refresh their `actions.csv`. Older folders keep the dual-wallet RAM numbers.
 
 | Slice | Run dir | Extra spawn | Extra terminate | Leftover |
 |---|---|---|---|---|
@@ -109,6 +111,7 @@ Full ladder reclaim is global first, then vicinity (`c3` dies before `c2`), whic
 
 | Version | Date | Note |
 |---|---|---|
+| v4 | 2026-08-20 | μ-matched CPU/RAM scale; leftover RAM ≈ 260 not 512 |
 | v3 | 2026-08-20 | Recorded run dirs after terminate-reason fix; vicinity / skip-BEG / BEG CSVs stamp `vicinity_terminate` / `beg_terminate` |
 | v2 | 2026-08-20 | Reclaim reasons match spawn rungs (`beg_terminate` / `vicinity_terminate`) |
 | v1 | 2026-08-20 | BEH / vicinity / skip-BEG slices next to the full-ladder triangle |

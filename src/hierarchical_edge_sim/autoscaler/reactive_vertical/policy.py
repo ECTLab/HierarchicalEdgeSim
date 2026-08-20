@@ -8,6 +8,8 @@ from typing import Any
 from hierarchical_edge_sim.env.api import Env, NeedHorizontalAction, ResizeAction, ResizeResult
 from hierarchical_edge_sim.env.config import EPS
 
+from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
+
 from .distribute import ReplicaView, distribute_down, distribute_up
 from .params import ReactiveVerticalParams, validate_params
 
@@ -189,24 +191,22 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     if intent == "UP":
-        deficit = obs["D"]
-        need_cpu = deficit * spec.cpu_per_request_cores
-        need_ram = deficit * spec.ram_per_request_mb
-        delta_cpu = min(max(need_cpu, params.delta_cpu_min_cores), params.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-        if spec.ram_per_request_mb > EPS:
-            delta_ram = min(max(need_ram, params.delta_ram_min_mb), params.alpha_up * max(obs["sum_ram_alloc"], EPS))
-        else:
-            delta_ram = 0.0
-        delta_cpu = min(delta_cpu, obs["room_up_cpu"]) if obs["room_up_cpu"] > 0 else delta_cpu
-        delta_ram = min(delta_ram, obs["room_up_ram"]) if obs["room_up_ram"] > 0 else delta_ram
+        need_cpu, need_ram = up_delta(obs, params)
+        if obs["room_up_cpu"] > 0:
+            need_cpu = min(need_cpu, obs["room_up_cpu"])
+            spec = obs["spec"]
+            if spec.cpu_per_request_cores > EPS and spec.ram_per_request_mb > EPS:
+                need_ram = need_cpu / spec.cpu_per_request_cores * spec.ram_per_request_mb
+        elif obs["room_up_ram"] > 0:
+            need_ram = min(need_ram, obs["room_up_ram"])
         return distribute_up(
             env=env,
             ms_id=ms_id,
             spec=spec,
             params=params,
             replicas=replicas,
-            delta_cpu=delta_cpu,
-            delta_ram=delta_ram,
+            delta_cpu=need_cpu,
+            delta_ram=need_ram,
             tau=tau,
         )
 

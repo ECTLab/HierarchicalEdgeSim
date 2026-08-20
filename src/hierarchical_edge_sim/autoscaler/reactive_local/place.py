@@ -88,6 +88,8 @@ def place_packed_spawns(
             free_ram[sid] -= ram
             remain_cpu = max(0.0, remain_cpu - head_cpu)
             remain_ram = max(0.0, remain_ram - head_ram)
+            if remain_cpu <= EPS:
+                remain_ram = 0.0
             placed = True
             break
         if not placed:

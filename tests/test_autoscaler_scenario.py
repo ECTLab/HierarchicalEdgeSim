@@ -209,8 +209,14 @@ def _assert_triangle_hold(env: Env, *, expect_seed: bool = True) -> None:
         and r.cpu_old is not None
         and r.cpu_new is not None
         and r.cpu_old == r.cpu_new
+        and r.ram_old is not None
+        and r.ram_new is not None
+        and abs(r.ram_old - r.ram_new) < 1.0
     ]
-    assert ram_dust == [], "BEV-down must not shave RAM after CPU quantum already holds μ"
+    assert ram_dust == [], "BEV-down must not chatter sub-MB RAM dust"
+    mu = max(0.0, leftover.cpu_alloc_cores - 0.5) / 0.01
+    matched_ram = 256.0 + mu * 0.5
+    assert abs(leftover.ram_alloc_mb - matched_ram) < 2.0, "leftover RAM must match serving μ, not ram_max"
     terms = [
         r
         for r in env.action_log

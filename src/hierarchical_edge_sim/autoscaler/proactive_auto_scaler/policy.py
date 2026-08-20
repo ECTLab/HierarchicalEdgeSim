@@ -208,9 +208,12 @@ def _clip_step(
     """
     if up:
         cap_cpu = max(ladder.delta_cpu_min_cores, ladder.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-        cap_ram = max(ladder.delta_ram_min_mb, ladder.alpha_up * max(obs["sum_ram_alloc"], EPS))
-    else:
-        cap_cpu, cap_ram = down_delta(obs, ladder)
+        need_cpu = min(need_cpu, cap_cpu)
+        spec = obs["spec"]
+        if spec.ram_per_request_mb > EPS and spec.cpu_per_request_cores > EPS:
+            need_ram = need_cpu / spec.cpu_per_request_cores * spec.ram_per_request_mb
+        return need_cpu, need_ram
+    cap_cpu, cap_ram = down_delta(obs, ladder)
     return min(need_cpu, cap_cpu), min(need_ram, cap_ram)
 
 

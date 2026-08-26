@@ -20,9 +20,9 @@ That is the role S4 implements, with sim-shaped mechanics:
 | Distributed CMs; non-leaders RPC to the leader | One in-process `reactive_local` tick; no CM threads |
 | Leader process runs `VicinityLeaderSchedule` | `schedule_vicinity_help` **is** that round |
 | Sequence numbers assigned on receipt at the leader | `seq` = order of `env.list_microservices()` (sorted ids) among leftovers this tick |
-| Election publishes the leader id | `topology.vicinities[].leader` plus `env.is_leader` / `Cluster.is_vicinity_leader` |
+| Election publishes the leader id | YAML `topology.vicinities[].leader`, **or** Algorithm 1 election, plus `env.is_leader` / `Cluster.is_vicinity_leader` |
 
-**YAML `leader:` is topology metadata**, same as membership. The scaler does **not** branch on `env.is_leader(...)`. With a single shared world there is only one scheduler, so the named leader is not a second actor. The function still matches the paper’s *job*: one FCFS joint round per vicinity, then stop.
+**Published `leader` is topology metadata**, same as membership (YAML or Algorithm 1). The scaler does **not** branch on `env.is_leader(...)`. With a single shared world there is only one scheduler, so the named leader is not a second actor. The function still matches the paper’s *job*: one FCFS joint round per vicinity, then stop.
 
 Why keep the named leader at all? So later stages (heartbeat timeout → skip vicinity and go to BEG, re-election) have a real leader id to talk about, and so configs already match the three-layer picture (root publishes `{vicinity → members, leader}`).
 
@@ -33,7 +33,7 @@ Why keep the named leader at all? So later stages (heartbeat timeout → skip vi
 1. Group requests by `env.vicinity_of(home)`.
 2. For each vicinity, sort by `(seq, ms_id)` — **FCFS, one round**.
 3. Snapshot free CPU/RAM on all member servers; subtract this tick’s pending resize/spawn/terminate so two requests cannot over-commit the same worker.
-4. For each request, spawn **above MS minima** on **non-home** members only (same `packed_spawn_size` as BEH so μ>0 on the next tick). Skip a worker that can only fit the floor. Member order is YAML `members:`; within a cluster, servers by free CPU then id.
+4. For each request, spawn **above MS minima** on **non-home** members only (same `packed_spawn_size` as BEH so μ>0 on the next tick). Skip a worker that can only fit the floor. Member order is the published vicinity list (YAML `members:` or Algorithm 1 seed-then-closest); within a cluster, servers by free CPU then id.
 5. Each spawn is `reason="vicinity_spawn"`, `loan_tier="vicinity"`, `actor_cluster_id=home`. `apply_actions` grants the loan on the neighbor worker (and drops it if spawn fails). Later reclaim of that replica is `vicinity_terminate` (S6).
 6. If residual remains, S5 BEG consumes it (`NeedGlobalHelpAction` if BEG also fails).
 
@@ -46,9 +46,9 @@ Not in S4 (paper has them; we deferred):
 - **Reserve / `safe_j`:** lender withholds capacity for its own predicted near-future load. S4 uses raw free capacity.
 - **Distance ranking** inside the vicinity (`d(home, owner(j))` then safe headroom). S4 uses config member order.
 - **Multi-replica `k` on one worker** in one inner step. S4 places one minima-sized replica per inner iteration, same as BEH.
-- **Leader election / re-partition / heartbeat.** Membership and leader are static YAML.
+- **Leader re-partition / heartbeat.** Bootstrap election is Algorithm 1 (or YAML). Periodic \(T_{\mathit{repart}}\) and heartbeat → BEG are not simulated.
 
-If `topology.vicinities` is omitted, `World.root` is `None` and leftovers stay S2 log-only `NeedVicinityHelpAction` — there is no leader to run.
+If both `topology.vicinities` and a complete cluster distance are omitted, `World.root` is `None` and leftovers stay S2 log-only `NeedVicinityHelpAction` — there is no leader to run. See [vicinity-partition.md](./vicinity-partition.md).
 
 ---
 
@@ -58,7 +58,7 @@ Every decision tick, after every MS has walked local up (or down):
 
 1. **Up — local first** (unchanged S2): BEV then in-cluster BEH on the app-owner cluster.
 2. Leftover `(remain_cpu, remain_ram)` becomes a `HelpRequest` (FCFS `seq` = `list_microservices()` order).
-3. If `World.root` is `None` (no `topology.vicinities`): same as S2 — log-only `NeedVicinityHelpAction`.
+3. If `World.root` is `None` (no YAML vicinities and no complete cluster distance): same as S2 — log-only `NeedVicinityHelpAction`.
 4. If a vicinity exists: run the leader round above (`schedule_vicinity_help`).
 5. Still leftover after that round → **S5 BEG** (see [s5-global-help.md](./s5-global-help.md)); if BEG also fails, log-only `NeedGlobalHelpAction`.
 6. **Down:** terminate global loans, then vicinity, then local extras (never the last). Optional cascade-home is S6.

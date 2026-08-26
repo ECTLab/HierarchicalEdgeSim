@@ -1,13 +1,13 @@
 # Thesis algorithms vs HierarchicalEdgeSim
 
-**Status:** review draft (comparison as of 2026-08-22)  
+**Status:** review draft (comparison as of 2026-08-26)  
 **Tex:** `proposed_method_complete.tex` (Proposed Method — Consolidated Draft 3, Summer 2026)  
 **Code:** current HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
-**Related:** [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
+**Related:** [vicinity-partition.md](./vicinity-partition.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
 
 This note compares every named algorithm and clarification in the proposed-method tex with the simulator. It also lists places where the implementation is *more reasonable* than the algorithm (tex holes that showed up against this env’s serving model).
 
-Primary code: `autoscaler/reactive_local/`, `autoscaler/proactive_auto_scaler/decide.py`, `env/api.py` (`request_worker_owner_scale`), `env/loans.py`, `env/root.py`.
+Primary code: `autoscaler/reactive_local/`, `autoscaler/proactive_auto_scaler/decide.py`, `env/api.py` (`request_worker_owner_scale`), `env/loans.py`, `env/root.py`, `env/partition.py`.
 
 ---
 
@@ -21,20 +21,19 @@ BEV → BEH → VicinityLeaderSchedule → BEG
 
 Scale-down never enters the vicinity or global tiers.
 
-Several algorithms are **lite** relative to the tex, one named algorithm is **absent**, and a handful of control-path rules in the code are **more reasonable than the algorithms** because the tex never accounted for this simulator’s serving model.
+Several algorithms are **lite** relative to the tex, and a handful of control-path rules in the code are **more reasonable than the algorithms** because the tex never accounted for this simulator’s serving model.
 
 | Count | Status | Meaning |
 |---|---|---|
 | 4 | Stronger than the tex | Same job, but the code closes a hole the algorithm omitted |
 | 1 | Structural match | Same control flow |
-| 4 | Implemented lite | Same job; paper pieces stubbed |
-| 1 | Named algorithm missing | Not in the codebase |
+| 5 | Implemented lite | Same job; paper pieces stubbed |
 
-**Implemented as specified (structure):** AllocateResources, reusable BEV/BEH, loan registry, owner-mediated mutation, cost-ordered scale-down, CheckCascadingMigration, a vicinity-wide FCFS help round, and BEG outside the home vicinity.
+**Implemented as specified (structure):** VicinityPartitionAndLeaderElection at bootstrap, AllocateResources, reusable BEV/BEH, loan registry, owner-mediated mutation, cost-ordered scale-down, CheckCascadingMigration, a vicinity-wide FCFS help round, and BEG outside the home vicinity.
 
 **Implemented, but not the way the tex writes them:** PredictAndDecide, BEV packing, BEH spawn sizing, cooldown, FCFS, and BEG ranking. In these places the code is usually *stricter* than the algorithm, for reasons that showed up in real runs.
 
-**Not implemented:** `VicinityPartitionAndLeaderElection`, lender `Reserve` / `safe_j` (clarification 7), confidence \(\kappa\) / predictor ensemble, inter-cluster distance, BEG’s expected-response-time gate, root application admission, and leader heartbeat failover.
+**Not implemented:** lender `Reserve` / `safe_j` (clarification 7), confidence \(\kappa\) / predictor ensemble, BEG’s expected-response-time gate, root application admission, periodic re-partition \(T_{\mathit{repart}}\), and leader heartbeat failover. Inter-cluster distance exists for Algorithm 1; BEG and the vicinity help round still do not rank by it.
 
 That split matches what the project’s own stage docs already call “lite vs paper” (S4–S7). It is not a secret gap; it is an intentional sim cut, plus a set of physics fixes the tex never stated.
 
@@ -55,7 +54,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 
 | Algorithm | Tex | Code | Status | What actually landed |
 |---|---|---|---|---|
-| VicinityPartitionAndLeaderElection | Alg. vicinity | not present | Not implemented | YAML membership + leader only. No z-score/gap seed, no \(m_{\max}\) election, no \(T_{\mathit{repart}}\), no heartbeat fallback. |
+| VicinityPartitionAndLeaderElection | Alg. vicinity | `env/partition.py` | Implemented lite | Listing mapped at bootstrap from coords or `latency_ms`. YAML `vicinities:` remains an experiment override. No \(T_{\mathit{repart}}\), heartbeat, or RPCs. |
 | ClusterManagerCycle | Alg. cmcycle | `reactive_local/policy.py` · `proactive_auto_scaler/policy.py` | Implemented lite | One in-process `on_tick_end` walks every MS, then one joint help round. No per-cluster CM, no leader barrier, no plan-timeout → BEG. |
 | PredictAndDecide | Alg. predict | `proactive_auto_scaler/decide.py` | Stronger than tex | Same Up/Down/None + sustained shape, but util/residual use serving headroom \(H=\sum(A-\min)\), not total alloc. No \(\kappa\) ensemble; TCN or persistence, not LSTM pool. |
 | AllocateResources | Alg. allocate | `reactive_local/allocate.py` | Matches tex | BEV → BEH → \(\rho\) for Up; Down never leaves home. Cooldown is success-gated (and proactive Up/Down is asymmetric), not `StartCooldown(H)` every window. |
@@ -79,7 +78,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 | C5 | Reusable BEV / BEH blocks | Matches tex | Shared `distribute` + `beh`; both `reactive_local` and `proactive_auto_scaler` call the same ladder. |
 | C6 | Worker-owner sole mutator of lent nodes | Implemented lite | Auth path exists. Local BEH does not prefer an already-lent worker for a second spawn (clarification 6’s “same worker” rule). |
 | C7 | Lender protects own forecast before granting | Not implemented | Eq. reserve / `safe_j` are not in vicinity or BEG. Lenders offer raw free capacity. |
-| C8 | Non-overlapping vicinities + leader joint round; simple BEG | Implemented lite | Partition is hand YAML. Joint round and BEG exist in lite form. Leader id is metadata, not a second actor. |
+| C8 | Non-overlapping vicinities + leader joint round; simple BEG | Implemented lite | Partition: Algorithm 1 at bootstrap (or YAML override). Joint round and BEG exist in lite form. Leader id is metadata, not a second actor. |
 
 ---
 
@@ -90,7 +89,7 @@ The tex assumes distributed cluster managers, RPCs, and a leader barrier. Hierar
 1. Every microservice is scanned in sorted `ms_id` order (cooldown / streaks / PredictAndDecide or reactive pressure).
 2. Local **BEV then BEH** run on the **app-owner cluster**.
 3. Leftover Up residual becomes a `HelpRequest`.
-4. If `topology.vicinities` exists, **one FCFS vicinity round**, then **BEG** on clusters outside \(V_{\text{home}}\).
+4. If `World.root` exists (YAML vicinities **or** Algorithm 1 from coords/`latency_ms`), **one FCFS vicinity round**, then **BEG** on clusters outside \(V_{\text{home}}\).
 5. All mutations go through `Env.request_worker_owner_scale`.
 
 So ClusterManagerCycle is **emulated**, not distributed. The ladder is still the one in the tex: BEV → BEH → VicinityLeaderSchedule → BEG, and Down never enters vicinity/global.
@@ -107,11 +106,13 @@ There are three scaler names. Only the last two walk that ladder:
 
 ## Algorithm-by-algorithm
 
-### 1. VicinityPartitionAndLeaderElection — not implemented
+### 1. VicinityPartitionAndLeaderElection — implemented at bootstrap
 
 The tex replaces the old `VICINITY_THRESHOLD` with a densest-seed + \(z\)-score (or largest-gap) partition, cap \(m_{\max}\), and a capacity-first leader score \(\rho\).
 
-The simulator takes `topology.vicinities` from YAML: member lists and a `leader:` field. `RootOrchestrator` only looks those up. There is no distance function, no re-partition period \(T_{\mathit{repart}}\), no join/leave, no heartbeat \(\Delta t_{hb}\).
+That listing now runs in `env/partition.py` when every cluster has `coords` (or a complete `latency_ms` matrix). YAML `topology.vicinities` remains an override so triangle experiments can pin groups. There is still no request-path delay, no \(T_{\mathit{repart}}\), no join/leave, no heartbeat \(\Delta t_{hb}\). Two paper-silent edges are documented: \(|D|=1\) still takes the only neighbor, and an empty \(z\)-score cut stays a singleton seed.
+
+How to tell coords from RTT, what to open after `run_env_only.py`, and sample `run_meta.yaml` excerpts (`demo_partition`, `demo_partition_latency`, `demo_60_two_clusters`) are in [vicinity-partition.md](./vicinity-partition.md).
 
 The named leader is **metadata**. `schedule_vicinity_help` does not branch on `env.is_leader`. That is documented on purpose so triangle experiments can force BEH vs vicinity vs BEG. It is not the algorithm in the tex’s vicinity section.
 
@@ -289,10 +290,10 @@ Tex `InCooldown` → `continue` (no observation). Code updates drop/slack streak
 
 | Gap | Tex anchor | Why it matters |
 |---|---|---|
-| Vicinity partition + capacity-first election | Alg. vicinity | Static `topology.vicinities` in YAML. Fine for controlled experiments; not the geometry-driven partition in the tex. |
+| Vicinity partition + capacity-first election | Alg. vicinity | Implemented at bootstrap from coords/`latency_ms`. YAML override for triangle experiments. No re-partition / heartbeat. |
 | Lender Reserve / `safe_j` (C7) | Eq. reserve, Eq. safe, Alg. leader | Help uses raw free CPU/RAM. A lender can give away capacity it will need next window. |
 | Confidence \(\kappa\) + predictor ensemble | Eq. confidence, Alg. predict | Cold start is reactive until history length \(W\). After that the run is fully proactive. No MAPE \(\kappa\), no LSTM/GRU pool. TCN-delta or persistence. |
-| Inter-cluster distance | Alg. vicinity, Alg. leader, Alg. beg, Alg. cascade | No latency matrix. Vicinity order is YAML members; BEG is free-CPU; cascade is global then vicinity then older `ts`. |
+| Inter-cluster distance | Alg. vicinity, Alg. leader, Alg. beg, Alg. cascade | Topology \(d(c,c')\) exists (coords or `latency_ms`) and feeds Algorithm 1. Vicinity help still walks published member order; BEG is free-CPU; cascade is global then vicinity then older `ts`. |
 | BEG expected-response-time gate and retry bound \(B\) | Alg. beg | Walks all legal outside clusters. Always places if a packed replica fits. |
 | Prefer already-lent worker for a second spawn (C6) | Clarification 6 + Alg. beh eligibility \(e_m\) | Local BEH stays in the home cluster. Extra borrowed capacity is a new vicinity/BEG grant, not a second instance on the existing loaned worker. |
 | Root least-loaded admission | § Cloud layer | Initial placement is YAML. No live application admission at the root. |
@@ -311,7 +312,7 @@ The tex is distributed CMs plus a leader barrier. The sim keeps a single `on_tic
 
 ### YAML vicinities
 
-The tex itself says the older prototype used `VICINITY_THRESHOLD`. HierarchicalEdgeSim still uses hand groups so experiments can force BEH vs vicinity vs BEG (the triangle configs). Algorithm vicinity was explicitly deferred in the [roadmap](./proposed-implementation-roadmap.md).
+HierarchicalEdgeSim uses **Algorithm 1** when cluster coords (or a complete RTT list) are in the config. Hand groups remain so experiments can force BEH vs vicinity vs BEG (the triangle configs). Periodic re-partition and heartbeat were left out on purpose. Env-only samples: [vicinity-partition.md](./vicinity-partition.md).
 
 ### Proactive cooldown vs StartCooldown(H)
 
@@ -345,14 +346,14 @@ Safe claims:
 
 Claims to qualify or drop:
 
-- Do **not** claim the \(z\)-score vicinity partition or capacity-first election. Say vicinities are an experimental partition so the ladder rungs can be forced.
+- You **can** claim Algorithm 1 (bootstrap partition + capacity-first election) when the world is built from coords/`latency_ms`. Still do **not** claim \(T_{\mathit{repart}}\), heartbeat failover, or distributed leader RPCs.
 - Do **not** claim lender Reserve / \(\mathrm{safe}_j\).
 - Do **not** claim \(\kappa\)-gated ensemble switching. Cold start is reactive-until-\(W\), then one model.
 - Do **not** claim load–distance BEG. Say least-loaded (free CPU) among clusters outside \(V_{\text{home}}\).
 
 For the \(\mu=0\) / headroom / last-replica rules, the honest framing is: **the algorithms specified resource floors but not a serving model.** Once \(\mu=(A-\min)/\rho\) and headroom routing are the physics, seeding at minima and shrinking to minima are bugs. The simulator made the method operational; those rules should probably move **into** a later draft of the algorithms rather than stay as “implementation details.”
 
-If you want a next step, the highest-value tex updates would be: (1) packed spawn above minima, (2) residual from serving headroom, (3) last-replica + surplus down, (4) coupled CPU/RAM through \(\rho\). The highest-value **code** remaining vs the current tex is Reserve/`safe_j` and the partition algorithm — only if you still want those as thesis contributions rather than future work.
+If you want a next step, the highest-value tex updates would be: (1) packed spawn above minima, (2) residual from serving headroom, (3) last-replica + surplus down, (4) coupled CPU/RAM through \(\rho\). The highest-value **code** remaining vs the current tex is Reserve/`safe_j` — only if you still want that as a thesis contribution rather than future work.
 
 ---
 
@@ -361,3 +362,5 @@ If you want a next step, the highest-value tex updates would be: (1) packed spaw
 | Version | Date | Note |
 |---|---|---|
 | v1 | 2026-08-22 | Written from the thesis-vs-simulator comparison (chat report + canvas tables) |
+| v2 | 2026-08-26 | Algorithm 1 mapped at bootstrap (`env/partition.py`); YAML vicinities stay an override |
+| v3 | 2026-08-26 | Pointer to vicinity-partition.md samples (coords vs `latency_ms`) |

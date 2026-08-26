@@ -37,7 +37,7 @@ Eight clarifications that matter for code:
 | 5 | Reusable BEV / BEH blocks | Shared functions, not one giant policy |
 | 6 | Worker-owner sole mutator of lent nodes | Loan registry + owner-mediated mutate API |
 | 7 | Lender reserves own forecast before lending | `Reserve` / `safe_j` from each member’s PredictAndDecide |
-| 8 | Non-overlapping vicinities + leader joint round; simple BEG | Topology today is static YAML; partition + schedule + BEG still missing |
+| 8 | Non-overlapping vicinities + leader joint round; simple BEG | Partition at bootstrap or YAML; S4 joint round + S5 BEG exist in lite form |
 
 The predictor itself is intentionally a black box for now (ensemble + confidence + proactive/reactive switch). Do not block the ladder on training an LSTM.
 
@@ -77,7 +77,7 @@ Each phase should leave Part A + `reactive_vertical` green, and add one new sele
 2. **Ownership before vicinity help.** Clarification 6 is structural: if you add cross-cluster placement without a single-writer owner path, bookkeeping will rot and be hard to unwind.
 3. **Predictor as a plug-in early, but dumb.** Start with a stub / AR / last-window copy predictor that returns `û` vectors and a confidence score. Wire `PredictAndDecide` and the proactive/reactive gate; swap models later without touching BEV/BEH.
 4. **Vicinity before global.** Leader joint schedule is the novel piece; BEG is deliberately simpler (coarse load + distance retries).
-5. **Distance / auto-partition last among topology pieces.** Static YAML vicinities already unblock leader scheduling tests. Algorithm `VicinityPartitionAndLeaderElection` can replace YAML later.
+5. **Distance / auto-partition last among topology pieces.** Static YAML vicinities still unblock leader scheduling tests. Algorithm `VicinityPartitionAndLeaderElection` now runs at bootstrap when coords or `latency_ms` are set; YAML remains the override.
 
 ### Decomposition inside the new scaler
 
@@ -136,7 +136,7 @@ That preserves determinism without inventing a multi-process sim.
 | Paper piece | First implementation |
 |---|---|
 | Predictor ensemble (LSTM…) | One stub + MAPE confidence; reactive fallback |
-| Vicinity partition algorithm | Keep static YAML; optional later |
+| Vicinity partition algorithm | Bootstrap from coords/`latency_ms`; YAML override for ladder experiments |
 | Heartbeat / leader failure | Skip; assume leader always alive |
 | Expected RT gate in BEG | Optional boolean always-true, then add |
 | Inter-MS affinity | Out of scope (paper says future work) |
@@ -227,9 +227,9 @@ Without these, tiers 2–4 of the ladder cannot execute.
 | Gap | Today | Needed |
 |---|---|---|
 | `beg_admit` | Stub `NotImplementedError` | Coarse `L_c`, rank by load+γ·distance, bounded retries |
-| Inter-cluster distance / latency | Explicitly deferred | Matrix or coords for BEG ranking + later auto-partition |
+| Inter-cluster distance / latency | Coords or `latency_ms` for Algorithm 1; not used to delay requests | Same matrix could later rank BEG |
 | Aggregate load summaries at root | Missing | Periodic coarse stats (not fine per-node globally) |
-| Auto vicinity partition + election | Hand YAML | Algorithm `VicinityPartition…` (can wait) |
+| Auto vicinity partition + election | `env/partition.py` at bootstrap; YAML override | Periodic \(T_{\mathit{repart}}\) / heartbeat still future |
 | Leader failure / heartbeat | Missing | Future work per paper |
 
 ### 4.8 Orchestration shape

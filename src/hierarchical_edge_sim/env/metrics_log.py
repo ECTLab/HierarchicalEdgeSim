@@ -43,6 +43,7 @@ def write_run_outputs(
     ms_specs = _microservice_spec_index(world_spec)
     _write_run_meta(
         run_dir=run_dir,
+        world=world,
         world_spec=world_spec,
         traces=traces,
         run_id=run_id,
@@ -82,11 +83,24 @@ def write_run_outputs(
 def _write_run_meta(
     *,
     run_dir: Path,
+    world: World,
     world_spec: WorldSpec,
     traces: TraceStore,
     run_id: str,
     autoscaler_meta: dict | None = None,
 ) -> None:
+    published: list[dict] = []
+    source = None
+    if world.root is not None:
+        source = world.root.vicinity_source
+        published = [
+            {
+                "id": vic.id,
+                "members": list(vic.member_cluster_ids),
+                "leader": vic.leader_cluster_id,
+            }
+            for vic in world.root.vicinities.values()
+        ]
     payload = {
         "run_id": run_id,
         "seed": world_spec.sim.seed,
@@ -98,6 +112,10 @@ def _write_run_meta(
             "traces_dir": world_spec.traces_dir,
             "clusters": [asdict(c) for c in world_spec.clusters],
             "vicinities": [asdict(v) for v in world_spec.vicinities],
+            "latency_ms": [asdict(e) for e in world_spec.latency_ms],
+            "partition": world_spec.partition,
+            "vicinity_source": source,
+            "published_vicinities": published,
             "apps": [asdict(a) for a in world_spec.apps],
         },
     }

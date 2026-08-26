@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .config import AppSpec, ClusterSpec, ContainerSpec, MicroserviceSpec, VicinitySpec, WorldSpec
+from .config import AppSpec, ClusterSpec, ContainerSpec, MicroserviceSpec, WorldSpec
 from .models import App, Cluster, Container, Microservice, Server, Vicinity
+from .partition import (
+    latency_edges_to_matrix,
+    parse_partition_params,
+    partition_and_elect,
+    resolve_distance_matrix,
+)
 from .root import RootOrchestrator
 
 
@@ -29,23 +35,51 @@ def build_world(spec: WorldSpec) -> World:
     for app_spec in spec.apps:
         _register_app(world, app_spec)
 
-    world.root = _build_root(spec.vicinities) if spec.vicinities else None
+    world.root = _build_root(world, spec)
     if world.root is not None:
         _apply_vicinity_mirrors(world)
 
     return world
 
 
-def _build_root(vicinity_specs: list[VicinitySpec]) -> RootOrchestrator:
-    vicinities = [
-        Vicinity(
-            id=vspec.id,
-            member_cluster_ids=list(vspec.members),
-            leader_cluster_id=vspec.leader,
+def _build_root(world: World, spec: WorldSpec) -> RootOrchestrator | None:
+    cluster_ids = [c.id for c in spec.clusters]
+    coords = {c.id: c.coords for c in spec.clusters if c.coords is not None}
+    latency = latency_edges_to_matrix([(e.a, e.b, e.ms) for e in spec.latency_ms])
+    distances = resolve_distance_matrix(cluster_ids, coords, latency)
+
+    if spec.vicinities:
+        return RootOrchestrator.from_vicinities(
+            [
+                Vicinity(
+                    id=vspec.id,
+                    member_cluster_ids=list(vspec.members),
+                    leader_cluster_id=vspec.leader,
+                )
+                for vspec in spec.vicinities
+            ],
+            vicinity_source="yaml",
+            distances=distances,
         )
-        for vspec in vicinity_specs
-    ]
-    return RootOrchestrator.from_vicinities(vicinities)
+
+    if distances is None:
+        return None
+
+    cpu_cap = {
+        cid: sum(world.servers[sid].cpu_cap_cores for sid in world.clusters[cid].server_ids)
+        for cid in cluster_ids
+    }
+    ram_cap = {
+        cid: sum(world.servers[sid].ram_cap_mb for sid in world.clusters[cid].server_ids)
+        for cid in cluster_ids
+    }
+    params = parse_partition_params(spec.partition)
+    groups = partition_and_elect(cluster_ids, distances, cpu_cap, ram_cap, params)
+    return RootOrchestrator.from_vicinities(
+        groups,
+        vicinity_source="algorithm",
+        distances=distances,
+    )
 
 
 def _apply_vicinity_mirrors(world: World) -> None:

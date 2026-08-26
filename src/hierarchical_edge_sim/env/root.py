@@ -1,27 +1,46 @@
-"""Minimal root orchestrator — topology façade for vicinities / leaders."""
+"""Root orchestrator — publishes vicinities / leaders and optional cluster distances."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from .models import Vicinity
+from .partition import lookup_distance
 
 
 @dataclass(slots=True)
 class RootOrchestrator:
-    """Owns static vicinity membership and leaders; ranks BEG candidates (S5)."""
+    """Owns vicinity membership and leaders; ranks BEG candidates (S5).
+
+    ``vicinity_source`` is ``yaml`` (hand groups) or ``algorithm``
+    (VicinityPartitionAndLeaderElection). Distances are optional and do not
+    delay user requests.
+    """
 
     vicinities: dict[str, Vicinity] = field(default_factory=dict)
     _cluster_to_vicinity: dict[str, str] = field(default_factory=dict)
+    vicinity_source: str = "yaml"
+    distances: dict[tuple[str, str], float] | None = None
 
     @classmethod
-    def from_vicinities(cls, vicinities: list[Vicinity]) -> "RootOrchestrator":
-        root = cls()
+    def from_vicinities(
+        cls,
+        vicinities: list[Vicinity],
+        *,
+        vicinity_source: str = "yaml",
+        distances: dict[tuple[str, str], float] | None = None,
+    ) -> "RootOrchestrator":
+        root = cls(vicinity_source=vicinity_source, distances=distances)
         for vicinity in vicinities:
             root.vicinities[vicinity.id] = vicinity
             for cluster_id in vicinity.member_cluster_ids:
                 root._cluster_to_vicinity[cluster_id] = vicinity.id
         return root
+
+    def distance(self, a: str, b: str) -> float:
+        if self.distances is None:
+            raise RuntimeError("no cluster distance matrix (set coords or topology.latency_ms)")
+        return lookup_distance(self.distances, a, b)
 
     def list_vicinities(self) -> list[str]:
         return sorted(self.vicinities.keys())

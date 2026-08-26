@@ -69,7 +69,7 @@ This roadmap:     S0 (done) → S1 → S2 → S3 → S4 → S5 → S6 → S7
 | **S6** | Scale-down reclaim + cascade home | Scale-down order, CheckCascadingMigration | Costly loans released first; optional pull-home |
 | **S7** | Proactive front-end on full ladder | PredictAndDecide + AllocateResources | Same allocate path; forecast swaps residual source |
 
-Optional later (not blocking thesis core): dynamic root admission (your old #1–#2), Algorithm vicinity partitioning, κ/confidence blending.
+Optional later (not blocking thesis core): dynamic root admission (your old #1–#2), κ/confidence blending. Vicinity partition + leader election now runs at bootstrap when coords or `latency_ms` are set ([vicinity-partition.md](./vicinity-partition.md)).
 
 ---
 

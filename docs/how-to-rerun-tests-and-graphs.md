@@ -178,6 +178,15 @@ Traces (both N=60):
 
 Each command prints `<RUN_DIR>`, e.g. `results/42_YYYYMMDDTHHMMSSZ`.
 
+This config now has cluster `coords` and **no** hand `vicinities:`. Algorithm 1 publishes one group `{c1,c2}` with leader `c1`. How to read that in `run_meta.yaml`, plus the five-site coords and RTT-matrix demos:
+
+```bash
+.venv/bin/python examples/run_env_only.py configs/demo_partition.yaml
+.venv/bin/python examples/run_env_only.py configs/demo_partition_latency.yaml
+```
+
+See [vicinity-partition.md](./vicinity-partition.md) (coords vs latency, checklist, sample excerpts).
+
 ---
 
 ## 4) Analysis helper (modular)

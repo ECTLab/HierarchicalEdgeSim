@@ -1,4 +1,4 @@
-"""Tests for RootOrchestrator and static topology.vicinities."""
+"""Tests for RootOrchestrator: YAML vicinities and Algorithm 1 partition."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def test_configs_without_vicinities_keep_root_none(tiny_config_path):
     assert env.world.root is None
     assert env.get_cluster("c1").vicinity_id is None
     assert env.get_cluster("c1").is_vicinity_leader is False
-    with pytest.raises(RuntimeError, match="topology.vicinities"):
+    with pytest.raises(RuntimeError, match="World.root is None"):
         env.list_vicinities()
 
 
@@ -180,6 +180,7 @@ def test_demo_60_two_clusters_has_vicinity(project_root: Path):
     path = project_root / "configs" / "demo_60_two_clusters.yaml"
     env = Env.from_config(path)
     assert env.root is not None
+    assert env.root.vicinity_source == "algorithm"
     assert env.list_vicinities() == ["v1"]
     assert env.leader_of("v1") == "c1"
     assert set(env.list_vicinity_members("v1")) == {"c1", "c2"}
@@ -200,3 +201,102 @@ def test_world_without_vicinities_has_no_root(tiny_config_path):
     world = build_world(spec)
     assert world.root is None
     assert spec.vicinities == []
+
+
+def test_coords_run_algorithm_1_two_clusters(tmp_path):
+    cfg = deepcopy(_two_cluster_dict())
+    del cfg["topology"]["vicinities"]
+    cfg["topology"]["clusters"][0]["coords"] = [0.0, 0.0]
+    cfg["topology"]["clusters"][1]["coords"] = [1.0, 0.0]
+    path = _write_config(tmp_path, cfg)
+    env = Env.from_config(path)
+    assert env.root is not None
+    assert env.root.vicinity_source == "algorithm"
+    assert env.list_vicinities() == ["v1"]
+    assert set(env.list_vicinity_members("v1")) == {"c1", "c2"}
+    assert env.leader_of("v1") == "c1"
+    assert env.distance("c1", "c2") == pytest.approx(1.0)
+    assert env.get_cluster("c1").is_vicinity_leader is True
+
+
+def test_yaml_vicinities_override_coords(tmp_path):
+    cfg = deepcopy(_two_cluster_dict())
+    cfg["topology"]["clusters"][0]["coords"] = [0.0, 0.0]
+    cfg["topology"]["clusters"][1]["coords"] = [1.0, 0.0]
+    cfg["topology"]["vicinities"] = [
+        {"id": "hand", "members": ["c1"], "leader": "c1"},
+        {"id": "hand2", "members": ["c2"], "leader": "c2"},
+    ]
+    path = _write_config(tmp_path, cfg)
+    env = Env.from_config(path)
+    assert env.root is not None
+    assert env.root.vicinity_source == "yaml"
+    assert env.list_vicinities() == ["hand", "hand2"]
+    assert env.leader_of("hand") == "c1"
+    assert env.distance("c1", "c2") == pytest.approx(1.0)
+
+
+def test_latency_ms_is_enough_without_coords(tmp_path):
+    cfg = deepcopy(_two_cluster_dict())
+    del cfg["topology"]["vicinities"]
+    cfg["topology"]["latency_ms"] = [{"from": "c1", "to": "c2", "ms": 7.5}]
+    path = _write_config(tmp_path, cfg)
+    env = Env.from_config(path)
+    assert env.root.vicinity_source == "algorithm"
+    assert env.distance("c2", "c1") == pytest.approx(7.5)
+    assert set(env.list_vicinity_members("v1")) == {"c1", "c2"}
+
+
+def test_partition_knobs_without_geometry_rejected(tmp_path):
+    cfg = deepcopy(_two_cluster_dict())
+    del cfg["topology"]["vicinities"]
+    cfg["topology"]["partition"] = {"k": 0.5}
+    path = _write_config(tmp_path, cfg)
+    messages = [err.message for err in validate(load_yaml(path))]
+    assert any("VicinityPartitionAndLeaderElection" in msg for msg in messages)
+
+
+def test_partial_coords_rejected(tmp_path):
+    cfg = deepcopy(_two_cluster_dict())
+    del cfg["topology"]["vicinities"]
+    cfg["topology"]["clusters"][0]["coords"] = [0.0, 0.0]
+    path = _write_config(tmp_path, cfg)
+    messages = [err.message for err in validate(load_yaml(path))]
+    assert any("every cluster must have coords" in msg for msg in messages)
+
+
+def test_demo_partition_forms_two_pairs_and_an_isolate(project_root: Path):
+    path = project_root / "configs" / "demo_partition.yaml"
+    env = Env.from_config(path)
+    assert env.root.vicinity_source == "algorithm"
+    groups = {tuple(sorted(env.list_vicinity_members(vid))) for vid in env.list_vicinities()}
+    assert groups == {
+        ("west-a", "west-b"),
+        ("east-a", "east-b"),
+        ("isolated",),
+    }
+    west = env.vicinity_of("west-a")
+    east = env.vicinity_of("east-a")
+    assert env.leader_of(west) == "west-a"
+    assert env.leader_of(east) == "east-a"
+    assert env.leader_of(env.vicinity_of("isolated")) == "isolated"
+
+
+def test_demo_partition_latency_uses_rtt_not_coords(project_root: Path):
+    path = project_root / "configs" / "demo_partition_latency.yaml"
+    env = Env.from_config(path)
+    assert env.root.vicinity_source == "algorithm"
+    assert all(c.coords is None for c in env.world_spec.clusters)
+    assert env.distance("nyc-a", "nyc-b") == pytest.approx(2.0)
+    assert env.distance("lon-a", "lon-b") == pytest.approx(2.0)
+    assert env.distance("nyc-a", "lon-a") == pytest.approx(40.0)
+    assert env.distance("remote", "nyc-b") == pytest.approx(200.0)
+    groups = {tuple(sorted(env.list_vicinity_members(vid))) for vid in env.list_vicinities()}
+    assert groups == {
+        ("nyc-a", "nyc-b"),
+        ("lon-a", "lon-b"),
+        ("remote",),
+    }
+    assert env.leader_of(env.vicinity_of("nyc-a")) == "nyc-a"
+    assert env.leader_of(env.vicinity_of("lon-a")) == "lon-a"
+    assert env.leader_of(env.vicinity_of("remote")) == "remote"

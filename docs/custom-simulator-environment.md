@@ -151,6 +151,8 @@ D(e,e') = \texttt{latency}(cluster(e), cluster(e'))
 
 (or finer server-level matrix if needed). Bandwidth \(B(e,e')\) can be a constant per link class (intra-cluster vs inter-cluster) for transmission delay \(\bar{s}/B\).
 
+**Current HierarchicalEdgeSim:** `coords` and `topology.latency_ms` exist as topology \(d(c,c')\) for Algorithm 1 and `Env.distance`. They do **not** delay user requests (no \(D(e,e')\) on the serving path). See [vicinity-partition.md](./vicinity-partition.md).
+
 ### 3.3 Vicinities (environment fact, not policy)
 
 Vicinity membership is part of the **environment configuration** after init:

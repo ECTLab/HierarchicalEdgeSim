@@ -327,7 +327,7 @@ class Env:
     def get_server_free(self, server_id: str) -> tuple[float, float]:
         return server_free_cpu_cores(self.world, server_id), server_free_ram_mb(self.world, server_id)
 
-    # Hierarchy read APIs (require topology.vicinities)
+    # Hierarchy read APIs (YAML vicinities or Algorithm 1 partition)
     def list_vicinities(self) -> list[str]:
         return self._require_root().list_vicinities()
 
@@ -346,10 +346,15 @@ class Env:
     def list_vicinity_members(self, vicinity_id: str) -> list[str]:
         return self._require_root().list_vicinity_members(vicinity_id)
 
+    def distance(self, cluster_a: str, cluster_b: str) -> float:
+        """Inter-cluster distance d(c,c'). Topology only; does not delay requests."""
+        return self._require_root().distance(cluster_a, cluster_b)
+
     def _require_root(self) -> RootOrchestrator:
         if self.world.root is None:
             raise RuntimeError(
-                "hierarchy APIs require topology.vicinities in the config "
+                "hierarchy APIs require topology.vicinities or a complete cluster "
+                "distance (coords / latency_ms) so the root can publish a partition "
                 "(World.root is None)"
             )
         return self.world.root

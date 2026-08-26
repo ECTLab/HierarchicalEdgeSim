@@ -193,6 +193,7 @@ def validate(config: RawConfig) -> list[ValidationError]:
 
     _validate_traces(config, ms_trace_files, errors)
     _validate_vicinities(config, seen_cluster_ids, errors)
+    _validate_distance_and_partition(config, seen_cluster_ids, errors)
     return errors
 
 
@@ -276,6 +277,106 @@ def _validate_vicinities(
             ValidationError(
                 path="topology.vicinities",
                 message=f"cluster '{cluster_id}' is not assigned to any vicinity",
+            )
+            )
+
+
+def _validate_distance_and_partition(
+    config: RawConfig,
+    known_cluster_ids: set[str],
+    errors: list[ValidationError],
+) -> None:
+    """Coords / latency_ms / partition knobs. YAML vicinities stay a valid override."""
+    from .partition import (
+        matrix_is_complete,
+        parse_partition_params,
+        pair_key,
+    )
+
+    cluster_ids = [c.id for c in config.topology]
+    coords = {c.id: c.coords for c in config.topology if c.coords is not None}
+    partial_coords = 0 < len(coords) < len(cluster_ids)
+
+    for cidx, cluster in enumerate(config.topology):
+        if cluster.coords is None:
+            continue
+        x, y = cluster.coords
+        if not (math.isfinite(x) and math.isfinite(y)):
+            errors.append(
+                ValidationError(
+                    path=f"topology.clusters[{cidx}].coords",
+                    message="coords must be finite numbers",
+                )
+            )
+
+    latency_pairs: dict[tuple[str, str], float] = {}
+    seen_edge: set[tuple[str, str]] = set()
+    for eidx, edge in enumerate(config.latency_ms):
+        epath = f"topology.latency_ms[{eidx}]"
+        if edge.a not in known_cluster_ids:
+            errors.append(ValidationError(path=f"{epath}.from", message=f"unknown cluster id '{edge.a}'"))
+        if edge.b not in known_cluster_ids:
+            errors.append(ValidationError(path=f"{epath}.to", message=f"unknown cluster id '{edge.b}'"))
+        if edge.a == edge.b:
+            errors.append(ValidationError(path=epath, message="from and to must be different clusters"))
+        if edge.ms <= 0:
+            errors.append(ValidationError(path=f"{epath}.ms", message="must be > 0"))
+        key = pair_key(edge.a, edge.b)
+        if key in seen_edge:
+            errors.append(ValidationError(path=epath, message=f"duplicate pair '{edge.a}'-'{edge.b}'"))
+        seen_edge.add(key)
+        latency_pairs[key] = edge.ms
+
+    if config.partition is not None:
+        try:
+            parse_partition_params(config.partition)
+        except (TypeError, ValueError) as exc:
+            errors.append(ValidationError(path="topology.partition", message=str(exc)))
+
+    wants_geometry = bool(coords) or bool(config.latency_ms) or config.partition is not None
+    if config.vicinities:
+        # Hand groups win. Geometry is optional (stored for Env.distance when complete).
+        if config.latency_ms and not matrix_is_complete(cluster_ids, latency_pairs):
+            errors.append(
+                ValidationError(
+                    path="topology.latency_ms",
+                    message="must include every unordered cluster pair when the list is present",
+                )
+            )
+        if partial_coords and not matrix_is_complete(cluster_ids, latency_pairs):
+            errors.append(
+                ValidationError(
+                    path="topology.clusters",
+                    message="every cluster must have coords when any cluster has coords",
+                )
+            )
+        return
+
+    if not wants_geometry:
+        return
+
+    latency_complete = bool(latency_pairs) and matrix_is_complete(cluster_ids, latency_pairs)
+    coords_complete = len(coords) == len(cluster_ids) and len(cluster_ids) >= 1
+    if latency_pairs and not latency_complete:
+        errors.append(
+            ValidationError(
+                path="topology.latency_ms",
+                message="must include every unordered cluster pair (algorithm needs a complete d(·,·))",
+            )
+        )
+    if partial_coords and not latency_complete:
+        errors.append(
+            ValidationError(
+                path="topology.clusters",
+                message="every cluster must have coords when any cluster has coords",
+            )
+        )
+    if not latency_complete and not coords_complete:
+        errors.append(
+            ValidationError(
+                path="topology",
+                message="VicinityPartitionAndLeaderElection needs cluster coords or a complete "
+                "topology.latency_ms matrix (or set topology.vicinities by hand)",
             )
         )
 

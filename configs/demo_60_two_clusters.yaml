@@ -3,7 +3,8 @@
 # Cluster c1: 2 servers  → app web_app / MS api   → 1 container on c1-w1
 # Cluster c2: 1 server   → app media_app / MS ingest → 1 container on c2-w1
 #
-# Vicinity v1: members [c1, c2], leader c1 (RootOrchestrator; unused by tick loop)
+# Vicinities come from VicinityPartitionAndLeaderElection (cluster coords).
+# Expected: one group {c1,c2}, leader c1 (more installed CPU/RAM).
 #
 # Independent traces (same length N=60):
 #   traces/demo/api_60.csv
@@ -19,6 +20,7 @@ traces_dir: traces/demo/
 topology:
   clusters:
     - id: c1
+      coords: [0.0, 0.0]
       servers:
         - id: c1-w1
           cpu_cap_cores: 8.0
@@ -27,16 +29,11 @@ topology:
           cpu_cap_cores: 8.0
           ram_cap_mb: 16384
     - id: c2
+      coords: [1.0, 0.0]
       servers:
         - id: c2-w1
           cpu_cap_cores: 4.0
           ram_cap_mb: 8192
-
-  # Static vicinity / leader map (RootOrchestrator). Tick loop does not use this.
-  vicinities:
-    - id: v1
-      members: [c1, c2]
-      leader: c1
 
 apps:
   - id: web_app

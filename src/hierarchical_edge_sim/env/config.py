@@ -43,6 +43,7 @@ class ServerSpec:
 class ClusterSpec:
     id: str
     servers: list[ServerSpec]
+    coords: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +81,15 @@ class AppSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class LatencyEdge:
+    """One undirected inter-cluster RTT. ``from``/``to`` are cluster ids."""
+
+    a: str
+    b: str
+    ms: float
+
+
+@dataclass(frozen=True, slots=True)
 class RawConfig:
     sim: SimConfig
     traces_dir: str
@@ -87,6 +97,8 @@ class RawConfig:
     apps: list[AppSpec]
     source_path: Path
     vicinities: list[VicinitySpec] = field(default_factory=list)
+    latency_ms: list[LatencyEdge] = field(default_factory=list)
+    partition: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +109,8 @@ class WorldSpec:
     apps: list[AppSpec]
     source_path: Path
     vicinities: list[VicinitySpec] = field(default_factory=list)
+    latency_ms: list[LatencyEdge] = field(default_factory=list)
+    partition: dict[str, Any] | None = None
 
 
 def load_yaml(path: str | Path) -> RawConfig:
@@ -129,6 +143,17 @@ def load_yaml(path: str | Path) -> RawConfig:
             _parse_vicinity(item, f"topology.vicinities[{idx}]") for idx, item in enumerate(vicinities_raw)
         ]
 
+    latency_ms: list[LatencyEdge] = []
+    if "latency_ms" in topology_data:
+        latency_raw = _as_list(topology_data["latency_ms"], "topology.latency_ms")
+        latency_ms = [
+            _parse_latency_edge(item, f"topology.latency_ms[{idx}]") for idx, item in enumerate(latency_raw)
+        ]
+
+    partition: dict[str, Any] | None = None
+    if "partition" in topology_data:
+        partition = dict(_as_mapping(topology_data["partition"], path="topology.partition"))
+
     apps_raw = _as_list(_require(root, "apps", "root"), "apps")
     apps = [_parse_app(item, f"apps[{idx}]") for idx, item in enumerate(apps_raw)]
 
@@ -140,6 +165,8 @@ def load_yaml(path: str | Path) -> RawConfig:
         apps=apps,
         source_path=config_path,
         vicinities=vicinities,
+        latency_ms=latency_ms,
+        partition=partition,
     )
 
 
@@ -182,6 +209,8 @@ def to_world_spec(config: RawConfig) -> WorldSpec:
         apps=config.apps,
         source_path=config.source_path,
         vicinities=list(config.vicinities),
+        latency_ms=list(config.latency_ms),
+        partition=dict(config.partition) if config.partition is not None else None,
     )
 
 
@@ -189,9 +218,28 @@ def _parse_cluster(data: Any, path: str) -> ClusterSpec:
     obj = _as_mapping(data, path=path)
     servers_raw = _as_list(_require(obj, "servers", path), f"{path}.servers")
     servers = [_parse_server(item, f"{path}.servers[{idx}]") for idx, item in enumerate(servers_raw)]
+    coords: tuple[float, float] | None = None
+    if "coords" in obj:
+        coords_raw = _as_list(obj["coords"], f"{path}.coords")
+        if len(coords_raw) != 2:
+            raise ValueError(f"Expected 2 numbers at '{path}.coords', got {len(coords_raw)}")
+        coords = (
+            _to_float(coords_raw[0], f"{path}.coords[0]"),
+            _to_float(coords_raw[1], f"{path}.coords[1]"),
+        )
     return ClusterSpec(
         id=_to_str(_require(obj, "id", path), f"{path}.id"),
         servers=servers,
+        coords=coords,
+    )
+
+
+def _parse_latency_edge(data: Any, path: str) -> LatencyEdge:
+    obj = _as_mapping(data, path=path)
+    return LatencyEdge(
+        a=_to_str(_require(obj, "from", path), f"{path}.from"),
+        b=_to_str(_require(obj, "to", path), f"{path}.to"),
+        ms=_to_float(_require(obj, "ms", path), f"{path}.ms"),
     )
 
 

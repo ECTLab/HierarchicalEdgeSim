@@ -2,7 +2,7 @@
 
 **Status:** done (code + YAML aliases + tests)  
 **What this is:** why decide/sensing identifiers were renamed, and which leftovers are on purpose.  
-**What this is not:** Algorithm 3 mapping, serving-model changes, or a thesis comparison. Formulas did not change. Pipeline: [s7-proactive-front-end.md](./s7-proactive-front-end.md). Paper vs code: [thesis-vs-simulator.md](./thesis-vs-simulator.md).
+**What this is not:** Algorithm 3 mapping, serving-model changes, or a thesis comparison. Formulas did not change. Mapping: [predict-and-decide.md](./predict-and-decide.md). Pipeline: [s7-proactive-front-end.md](./s7-proactive-front-end.md). Paper vs code: [thesis-vs-simulator.md](./thesis-vs-simulator.md).
 
 The confusion was not “the simulator uses English and the paper uses Greek.” It was **the same letter meaning two different objects**, plus a few simulator-only names (TTW, \(C_{\mathrm{full}}\), RPS) that the paper never defines.
 

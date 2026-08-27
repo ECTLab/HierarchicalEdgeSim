@@ -1149,6 +1149,9 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     cycle = getattr(autoscaler, "cycle", None)
     if cycle:
         meta["cycle"] = cycle
+    decide = getattr(autoscaler, "decide", None)
+    if decide:
+        meta["decide"] = decide
     return meta
 
 

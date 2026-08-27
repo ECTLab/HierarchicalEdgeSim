@@ -3,6 +3,7 @@
 **Status:** control-path fixes (1)–(4) landed on `proactive-integration`  
 **Configs:** `configs/demo_alibaba_proactive.yaml`, `configs/demo_alibaba_reactive_local.yaml`  
 **Stage notes:** [s7-proactive-front-end.md](./s7-proactive-front-end.md)  
+**Algorithm 3 mapping:** [predict-and-decide.md](./predict-and-decide.md)  
 **Recorded numbers:** [alibaba-tcn-s7-results.md](./alibaba-tcn-s7-results.md)
 
 After Option A TCN was wired onto the completed ladder, the Alibaba MS_588 demo

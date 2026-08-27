@@ -39,6 +39,7 @@ class _MsState:
 class ProactiveAutoScaler:
     name: str = "proactive_auto_scaler"
     cycle: str = "cluster_manager"
+    decide: str = "predict_and_decide"
     params: ProactiveAutoScalerParams = field(default_factory=ProactiveAutoScalerParams)
     decision_every_k_ticks: int = 1
     _predictor: OneStepRpsPredictor | HorizonRpsPredictor = field(default_factory=PersistencePredictor)
@@ -77,6 +78,8 @@ class ProactiveAutoScaler:
             st = self._state[ms_id]
             obs = obs_by[ms_id]
             cluster_id = home_cluster_id(env, ms_id)
+            # Algorithm 3 (PredictAndDecide) once history length W is full.
+            # Cold start below is reactive streaks, not this listing.
             if rec.history_full and rec.forecast_rps is not None:
                 spec = obs["spec"]
                 decision = predict_and_decide(

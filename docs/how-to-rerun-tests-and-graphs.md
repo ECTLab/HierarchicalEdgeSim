@@ -256,7 +256,7 @@ RUN_DIR=$(.venv/bin/python examples/run_env_only.py configs/demo_60_two_clusters
 
 ### Ladder smoke configs
 
-These 60-tick runs are also the Algorithm 2 check (`autoscaler.cycle: cluster_manager` in `run_meta.yaml`). What to open: [cluster-manager-cycle.md](./cluster-manager-cycle.md).
+These 60-tick runs are also the Algorithm 2 check (`autoscaler.cycle: cluster_manager` in `run_meta.yaml`). What to open: [cluster-manager-cycle.md](./cluster-manager-cycle.md). `demo_60_proactive.yaml` is also the Algorithm 3 check (`autoscaler.decide: predict_and_decide`): [predict-and-decide.md](./predict-and-decide.md).
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_60_reactive_local.yaml

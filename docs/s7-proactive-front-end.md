@@ -6,7 +6,8 @@
 **Depends on:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)  
 **Alibaba diagnosis:** [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md)  
 **Cooldown (K8s-style, no 55-minute hold):** [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md)  
-**Names vs paper letters:** [naming-refactor.md](./naming-refactor.md)
+**Names vs paper letters:** [naming-refactor.md](./naming-refactor.md)  
+**Algorithm 3 mapping:** [predict-and-decide.md](./predict-and-decide.md)
 
 PredictAndDecide sits in front of the same AllocateResources path as `reactive_local` (BEV → BEH → vicinity → BEG, cost-ordered down + cascade). `reactive_local` stays the baseline scaler name.
 

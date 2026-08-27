@@ -219,7 +219,7 @@ When leader cannot cover residual:
 
 ### S7 — Proactive autoscaler on the completed ladder
 
-**v1 status:** done on this branch — see [s7-proactive-front-end.md](./s7-proactive-front-end.md). Option A TCN (`60×2` → 5-step delta) on Alibaba `MS_588`; persistence remains the torch-free test backend.
+**v1 status:** done on this branch — see [s7-proactive-front-end.md](./s7-proactive-front-end.md). How Algorithm 3 is mapped (gate vs residual): [predict-and-decide.md](./predict-and-decide.md). Option A TCN (`60×2` → 5-step delta) on Alibaba `MS_588`; persistence remains the torch-free test backend.
 
 Only now attach the predictor.
 

@@ -378,7 +378,14 @@ def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
     scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_60_proactive.yaml")
     assert scaler is not None
     assert scaler.name == "proactive_auto_scaler"
+    assert scaler.cycle == "cluster_manager"
+    assert scaler.decide == "predict_and_decide"
     assert scaler.params.predictor == "persistence"
+    from hierarchical_edge_sim.env.api import _autoscaler_meta
+
+    meta = _autoscaler_meta(scaler)
+    assert meta["decide"] == "predict_and_decide"
+    assert meta["cycle"] == "cluster_manager"
     _ = tmp_path
 
 

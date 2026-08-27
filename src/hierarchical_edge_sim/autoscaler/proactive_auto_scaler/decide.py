@@ -1,8 +1,8 @@
-"""PredictAndDecide: load trajectory → Up/Down/None + residuals + sustained (pure).
+"""PredictAndDecide (paper Algorithm predict / Algorithm 3).
 
-Paper Algorithm 3 works in utilization. This env predicts request rate (RPS)
-and maps it through serving headroom. Names avoid paper letters that mean
-something else:
+Control shape matches the listing: Up / Down / None + sustained + residuals.
+Utilization and residual use serving headroom, not total alloc (floors buy
+no μ). Names avoid paper letters that mean something else:
 
 - observed_rps / forecast_rps / peak_rps — not paper r* (predictor index)
 - cpu_per_request / ram_per_request — not paper rho (help-request payload)
@@ -58,6 +58,11 @@ def predict_and_decide(
     headroom_ram: float | None = None,
     eps: float = EPS,
 ) -> DecideResult:
+    """Paper Algorithm 3 gate: Up / Down / None + sustained + residuals.
+
+    Utilization and residual use serving headroom, not total alloc. See
+    ``docs/predict-and-decide.md``.
+    """
     if tick_sec <= 0:
         raise ValueError("tick_sec must be > 0")
     if n_replicas < 1:

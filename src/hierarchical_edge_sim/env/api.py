@@ -1146,6 +1146,9 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     k = getattr(autoscaler, "decision_every_k_ticks", None)
     if k is not None:
         meta["decision_every_k_ticks"] = k
+    cycle = getattr(autoscaler, "cycle", None)
+    if cycle:
+        meta["cycle"] = cycle
     return meta
 
 

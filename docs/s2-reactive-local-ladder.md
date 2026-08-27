@@ -13,7 +13,7 @@ Shared `autoscaler.params` (streaks, θ, α, δ, weights): [reactive-local-param
 
 ## Behavior
 
-Every decision tick, per microservice:
+Every decision tick, `cluster_manager_cycle` groups microservices by owner cluster, then per microservice:
 
 1. Same reactive signals as vertical (drop streak → up, slack streak → down).
 2. **Up — AllocateResources local tiers**
@@ -86,3 +86,4 @@ Loans, app-owner vs worker-owner RPC, vicinity leader schedule, BEG. `NeedVicini
 | Version | Date | Note |
 |---|---|---|
 | v1 | 2026-08-15 | S2 reactive_local BEV→BEH notes |
+| v2 | 2026-08-27 | Decision tick is ClusterManagerCycle (per owner cluster) |

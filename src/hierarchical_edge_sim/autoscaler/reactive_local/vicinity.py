@@ -5,7 +5,7 @@ from __future__ import annotations
 from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
 from hierarchical_edge_sim.env.config import EPS
 
-from .help import HelpRequest
+from .help import HelpRequest, help_fcfs_key
 from .place import place_packed_spawns, snapshot_free, subtract_pending
 
 __all__ = ["HelpRequest", "leftover_to_help_action", "schedule_vicinity_help"]
@@ -30,7 +30,7 @@ def schedule_vicinity_help(
     spawns: list = []
     unresolved: list[HelpRequest] = []
     for vid in sorted(by_vicinity):
-        queued = sorted(by_vicinity[vid], key=lambda r: (r.seq, r.ms_id))
+        queued = sorted(by_vicinity[vid], key=lambda r: (*help_fcfs_key(r), r.seq))
         members = env.list_vicinity_members(vid)
         free_cpu, free_ram = snapshot_free(env, members)
         subtract_pending(env, pending + spawns, free_cpu, free_ram)

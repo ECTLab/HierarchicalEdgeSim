@@ -119,15 +119,17 @@ Today: one global autoscaler `on_tick_end(env, tau)` after all MS physics.
 
 Paper: per-cluster cycle, then leader barrier, then apply plans.
 
-Practical mapping:
+Practical mapping (now `cluster_manager_cycle`):
 
 1. Keep one after-tick hook.
-2. Inside the proactive scaler, loop clusters in deterministic id order:
-   - run local PredictAndDecide + AllocateResources for MS hosted/owned there
-   - collect vicinity help requests `ρ`
-3. For each vicinity, if this tick’s “leader turn”: drain `Q_V` FCFS, emit placement plans.
+2. Inside the scaler, loop owner clusters in deterministic id order:
+   - run local PredictAndDecide + AllocateResources for MS owned there
+   - collect vicinity help requests `ρ` with \(t_{det}=\tau\)
+3. For each vicinity, drain `Q_V` FCFS, emit placement plans.
 4. Apply all mutations through owner-aware APIs.
 5. Unresolved → BEG.
+
+See [cluster-manager-cycle.md](./cluster-manager-cycle.md).
 
 That preserves determinism without inventing a multi-process sim.
 

@@ -19,7 +19,7 @@ That is the role S4 implements, with sim-shaped mechanics:
 |---|---|
 | Distributed CMs; non-leaders RPC to the leader | One in-process `reactive_local` tick; no CM threads |
 | Leader process runs `VicinityLeaderSchedule` | `schedule_vicinity_help` **is** that round |
-| Sequence numbers assigned on receipt at the leader | `seq` = order of `env.list_microservices()` (sorted ids) among leftovers this tick |
+| Sequence numbers assigned on receipt at the leader | `seq` from FCFS \((t_{det}, ms\_id)\) with \(t_{det}=\tau\) among leftovers this tick |
 | Election publishes the leader id | YAML `topology.vicinities[].leader`, **or** Algorithm 1 election, plus `env.is_leader` / `Cluster.is_vicinity_leader` |
 
 **Published `leader` is topology metadata**, same as membership (YAML or Algorithm 1). The scaler does **not** branch on `env.is_leader(...)`. With a single shared world there is only one scheduler, so the named leader is not a second actor. The function still matches the paper’s *job*: one FCFS joint round per vicinity, then stop.
@@ -57,7 +57,7 @@ If both `topology.vicinities` and a complete cluster distance are omitted, `Worl
 Every decision tick, after every MS has walked local up (or down):
 
 1. **Up — local first** (unchanged S2): BEV then in-cluster BEH on the app-owner cluster.
-2. Leftover `(remain_cpu, remain_ram)` becomes a `HelpRequest` (FCFS `seq` = `list_microservices()` order).
+2. Leftover `(remain_cpu, remain_ram)` becomes a `HelpRequest` (FCFS `t_det = τ`, then `ms_id`; see [cluster-manager-cycle.md](./cluster-manager-cycle.md)).
 3. If `World.root` is `None` (no YAML vicinities and no complete cluster distance): same as S2 — log-only `NeedVicinityHelpAction`.
 4. If a vicinity exists: run the leader round above (`schedule_vicinity_help`).
 5. Still leftover after that round → **S5 BEG** (see [s5-global-help.md](./s5-global-help.md)); if BEG also fails, log-only `NeedGlobalHelpAction`.

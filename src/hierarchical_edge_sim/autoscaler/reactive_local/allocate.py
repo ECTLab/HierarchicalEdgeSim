@@ -277,6 +277,7 @@ def ladder_up(
             ram_min=spec.ram_min_mb,
             min_head_cpu=params.delta_cpu_min_cores,
             min_head_ram=params.delta_ram_min_mb,
+            t_det=tau,
         )
     return actions, leftover
 

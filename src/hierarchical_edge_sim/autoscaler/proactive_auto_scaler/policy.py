@@ -1,4 +1,4 @@
-"""Proactive front-end: sense/forecast → PredictAndDecide → shared allocate ladder."""
+"""Proactive front-end: sense/forecast → PredictAndDecide → ClusterManagerCycle."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Any
 from hierarchical_edge_sim.env.api import Env
 from hierarchical_edge_sim.env.config import EPS
 
+from hierarchical_edge_sim.autoscaler.common.cm_cycle import CycleIntent, cluster_manager_cycle
 from hierarchical_edge_sim.autoscaler.reactive_local.allocate import (
     aggregate_ms,
     down_delta,
@@ -17,6 +18,7 @@ from hierarchical_edge_sim.autoscaler.reactive_local.allocate import (
     resolve_help,
     up_delta,
 )
+from hierarchical_edge_sim.autoscaler.reactive_local.beh import home_cluster_id
 from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest
 
 from .decide import Direction, predict_and_decide
@@ -36,6 +38,7 @@ class _MsState:
 @dataclass(slots=True)
 class ProactiveAutoScaler:
     name: str = "proactive_auto_scaler"
+    cycle: str = "cluster_manager"
     params: ProactiveAutoScalerParams = field(default_factory=ProactiveAutoScalerParams)
     decision_every_k_ticks: int = 1
     _predictor: OneStepRpsPredictor | HorizonRpsPredictor = field(default_factory=PersistencePredictor)
@@ -52,26 +55,28 @@ class ProactiveAutoScaler:
     def on_tick_end(self, env: Env, tau: int) -> list[Any]:
         assert self._sensing is not None
         closed = {rec.ms_id: rec for rec in self._sensing.on_tick(env, tau)}
-        actions: list[Any] = []
-        help_q: list[HelpRequest] = []
-        seq = 0
         self._pending_ms.clear()
         self._pending_proactive_ttw.clear()
         ladder = self.params.ladder
+        obs_by: dict[str, dict] = {}
 
         for ms_id in env.list_microservices():
             st = self._state.setdefault(ms_id, _MsState())
             if st.cooldown > 0:
                 st.cooldown -= 1
             obs = aggregate_ms(env, ms_id, tau)
+            obs_by[ms_id] = obs
             u_pressure, d_pressure = reactive_pressure(obs, ladder)
             st.u_streak = st.u_streak + 1 if u_pressure else 0
             st.d_streak = st.d_streak + 1 if d_pressure else 0
 
+        def scan_ms(ms_id: str) -> CycleIntent | None:
             rec = closed.get(ms_id)
             if rec is None:
-                continue
-
+                return None
+            st = self._state[ms_id]
+            obs = obs_by[ms_id]
+            cluster_id = home_cluster_id(env, ms_id)
             if rec.history_full and rec.r_hat is not None:
                 spec = obs["spec"]
                 decision = predict_and_decide(
@@ -93,85 +98,97 @@ class ProactiveAutoScaler:
                     H_cpu=obs["sum_h_cpu"],
                     H_ram=obs.get("sum_h_ram", 0.0),
                 )
-                # cooldown_C is scale-down only (K8s HPA: scaleUp window 0).
                 down_in_cd = rec.ttw_t < self._next_down_ttw.get(ms_id, 0)
                 if decision.direction is Direction.UP:
                     if decision.delta_cpu <= EPS and decision.delta_ram <= EPS:
-                        continue
+                        return None
                     need_cpu, need_ram = _clip_step(
                         decision.delta_cpu, decision.delta_ram, obs, ladder, up=True
                     )
-                    ms_actions, leftover = ladder_up(
-                        env,
-                        ms_id,
-                        tau,
-                        obs,
-                        ladder,
+                    return CycleIntent(
+                        ms_id=ms_id,
+                        cluster_id=cluster_id,
+                        t_det=tau,
+                        kind="up",
                         need_cpu=need_cpu,
                         need_ram=need_ram,
                         sustained=decision.sustained,
+                        ttw_t=rec.ttw_t,
                     )
-                    actions.extend(ms_actions)
-                    if leftover is not None:
-                        leftover.seq = seq
-                        help_q.append(leftover)
-                        seq += 1
-                    if ms_actions or leftover is not None:
-                        self._pending_proactive_ttw[ms_id] = rec.ttw_t
-                elif decision.direction is Direction.DOWN:
+                if decision.direction is Direction.DOWN:
                     if down_in_cd:
-                        continue
+                        return None
                     d_cpu, d_ram = abs(decision.delta_cpu), abs(decision.delta_ram)
                     if d_cpu <= EPS and d_ram <= EPS:
-                        continue
+                        return None
                     d_cpu, d_ram = _clip_step(d_cpu, d_ram, obs, ladder, up=False)
-                    down_actions = ladder_down(
-                        env,
-                        ms_id,
-                        tau,
-                        obs,
-                        ladder,
-                        delta_cpu=d_cpu,
-                        delta_ram=d_ram,
+                    return CycleIntent(
+                        ms_id=ms_id,
+                        cluster_id=cluster_id,
+                        t_det=tau,
+                        kind="down",
+                        need_cpu=d_cpu,
+                        need_ram=d_ram,
                     )
-                    actions.extend(down_actions)
-                continue
+                return None
 
-            # Cold start: history not full → reactive-only on this TTW close.
             if st.cooldown > 0:
-                continue
+                return None
             if st.u_streak >= ladder.x_up_streak:
                 need_cpu, need_ram = up_delta(obs, ladder)
-                ms_actions, leftover = ladder_up(
-                    env,
-                    ms_id,
-                    tau,
-                    obs,
-                    ladder,
+                return CycleIntent(
+                    ms_id=ms_id,
+                    cluster_id=cluster_id,
+                    t_det=tau,
+                    kind="up",
                     need_cpu=need_cpu,
                     need_ram=need_ram,
                     sustained=st.u_streak >= ladder.sustained_up_streak,
                 )
-                actions.extend(ms_actions)
-                if leftover is not None:
-                    leftover.seq = seq
-                    help_q.append(leftover)
-                    seq += 1
-            elif st.d_streak >= ladder.y_down_streak:
+            if st.d_streak >= ladder.y_down_streak:
                 d_cpu, d_ram = down_delta(obs, ladder)
-                actions.extend(
-                    ladder_down(
-                        env,
-                        ms_id,
-                        tau,
-                        obs,
-                        ladder,
-                        delta_cpu=d_cpu,
-                        delta_ram=d_ram,
-                    )
+                return CycleIntent(
+                    ms_id=ms_id,
+                    cluster_id=cluster_id,
+                    t_det=tau,
+                    kind="down",
+                    need_cpu=d_cpu,
+                    need_ram=d_ram,
                 )
+            return None
 
-        actions.extend(resolve_help(env, help_q, actions, tau))
+        def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
+            obs = obs_by[intent.ms_id]
+            if intent.kind == "up":
+                ms_actions, leftover = ladder_up(
+                    env,
+                    intent.ms_id,
+                    tau,
+                    obs,
+                    ladder,
+                    need_cpu=intent.need_cpu,
+                    need_ram=intent.need_ram,
+                    sustained=intent.sustained,
+                )
+                if (ms_actions or leftover is not None) and intent.ttw_t is not None:
+                    self._pending_proactive_ttw[intent.ms_id] = intent.ttw_t
+                return ms_actions, leftover
+            return (
+                ladder_down(
+                    env,
+                    intent.ms_id,
+                    tau,
+                    obs,
+                    ladder,
+                    delta_cpu=intent.need_cpu,
+                    delta_ram=intent.need_ram,
+                ),
+                None,
+            )
+
+        actions = cluster_manager_cycle(
+            env, tau, scan_ms=scan_ms, allocate=allocate, resolve_help=resolve_help
+        )
         self._pending_ms = {
             getattr(a, "ms_id", "")
             for a in actions

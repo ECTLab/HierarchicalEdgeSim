@@ -5,7 +5,7 @@ from __future__ import annotations
 from hierarchical_edge_sim.env.api import Env, NeedGlobalHelpAction
 from hierarchical_edge_sim.env.config import EPS
 
-from .help import HelpRequest
+from .help import HelpRequest, help_fcfs_key
 from .place import (
     cluster_free_cpu,
     place_packed_spawns,
@@ -26,7 +26,7 @@ def schedule_beg(
     if env.root is None or not requests:
         return ([], list(requests))
 
-    queued = sorted(requests, key=lambda r: (r.seq, r.ms_id))
+    queued = sorted(requests, key=lambda r: (*help_fcfs_key(r), r.seq))
     clusters = env.list_clusters()
     free_cpu, free_ram = snapshot_free(env, clusters)
     subtract_pending(env, pending, free_cpu, free_ram)

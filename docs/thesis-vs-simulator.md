@@ -3,11 +3,11 @@
 **Status:** review draft (comparison as of 2026-08-26)  
 **Tex:** `proposed_method_complete.tex` (Proposed Method — Consolidated Draft 3, Summer 2026)  
 **Code:** current HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
-**Related:** [vicinity-partition.md](./vicinity-partition.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
+**Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
 
 This note compares every named algorithm and clarification in the proposed-method tex with the simulator. It also lists places where the implementation is *more reasonable* than the algorithm (tex holes that showed up against this env’s serving model).
 
-Primary code: `autoscaler/reactive_local/`, `autoscaler/proactive_auto_scaler/decide.py`, `env/api.py` (`request_worker_owner_scale`), `env/loans.py`, `env/root.py`, `env/partition.py`.
+Primary code: `autoscaler/common/cm_cycle.py`, `autoscaler/reactive_local/allocate.py`, `autoscaler/proactive_auto_scaler/decide.py`, `env/api.py` (`request_worker_owner_scale`), `env/loans.py`, `env/root.py`, `env/partition.py`.
 
 ---
 
@@ -55,7 +55,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 | Algorithm | Tex | Code | Status | What actually landed |
 |---|---|---|---|---|
 | VicinityPartitionAndLeaderElection | Alg. vicinity | `env/partition.py` | Implemented lite | Listing mapped at bootstrap from coords or `latency_ms`. YAML `vicinities:` remains an experiment override. No \(T_{\mathit{repart}}\), heartbeat, or RPCs. |
-| ClusterManagerCycle | Alg. cmcycle | `reactive_local/policy.py` · `proactive_auto_scaler/policy.py` | Implemented lite | One in-process `on_tick_end` walks every MS, then one joint help round. No per-cluster CM, no leader barrier, no plan-timeout → BEG. |
+| ClusterManagerCycle | Alg. cmcycle | `autoscaler/common/cm_cycle.py` | Implemented lite | Per-cluster \(Q_c\) then one vicinity round + BEG in one hook. \(t_{det}=\tau\). No CM processes, barrier, or \(\Delta t_{plan}\). |
 | PredictAndDecide | Alg. predict | `proactive_auto_scaler/decide.py` | Stronger than tex | Same Up/Down/None + sustained shape, but util/residual use serving headroom \(H=\sum(A-\min)\), not total alloc. No \(\kappa\) ensemble; TCN or persistence, not LSTM pool. |
 | AllocateResources | Alg. allocate | `reactive_local/allocate.py` | Matches tex | BEV → BEH → \(\rho\) for Up; Down never leaves home. Cooldown is success-gated (and proactive Up/Down is asymmetric), not `StartCooldown(H)` every window. |
 | BEV | Alg. bev | `common/distribute.py` | Stronger than tex | Hottest-first packing with \(\mu\)-matched CPU/RAM, skip \(\mu=0\) resizes, last-replica surplus floor. Borrowed Grow/Shrink goes through owner API at apply time. |
@@ -72,7 +72,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 | # | Clarification | Status | In the simulator |
 |---|---|---|---|
 | C1 | App = set of MS types; decide per type | Matches tex | World model is apps → microservices → containers. Policy is per `ms_id`. |
-| C2 | FCFS across MS sharing a cluster | Implemented lite | Sorted `ms_id`, then leftover `seq`. Detection timestamps would collapse to that order in one tick. |
+| C2 | FCFS across MS sharing a cluster | Implemented lite | \(t_{det}=\tau\), then `ms_id`. Wall-clock detection times would collapse to that order in one tick. |
 | C3 | RAM floor/ceiling on scale-out and scale-in | Stronger than tex | Env clamps min/max. Policy also matches RAM to serving \(\mu\) so `ram_max` is a ceiling, not a target. |
 | C4 | Per-MS vector-valued worker state | Implemented lite | Replica lists with \(q\), alloc, free. Not the formal length-\(W\) \(\mathbf{h},\mathbf{a},\mathbf{q},\mathbf{e}\) vectors; one scaler for the whole world. |
 | C5 | Reusable BEV / BEH blocks | Matches tex | Shared `distribute` + `beh`; both `reactive_local` and `proactive_auto_scaler` call the same ladder. |
@@ -84,15 +84,15 @@ That split matches what the project’s own stage docs already call “lite vs p
 
 ## What “implemented” means in this repo
 
-The tex assumes distributed cluster managers, RPCs, and a leader barrier. HierarchicalEdgeSim is one process and one after-tick hook. Inside that hook:
+The tex assumes distributed cluster managers, RPCs, and a leader barrier. HierarchicalEdgeSim is one process and one after-tick hook. Inside that hook `cluster_manager_cycle` runs Algorithm 2:
 
-1. Every microservice is scanned in sorted `ms_id` order (cooldown / streaks / PredictAndDecide or reactive pressure).
-2. Local **BEV then BEH** run on the **app-owner cluster**.
-3. Leftover Up residual becomes a `HelpRequest`.
-4. If `World.root` exists (YAML vicinities **or** Algorithm 1 from coords/`latency_ms`), **one FCFS vicinity round**, then **BEG** on clusters outside \(V_{\text{home}}\).
-5. All mutations go through `Env.request_worker_owner_scale`.
+1. Observe every microservice (cooldown countdown / streaks / PredictAndDecide or reactive pressure).
+2. Per **owner cluster**: enqueue \(\Delta\neq\) None, sort \(Q_c\) by \((t_{det}, ms\_id)\) with \(t_{det}=\tau\), drain local **BEV then BEH**.
+3. Leftover Up residual becomes a `HelpRequest` with that \(t_{det}\).
+4. If `World.root` exists, **one FCFS vicinity round**, then **BEG** on clusters outside \(V_{\text{home}}\).
+5. All mutations go through `Env.request_worker_owner_scale` at apply time.
 
-So ClusterManagerCycle is **emulated**, not distributed. The ladder is still the one in the tex: BEV → BEH → VicinityLeaderSchedule → BEG, and Down never enters vicinity/global.
+So ClusterManagerCycle is **mapped**, not distributed. The ladder is still the one in the tex: BEV → BEH → VicinityLeaderSchedule → BEG, and Down never enters vicinity/global. See [cluster-manager-cycle.md](./cluster-manager-cycle.md).
 
 There are three scaler names. Only the last two walk that ladder:
 
@@ -116,15 +116,15 @@ How to tell coords from RTT, what to open after `run_env_only.py`, and sample `r
 
 The named leader is **metadata**. `schedule_vicinity_help` does not branch on `env.is_leader`. That is documented on purpose so triangle experiments can force BEH vs vicinity vs BEG. It is not the algorithm in the tex’s vicinity section.
 
-### 2. ClusterManagerCycle — lite (emulated)
+### 2. ClusterManagerCycle — implemented at the tick (in-process)
 
-Present in spirit: collect metrics, skip cooldown, PredictAndDecide (or reactive streaks), allocate, then vicinity/BEG.
+The listing now lives in `cluster_manager_cycle` (`autoscaler/common/cm_cycle.py`): per-cluster \(Q_c\), local AllocateResources, then one vicinity round and BEG. How to tell the cycle ran (`autoscaler.cycle`), which demos to use, and sample `actions.csv` excerpts are in [cluster-manager-cycle.md](./cluster-manager-cycle.md).
 
-Missing relative to the tex:
+Still not the tex’s distributed protocol:
 
-- Per-cluster CM and per-\((m,c)\) predictor instances. One global scaler decides for every MS.
-- Detection-timestamp FCFS. Order is `env.list_microservices()` (sorted ids); leftover `seq` follows that.
-- Leader barrier / free-vector reports / plan timeout \(\Delta t_{\mathit{plan}}\).
+- No CM process per cluster. One hook. Predictor history is per `ms_id`, not per \((m,c)\).
+- \(t_{det}=\tau\). Inside a tick that is the same FCFS as sorted microservice id (clarification 2).
+- No barrier wait \(\Delta t_{bar}\) and no plan timeout \(\Delta t_{plan}\). Apply is synchronous; unmet residual → BEG in the same tick.
 - `InCooldown` in the tex skips the whole MS; the code still updates streaks every tick and only suppresses **emission**. That is better (see [Cooldown after a rejected window](#7-cooldown-after-a-rejected-window-freezes-a-stuck-ms) and [Streaks during cooldown](#8-streaks-during-cooldown)).
 
 ### 3. PredictAndDecide — implemented, formula changed on purpose
@@ -347,6 +347,7 @@ Safe claims:
 Claims to qualify or drop:
 
 - You **can** claim Algorithm 1 (bootstrap partition + capacity-first election) when the world is built from coords/`latency_ms`. Still do **not** claim \(T_{\mathit{repart}}\), heartbeat failover, or distributed leader RPCs.
+- You **can** claim Algorithm 2 (`ClusterManagerCycle`) as the per-cluster intent queue + local allocate + one vicinity round + BEG inside the tick hook. Still do **not** claim CM processes, a leader barrier, or \(\Delta t_{plan}\).
 - Do **not** claim lender Reserve / \(\mathrm{safe}_j\).
 - Do **not** claim \(\kappa\)-gated ensemble switching. Cold start is reactive-until-\(W\), then one model.
 - Do **not** claim load–distance BEG. Say least-loaded (free CPU) among clusters outside \(V_{\text{home}}\).
@@ -364,3 +365,5 @@ If you want a next step, the highest-value tex updates would be: (1) packed spaw
 | v1 | 2026-08-22 | Written from the thesis-vs-simulator comparison (chat report + canvas tables) |
 | v2 | 2026-08-26 | Algorithm 1 mapped at bootstrap (`env/partition.py`); YAML vicinities stay an override |
 | v3 | 2026-08-26 | Pointer to vicinity-partition.md samples (coords vs `latency_ms`) |
+| v4 | 2026-08-27 | Algorithm 2 mapped as in-process ClusterManagerCycle |
+| v5 | 2026-08-27 | Pointer to cluster-manager-cycle.md demo checklist and samples |

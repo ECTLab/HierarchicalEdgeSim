@@ -48,14 +48,14 @@ autoscaler:
   name: proactive_auto_scaler
   decision_every_k_ticks: 1
   params:
-    ttw_ticks: 1
+    ticks_per_window: 1
     feature_window: 60
-    horizon_H: 5
+    forecast_horizon: 5
     theta_up: 0.80
     theta_down: 0.30
     theta_target: 0.60
-    sustained_tau: 99
-    # Scale-down only (K8s HPA: scaleUp 0s, scaleDown 300s). 1 TTW = 1 min.
+    sustained_steps: 99
+    # Scale-down only (K8s HPA: scaleUp 0s, scaleDown 300s). 1 window = 1 min.
     cooldown_C: 5
     predictor: tcn_delta
     model_dir: models/tcn_delta_v1_ms150
@@ -68,7 +68,7 @@ autoscaler:
     theta_high: 0.90
     use_near_saturation_up: false
     alpha_up: 0.20
-    # Kubernetes scaleDown default: 100% of pods per period. 1 TTW = 1 min.
+    # Kubernetes scaleDown default: 100% of pods per period. 1 window = 1 min.
     alpha_down: 1.0
     delta_cpu_min_cores: 0.25
     delta_ram_min_mb: 128

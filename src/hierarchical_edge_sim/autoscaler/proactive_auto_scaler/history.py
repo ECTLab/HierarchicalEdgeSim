@@ -1,14 +1,14 @@
-"""Ring buffer of real TTW request counts (history purity)."""
+"""Ring buffer of real per-window request counts (history purity)."""
 
 from __future__ import annotations
 
 from collections import deque
 
-from .ttw_rps import counts_to_rps
+from .window_rps import counts_to_rps
 
 
 class RpsHistory:
-    """Fixed-capacity buffer of observed TTW request counts (not forecasts)."""
+    """Fixed-capacity buffer of observed window request counts (not forecasts)."""
 
     def __init__(self, capacity: int) -> None:
         if capacity < 1:
@@ -30,8 +30,11 @@ class RpsHistory:
         """Observed request counts in the window."""
         return list(self._buf)
 
-    def as_rps(self, *, ttw_ticks: int, tick_sec: float) -> list[float]:
-        return [counts_to_rps(n, ttw_ticks=ttw_ticks, tick_sec=tick_sec) for n in self._buf]
+    def as_rps(self, *, ticks_per_window: int, tick_sec: float) -> list[float]:
+        return [
+            counts_to_rps(n, ticks_per_window=ticks_per_window, tick_sec=tick_sec)
+            for n in self._buf
+        ]
 
     def is_full(self) -> bool:
         return len(self._buf) >= self._capacity

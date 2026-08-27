@@ -34,14 +34,39 @@ def test_params_defaults_and_unknown_predictor():
     assert p.feature_window == 10
     assert p.ladder.cascade_home is True
     assert p.cooldown_C == 3
-    tcn = validate_params({"predictor": "tcn_delta", "feature_window": 60, "horizon_H": 5})
+    tcn = validate_params({"predictor": "tcn_delta", "feature_window": 60, "forecast_horizon": 5})
     assert tcn.cooldown_C == 5
+    assert tcn.ticks_per_window == 1
+    assert tcn.forecast_horizon == 5
+    legacy = validate_params(
+        {
+            "ttw_ticks": 1,
+            "horizon_H": 3,
+            "sustained_tau": 4,
+        }
+    )
+    assert legacy.ticks_per_window == 1
+    assert legacy.forecast_horizon == 3
+    assert legacy.sustained_steps == 4
     with pytest.raises(ValueError, match="hold_down_ticks was removed"):
         validate_params({"hold_down_ticks": 55})
     with pytest.raises(ValueError, match="predictor must be one of"):
         validate_params({"predictor": "lstm"})
     with pytest.raises(ValueError, match="feature_window=60"):
-        validate_params({"predictor": "tcn_delta", "feature_window": 10, "horizon_H": 5})
+        validate_params({"predictor": "tcn_delta", "feature_window": 10, "forecast_horizon": 5})
+
+
+def test_window_rps_conversion():
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.window_rps import (
+        counts_to_rps,
+        is_window_close,
+        window_index,
+    )
+
+    assert counts_to_rps(120.0, ticks_per_window=2, tick_sec=1.0) == 60.0
+    assert is_window_close(2, 2)
+    assert not is_window_close(1, 2)
+    assert window_index(2, 2) == 1
 
 
 def test_forecast_horizon_does_not_mutate_history():
@@ -155,8 +180,8 @@ def test_horizon_spike_scales_up_without_drops(tmp_path: Path):
     scaler = build(
         {
             "feature_window": 2,
-            "horizon_H": 3,
-            "sustained_tau": 99,
+            "forecast_horizon": 3,
+            "sustained_steps": 99,
             "x_up_streak": 99,
             "y_down_streak": 99,
             "cooldown_ticks": 0,
@@ -176,8 +201,8 @@ def test_horizon_step_is_clipped_so_beh_does_not_mass_spawn(tmp_path: Path):
     scaler = build(
         {
             "feature_window": 2,
-            "horizon_H": 3,
-            "sustained_tau": 99,
+            "forecast_horizon": 3,
+            "sustained_steps": 99,
             "x_up_streak": 99,
             "y_down_streak": 99,
             "cooldown_ticks": 0,
@@ -222,12 +247,12 @@ def test_cooldown_blocks_down_not_up(tmp_path: Path):
     scaler = build(
         {
             "feature_window": 2,
-            "horizon_H": 2,
+            "forecast_horizon": 2,
             "cooldown_C": 2,
             "cooldown_ticks": 0,
             "x_up_streak": 99,
             "y_down_streak": 99,
-            "sustained_tau": 99,
+            "sustained_steps": 99,
         },
         predictor=pred,
     )
@@ -263,12 +288,12 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
     scaler = build(
         {
             "feature_window": 2,
-            "horizon_H": 2,
+            "forecast_horizon": 2,
             "cooldown_C": 5,
             "cooldown_ticks": 0,
             "x_up_streak": 99,
             "y_down_streak": 99,
-            "sustained_tau": 99,
+            "sustained_steps": 99,
         },
         predictor=_FixedPredictor(100.0),
     )
@@ -299,12 +324,12 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
     scaler = build(
         {
             "feature_window": 2,
-            "horizon_H": 2,
+            "forecast_horizon": 2,
             "cooldown_C": 2,
             "cooldown_ticks": 0,
             "x_up_streak": 99,
             "y_down_streak": 99,
-            "sustained_tau": 99,
+            "sustained_steps": 99,
             "alpha_down": 1.0,
         },
         predictor=pred,
@@ -363,7 +388,7 @@ def test_yaml_loads_alibaba_tcn(project_root: Path):
     assert scaler is not None
     assert scaler.params.predictor == "tcn_delta"
     assert scaler.params.feature_window == 60
-    assert scaler.params.horizon_H == 5
+    assert scaler.params.forecast_horizon == 5
     assert scaler.params.cooldown_C == 5
     assert scaler.params.ladder.alpha_down == 1.0
 

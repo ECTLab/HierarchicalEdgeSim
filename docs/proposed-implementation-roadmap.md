@@ -226,7 +226,7 @@ Only now attach the predictor.
 **Pipeline**
 
 ```text
-sense (TTW RPS history)
+sense (per-window RPS history)
   → PredictAndDecide (direction, δ_cpu, δ_ram, sustained)
   → AllocateResources (same S2–S5 ladder)
 ```
@@ -248,7 +248,7 @@ Recommendation: pick **one** for S7 v1; treat the other as a drop-in `predictors
 
 Candidates after S2+ exist:
 
-- `autoscaler/proactive_auto_scaler/sensing.py`, `history.py`, `forecast.py`, `ttw_rps.py`
+- `autoscaler/proactive_auto_scaler/sensing.py`, `history.py`, `forecast.py`, `window_rps.py`
 - LSTM loader **if** Option B
 - Decide math / tests — rewire `allocate` to call shared ladder, not vertical-only
 

@@ -3,7 +3,7 @@
 **Status:** review draft (comparison as of 2026-08-26)  
 **Tex:** `proposed_method_complete.tex` (Proposed Method — Consolidated Draft 3, Summer 2026)  
 **Code:** current HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
-**Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
+**Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [naming-refactor.md](./naming-refactor.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
 
 This note compares every named algorithm and clarification in the proposed-method tex with the simulator. It also lists places where the implementation is *more reasonable* than the algorithm (tex holes that showed up against this env’s serving model).
 
@@ -56,7 +56,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 |---|---|---|---|---|
 | VicinityPartitionAndLeaderElection | Alg. vicinity | `env/partition.py` | Implemented lite | Listing mapped at bootstrap from coords or `latency_ms`. YAML `vicinities:` remains an experiment override. No \(T_{\mathit{repart}}\), heartbeat, or RPCs. |
 | ClusterManagerCycle | Alg. cmcycle | `autoscaler/common/cm_cycle.py` | Implemented lite | Per-cluster \(Q_c\) then one vicinity round + BEG in one hook. \(t_{det}=\tau\). No CM processes, barrier, or \(\Delta t_{plan}\). |
-| PredictAndDecide | Alg. predict | `proactive_auto_scaler/decide.py` | Stronger than tex | Same Up/Down/None + sustained shape, but util/residual use serving headroom \(H=\sum(A-\min)\), not total alloc. No \(\kappa\) ensemble; TCN or persistence, not LSTM pool. |
+| PredictAndDecide | Alg. predict | `proactive_auto_scaler/decide.py` | Stronger than tex | Same Up/Down/None + sustained shape, but util/residual use serving headroom \(\sum(A-\min)\), not total alloc. No \(\kappa\) ensemble; TCN or persistence, not LSTM pool. |
 | AllocateResources | Alg. allocate | `reactive_local/allocate.py` | Matches tex | BEV → BEH → \(\rho\) for Up; Down never leaves home. Cooldown is success-gated (and proactive Up/Down is asymmetric), not `StartCooldown(H)` every window. |
 | BEV | Alg. bev | `common/distribute.py` | Stronger than tex | Hottest-first packing with \(\mu\)-matched CPU/RAM, skip \(\mu=0\) resizes, last-replica surplus floor. Borrowed Grow/Shrink goes through owner API at apply time. |
 | BEH | Alg. beh | `reactive_local/beh.py` | Stronger than tex | Same host-then-free ranking and global→vicinity→local reclaim. Spawns above minima so \(\mu>0\). Never kills the last replica; extras die only if remaining \(\mu\) still covers \(\mu_{\text{tgt}}\). |
@@ -136,7 +136,7 @@ What does **not** match:
 | Tex | Code |
 |---|---|
 | \(u = \max_j q_{m,j}\) (hottest replica) | Fleet \(q_{ms}\) from serving headroom, plus drop pressure on the reactive path |
-| \(\delta = A \tilde u / \theta_{\text{target}} - A\) | \(A_{\text{req}} = n\cdot\min + (\rho \cdot r^* \cdot \text{tick\_sec}) / \theta_{\text{target}}\) using \(H=\sum(A-\min)\) |
+| \(\delta = A \tilde u / \theta_{\text{target}} - A\) | \(A_{\text{req}} = n\cdot\min + (\texttt{cpu\_per\_request} \cdot \texttt{peak\_rps} \cdot \text{tick\_sec}) / \theta_{\text{target}}\) using \(\texttt{headroom}=\sum(A-\min)\). Code `peak_rps` is not paper \(r^*\) (predictor index). |
 | \(\kappa_r = 1/(1+\text{MAPE})\), pick \(r^*=\arg\max \kappa\), floor \(\kappa_{\min}\) | Cold start = reactive until history length \(W\); then **always** proactive. No MAPE, no ensemble |
 | LSTM / Bi-LSTM / GRU / Bi-GRU / A-Bi-GRU | TCN-delta (Alibaba) or persistence (tests). The tex called the predictor a black box; this is a different family |
 
@@ -236,7 +236,7 @@ These are not accidental drift. They showed up when a literal reading of the tex
 | Issue the tex missed | What the algorithm says | What the code does | Why the code is more reasonable |
 |---|---|---|---|
 | Floors buy no throughput | PredictAndDecide treats total alloc \(A\) as serving capacity. BEH / vicinity / BEG seed new replicas at `cpu_min` / `ram_min`. | \(\mu = \min((A-\min)/\rho)\). `packed_spawn_size` places floor + leftover headroom and skips a worker that can only fit the floor. | A minima replica gets zero CPU-headroom routing weight, so it serves nothing until a later BEV. On a worker whose cap is the floor, that replica is permanently dead. Literal paper spawn produced the 69% Alibaba drop (\(\mu=0\) fleet). |
-| Headroom residual, not \(A\cdot\tilde u/\theta - A\) | \(\delta = \max(0, A\cdot\tilde u/\theta_{\text{target}} - A)\). Floors inflate \(A\) without adding \(\mu\). | \(A_{\text{req}} = n\cdot\min + (\rho \cdot r^* \cdot \text{tick\_sec}) / \theta_{\text{target}}\), using \(H = \sum(A-\min)\). \(H\approx 0\) with load is treated as saturated (Up). | After a trough, idle min-replicas made \(q\) look idle and residual grew the wrong resource. Headroom matches the usage model. |
+| Headroom residual, not \(A\cdot\tilde u/\theta - A\) | \(\delta = \max(0, A\cdot\tilde u/\theta_{\text{target}} - A)\). Floors inflate \(A\) without adding \(\mu\). | \(A_{\text{req}} = n\cdot\min + (\texttt{cpu\_per\_request} \cdot \texttt{peak\_rps} \cdot \text{tick\_sec}) / \theta_{\text{target}}\), using \(\texttt{headroom} = \sum(A-\min)\). Headroom \(\approx 0\) with load is treated as saturated (Up). | After a trough, idle min-replicas made \(q\) look idle and residual grew the wrong resource. Headroom matches the usage model. |
 | \(\mu\)-matched CPU/RAM instead of two wallets | Independent \(\delta_{\text{cpu}}\) and \(\delta_{\text{ram}}\). BEV grows each up to `cpu_max` / `ram_max`. `ram_max` is treated like a fill target. | One serving-\(\mu\) step, rate-capped on the CPU wallet, both resources via \(\rho\). BEV-up will not apply a resize that still has \(\mu=0\). | Independent wallets pumped RAM toward `ram_max` while CPU was already binding, then surplus-down left RAM-dead replicas that still attracted CPU-weighted routing and dropped everything. |
 | Surplus scale-down and last-replica floor | BEH terminate walks \(J\) until residual \(\ge 0\). No last-replica rule. BEV shrinks to deployment minima. | \(\mu_{\text{tgt}} = \Lambda/(1-\theta_{\text{free}})\). Release only surplus. Never terminate the last replica. Skip BEV-shrink of the seed in the same tick as a terminate. Extras die only if remaining \(\mu\) still covers \(\mu_{\text{tgt}}\). | Literal shrink-to-minima walks the leftover seed onto \(\mu=0\), then routing still sends it load and the next ticks bounce Up. `Env.terminate` also refuses `LAST_REPLICA`. |
 | Pending-action free snapshot | Vicinity/BEG read live free vectors. Two FCFS requests in one window can over-commit the same worker. | `snapshot_free` then `subtract_pending` (resize/spawn/terminate already queued this tick) before placing. | Single-threaded joint round still needs this; otherwise two MS leftovers pack the same last slot. |
@@ -316,7 +316,7 @@ HierarchicalEdgeSim uses **Algorithm 1** when cluster coords (or a complete RTT 
 
 ### Proactive cooldown vs StartCooldown(H)
 
-After Alibaba, proactive scale-up is never delayed (HPA scaleUp window 0). Scale-down waits `cooldown_C` TTWs after an Up. Cold-start reactive still uses `cooldown_ticks` on any success.
+After Alibaba, proactive scale-up is never delayed (HPA scaleUp window 0). Scale-down waits `cooldown_C` windows after an Up. Cold-start reactive still uses `cooldown_ticks` on any success.
 
 ### Cascade is per-MS
 

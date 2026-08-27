@@ -5,7 +5,8 @@
 **Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S7  
 **Depends on:** [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)  
 **Alibaba diagnosis:** [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md)  
-**Cooldown (K8s-style, no 55-minute hold):** [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md)
+**Cooldown (K8s-style, no 55-minute hold):** [s7-k8s-scale-cooldown.md](./s7-k8s-scale-cooldown.md)  
+**Names vs paper letters:** [naming-refactor.md](./naming-refactor.md)
 
 PredictAndDecide sits in front of the same AllocateResources path as `reactive_local` (BEV → BEH → vicinity → BEG, cost-ordered down + cascade). `reactive_local` stays the baseline scaler name.
 
@@ -22,7 +23,7 @@ PredictAndDecide sits in front of the same AllocateResources path as `reactive_l
 | History purity | durable buffer holds observed request counts only |
 | Sensing | container `lambda_in` only — no live trace reads |
 | Allocate | `reactive_local.allocate` (same reasons: `bev_up`, `beh_spawn`, …) |
-| TTW | `ttw_ticks=1` for TCN (one Alibaba minute per sample) |
+| Window | `ticks_per_window=1` for TCN (one Alibaba minute per sample) |
 
 Option B (univariate one-step + recursive roll) remains only as the persistence / unit-test path.
 
@@ -34,25 +35,26 @@ Inference reconstructs absolute normalized load as `last_known + delta`, then de
 
 ```text
 each tick: accumulate λ_in
-TTW close:
-  r_t = N / (L · tick_sec)
+window close (every ticks_per_window ticks):
+  observed_rps = N / (L · tick_sec)
   append N to history
   if history < W:  reactive streaks → ladder   # cold start
   else:
-    r̂ = TCN(60×2) → 5 RPS hats
-    PredictAndDecide(r_t, r̂, H=Σ(A−min), ρ) → (Δ, δ_cpu, δ_ram, sustained)
+    forecast_rps = TCN(60×2) → 5 RPS hats
+    PredictAndDecide(observed_rps, forecast_rps, headroom=Σ(A−min), cpu_per_request)
+      → (Δ, δ_cpu, δ_ram, sustained)
     same ladder as S2–S6
 ```
 
-Decide maps RPS to utilization with `C_full = (H / ρ) / tick_sec` where `H = Σ(A − min)` (floors buy no μ). `H ≈ 0` and `r_t > 0` is treated as saturated (Up). Residual is `A_req = n·min + (ρ · r* · tick_sec) / θ_target`. Proactive BEV-down will not pin the last serving replica onto a floor, and will not leave any replica at `μ = 0` with CPU headroom (routing would send it load it cannot serve). Then:
+Decide maps RPS to utilization with `rps_capacity = (headroom / cpu_per_request) / tick_sec` where `headroom = Σ(A − min)` (floors buy no μ). Headroom ≈ 0 and `observed_rps > 0` is treated as saturated (Up). Residual is `A_req = n·min + (cpu_per_request · peak_rps · tick_sec) / θ_target`. Proactive BEV-down will not pin the last serving replica onto a floor, and will not leave any replica at `μ = 0` with CPU headroom (routing would send it load it cannot serve). Then:
 
 - **Up** if `u_obs ≥ θ_up` or any `û ≥ θ_up`
 - **Down** if both observed and all hats are `≤ θ_down`
 - else **None**
 
-Decide residual is the gap from current alloc `A` to `A_req = n·min + (ρ · r* · tick_sec) / θ_target`, where `r*` is `max(r_t, hats)`. Apply clips that gap to one reactive-sized step (`α_up` / `α_down`). BEH packs that leftover above minima so the new replica can serve on the next tick (apply order is resize then spawn, so there is no same-tick BEV of a new id).
+Decide residual is the gap from current alloc `A` to `A_req = n·min + (cpu_per_request · peak_rps · tick_sec) / θ_target`, where `peak_rps` is `max(observed_rps, hats)`. Apply clips that gap to one reactive-sized step (`α_up` / `α_down`). BEH packs that leftover above minima so the new replica can serve on the next tick (apply order is resize then spawn, so there is no same-tick BEV of a new id).
 
-`sustained` is true when at least `sustained_tau` forecast steps sit at/above `θ_up` — that skips BEV and goes to BEH.
+`sustained` is true when at least `sustained_steps` forecast steps sit at/above `θ_up` — that skips BEV and goes to BEH.
 
 ---
 
@@ -80,7 +82,7 @@ YAML leftover keys after the decide block are `reactive_local` params (`x_up_str
 - Global TCN from `alibaba-trace` (`tcn-only`), not a per-MS embedding and not LSTM.
 - Training min–max is the full 12h series (same leakage as that repo).
 - No vicinity `Reserve` / lender forecast (still S4 lite).
-- Cooldown after a proactive **Up** is `cooldown_C` TTWs and delays **scale-down
+- Cooldown after a proactive **Up** is `cooldown_C` windows and delays **scale-down
   only** (Kubernetes HPA: scaleUp 0s, scaleDown 300s, then 100% per period).
   Scale-up follows the forecast immediately. Alibaba TCN uses `α_down = 1.0`.
   Cold-start reactive still uses `cooldown_ticks`.

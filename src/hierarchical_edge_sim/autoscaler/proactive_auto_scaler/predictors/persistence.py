@@ -2,10 +2,10 @@
 
 
 class PersistencePredictor:
-    def __init__(self, horizon_h: int = 3) -> None:
-        if horizon_h < 1:
-            raise ValueError("horizon_h must be >= 1")
-        self.horizon_h = horizon_h
+    def __init__(self, forecast_horizon: int = 3) -> None:
+        if forecast_horizon < 1:
+            raise ValueError("forecast_horizon must be >= 1")
+        self.forecast_horizon = forecast_horizon
 
     def predict_next(self, x: list[float]) -> float:
         if not x:
@@ -21,4 +21,4 @@ class PersistencePredictor:
     ) -> list[float]:
         _ = time_ticks, counts
         last = self.predict_next(history_rps)
-        return [last] * self.horizon_h
+        return [last] * self.forecast_horizon

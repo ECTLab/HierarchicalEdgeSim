@@ -66,14 +66,14 @@ Removed `hold_down_ticks`. If a YAML file still sets it, loading fails with an e
 | After hold removal | Never delayed | Blocked for `cooldown_C` after **any** apply (10% stairs) |
 | **HEAD** | Never delayed | Blocked for `cooldown_C` after an **Up** only; `α_down = 1.0` |
 
-On Alibaba, 1 TTW = 1 minute, so `cooldown_C: 5` is the 300s down window. Cold-start (no hats yet) still uses the reactive `cooldown_ticks` on that path.
+On Alibaba, 1 window = 1 minute, so `cooldown_C: 5` is the 300s down window. Cold-start (no hats yet) still uses the reactive `cooldown_ticks` on that path.
 
 Decide is unchanged: Up if observed or any hat ≥ `θ_up`; Down only if **both** observed and all hats ≤ `θ_down`. The forecast still drives direction. Cooldown after Up only **delays the first shrink**.
 
 | File | Change |
 |---|---|
 | `proactive_auto_scaler/params.py` | Drop the field; reject leftover YAML |
-| `proactive_auto_scaler/policy.py` | `_next_down_ttw` on Up only; Down ignores it |
+| `proactive_auto_scaler/policy.py` | `_next_down_window` on Up only; Down ignores it |
 | `configs/demo_alibaba_proactive.yaml` | No hold; `α_down: 1.0`; K8s comments |
 | `configs/demo_alibaba_ms150_proactive.yaml` | Same |
 | `tests/test_proactive_auto_scaler.py` | Down waits after Up; Down may repeat; Up ignores cooldown |

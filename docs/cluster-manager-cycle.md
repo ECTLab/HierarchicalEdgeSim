@@ -17,7 +17,7 @@ This is **not** `run_env_only.py`. Algorithm 1 (partition) can run with no autos
 
 `on_tick_end` still fires once after physics. Inside it:
 
-1. **Observe every MS** (streaks, cooldown countdown, TTW sensing). Cooldown does **not** skip observation — that is stricter than tex `InCooldown` → `continue`.
+1. **Observe every MS** (streaks, cooldown countdown, window sensing). Cooldown does **not** skip observation — that is stricter than tex `InCooldown` → `continue`.
 2. **`cluster_manager_cycle`**: per owner cluster, enqueue \(\Delta\neq\) None, sort \(Q_c\), drain local AllocateResources (BEV then BEH).
 3. Merge leftover \(\rho\) FCFS and run VicinityLeaderSchedule then BEG (`resolve_help`).
 

@@ -19,12 +19,12 @@ def clip_unit(value: float, *, lo: float = 0.0, hi: float = 1.0) -> float:
     return min(hi, max(lo, float(value)))
 
 
-def rps_to_count(rps: float, *, tick_sec: float, ttw_ticks: int = 1) -> float:
-    return float(rps) * float(ttw_ticks) * float(tick_sec)
+def rps_to_count(rps: float, *, tick_sec: float, ticks_per_window: int = 1) -> float:
+    return float(rps) * float(ticks_per_window) * float(tick_sec)
 
 
-def count_to_rps(count: float, *, tick_sec: float, ttw_ticks: int = 1) -> float:
-    return float(count) / (float(ttw_ticks) * float(tick_sec))
+def count_to_rps(count: float, *, tick_sec: float, ticks_per_window: int = 1) -> float:
+    return float(count) / (float(ticks_per_window) * float(tick_sec))
 
 
 def time_window(close_time_tick: int, lookback: int) -> list[int]:

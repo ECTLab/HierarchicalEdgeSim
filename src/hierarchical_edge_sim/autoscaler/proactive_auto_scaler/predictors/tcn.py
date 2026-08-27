@@ -68,7 +68,7 @@ class TcnDeltaPredictor:
 
         self.meta = dict(meta)
         self.lookback = int(meta["lookback"])
-        self.horizon_h = int(meta["horizon"])
+        self.forecast_horizon = int(meta["horizon"])
         self.time_scale = float(meta["time_scale"])
         self.tick_sec = float(meta["tick_sec"])
         self.load_min = float(meta["load_min"])
@@ -78,7 +78,7 @@ class TcnDeltaPredictor:
             input_size=int(arch.get("input_size", 2)),
             num_channels=list(arch.get("num_channels") or [32, 64]),
             kernel_size=int(arch.get("kernel_size", 3)),
-            output_size=int(arch.get("output_size", self.horizon_h)),
+            output_size=int(arch.get("output_size", self.forecast_horizon)),
         )
         module.load_state_dict(_load_state_dict(weights_path))
         module.eval()
@@ -109,7 +109,7 @@ class TcnDeltaPredictor:
     ) -> list[float]:
         if counts is None:
             counts = [
-                rps_to_count(rps, tick_sec=self.tick_sec, ttw_ticks=1) for rps in history_rps
+                rps_to_count(rps, tick_sec=self.tick_sec, ticks_per_window=1) for rps in history_rps
             ]
         if len(counts) != self.lookback:
             raise ValueError(f"TCN lookback is {self.lookback}, got {len(counts)} samples")
@@ -133,7 +133,7 @@ class TcnDeltaPredictor:
         for delta in deltas:
             abs_norm = last_norm + float(delta)
             abs_count = max(0.0, denormalize_load(abs_norm, self.load_min, self.load_max))
-            rps_out.append(count_to_rps(abs_count, tick_sec=self.tick_sec, ttw_ticks=1))
+            rps_out.append(count_to_rps(abs_count, tick_sec=self.tick_sec, ticks_per_window=1))
         return rps_out
 
 

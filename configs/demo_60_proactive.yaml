@@ -41,13 +41,13 @@ autoscaler:
   name: proactive_auto_scaler
   decision_every_k_ticks: 1
   params:
-    ttw_ticks: 1
+    ticks_per_window: 1
     feature_window: 10
-    horizon_H: 3
+    forecast_horizon: 3
     theta_up: 0.80
     theta_down: 0.30
     theta_target: 0.60
-    sustained_tau: 2
+    sustained_steps: 2
     cooldown_C: 3
     predictor: persistence
     x_up_streak: 3

@@ -44,9 +44,9 @@ class ProactiveAutoScaler:
     _predictor: OneStepRpsPredictor | HorizonRpsPredictor = field(default_factory=PersistencePredictor)
     _sensing: ProactiveSensing | None = None
     _state: dict[str, _MsState] = field(default_factory=dict)
-    _next_down_ttw: dict[str, int] = field(default_factory=dict)
+    _next_down_window: dict[str, int] = field(default_factory=dict)
     _pending_ms: set[str] = field(default_factory=set)
-    _pending_proactive_ttw: dict[str, int] = field(default_factory=dict)
+    _pending_proactive_window: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self._sensing is None:
@@ -56,7 +56,7 @@ class ProactiveAutoScaler:
         assert self._sensing is not None
         closed = {rec.ms_id: rec for rec in self._sensing.on_tick(env, tau)}
         self._pending_ms.clear()
-        self._pending_proactive_ttw.clear()
+        self._pending_proactive_window.clear()
         ladder = self.params.ladder
         obs_by: dict[str, dict] = {}
 
@@ -77,28 +77,28 @@ class ProactiveAutoScaler:
             st = self._state[ms_id]
             obs = obs_by[ms_id]
             cluster_id = home_cluster_id(env, ms_id)
-            if rec.history_full and rec.r_hat is not None:
+            if rec.history_full and rec.forecast_rps is not None:
                 spec = obs["spec"]
                 decision = predict_and_decide(
-                    r_t=rec.r_t,
-                    r_hat=rec.r_hat,
+                    observed_rps=rec.observed_rps,
+                    forecast_rps=rec.forecast_rps,
                     A_cpu=obs["sum_cpu_alloc"],
                     A_ram=obs["sum_ram_alloc"],
-                    rho_cpu=spec.cpu_per_request_cores,
-                    rho_ram=spec.ram_per_request_mb,
+                    cpu_per_request=spec.cpu_per_request_cores,
+                    ram_per_request=spec.ram_per_request_mb,
                     tick_sec=float(env.world_spec.sim.tick_sec),
                     u_meas=obs["q_ms"],
                     theta_up=self.params.theta_up,
                     theta_down=self.params.theta_down,
                     theta_target=self.params.theta_target,
-                    sustained_tau=self.params.sustained_tau,
+                    sustained_steps=self.params.sustained_steps,
                     cpu_min_cores=spec.cpu_min_cores,
                     ram_min_mb=spec.ram_min_mb,
                     n_replicas=max(1, len(obs["replicas"])),
-                    H_cpu=obs["sum_h_cpu"],
-                    H_ram=obs.get("sum_h_ram", 0.0),
+                    headroom_cpu=obs["sum_h_cpu"],
+                    headroom_ram=obs.get("sum_h_ram", 0.0),
                 )
-                down_in_cd = rec.ttw_t < self._next_down_ttw.get(ms_id, 0)
+                down_in_cd = rec.window_index < self._next_down_window.get(ms_id, 0)
                 if decision.direction is Direction.UP:
                     if decision.delta_cpu <= EPS and decision.delta_ram <= EPS:
                         return None
@@ -113,7 +113,7 @@ class ProactiveAutoScaler:
                         need_cpu=need_cpu,
                         need_ram=need_ram,
                         sustained=decision.sustained,
-                        ttw_t=rec.ttw_t,
+                        window_index=rec.window_index,
                     )
                 if decision.direction is Direction.DOWN:
                     if down_in_cd:
@@ -170,8 +170,8 @@ class ProactiveAutoScaler:
                     need_ram=intent.need_ram,
                     sustained=intent.sustained,
                 )
-                if (ms_actions or leftover is not None) and intent.ttw_t is not None:
-                    self._pending_proactive_ttw[intent.ms_id] = intent.ttw_t
+                if (ms_actions or leftover is not None) and intent.window_index is not None:
+                    self._pending_proactive_window[intent.ms_id] = intent.window_index
                 return ms_actions, leftover
             return (
                 ladder_down(
@@ -203,13 +203,13 @@ class ProactiveAutoScaler:
                 st.u_streak = 0
                 st.d_streak = 0
                 st.cooldown = self.params.ladder.cooldown_ticks
-            for ms_id, ttw_t in self._pending_proactive_ttw.items():
+            for ms_id, closed_index in self._pending_proactive_window.items():
                 # Armed on Up only (HPA: 300s down window after a high rec).
                 # Down itself does not restart the wait, so 100% cuts can
                 # continue each tick the way HPA's 15s scaleDown period does.
-                self._next_down_ttw[ms_id] = ttw_t + self.params.cooldown_C + 1
+                self._next_down_window[ms_id] = closed_index + self.params.cooldown_C + 1
         self._pending_ms.clear()
-        self._pending_proactive_ttw.clear()
+        self._pending_proactive_window.clear()
 
 
 def _clip_step(
@@ -239,7 +239,7 @@ def _default_predictor(params: ProactiveAutoScalerParams) -> OneStepRpsPredictor
         from .predictors.tcn import TcnDeltaPredictor
 
         return TcnDeltaPredictor.from_model_dir(params.model_dir)
-    return PersistencePredictor(horizon_h=params.horizon_H)
+    return PersistencePredictor(forecast_horizon=params.forecast_horizon)
 
 
 def build(

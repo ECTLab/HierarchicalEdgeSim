@@ -15,20 +15,30 @@ _PREDICTORS = ("persistence", "tcn_delta")
 
 @dataclass(frozen=True, slots=True)
 class ProactiveAutoScalerParams:
-    ttw_ticks: int = 1
+    ticks_per_window: int = 1
     feature_window: int = 10
-    horizon_H: int = 3
+    forecast_horizon: int = 3
     theta_up: float = 0.80
     theta_down: float = 0.30
     theta_target: float = 0.60
-    sustained_tau: int = 2
+    sustained_steps: int = 2
     # Scale-down only. Kubernetes HPA default: scaleUp stabilization 0s,
-    # scaleDown 300s. On Alibaba (1 TTW = 1 min) cooldown_C=5 is that 5 min.
+    # scaleDown 300s. On Alibaba (1 window = 1 min) cooldown_C=5 is that 5 min.
     cooldown_C: int = 3
     predictor: str = "persistence"
     model_dir: str = "models/tcn_delta_v1"
     time_tick_offset: int = 0
     ladder: ReactiveLocalParams = field(default_factory=ReactiveLocalParams)
+
+
+def _pop_alias(data: dict[str, Any], new_key: str, old_key: str, default: Any) -> Any:
+    """Prefer ``new_key``; still accept ``old_key`` from older YAML."""
+    if new_key in data:
+        data.pop(old_key, None)
+        return data.pop(new_key)
+    if old_key in data:
+        return data.pop(old_key)
+    return default
 
 
 def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
@@ -44,28 +54,38 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
             "hold_down_ticks was removed; cooldown_C delays scale-down only "
             "(Kubernetes HPA: scaleUp stabilization 0s, scaleDown 300s)"
         )
+    ticks_per_window = int(_pop_alias(data, "ticks_per_window", "ttw_ticks", 1))
+    forecast_horizon = int(
+        _pop_alias(
+            data,
+            "forecast_horizon",
+            "horizon_H",
+            5 if predictor == "tcn_delta" else 3,
+        )
+    )
+    sustained_steps = int(_pop_alias(data, "sustained_steps", "sustained_tau", 2))
     params = ProactiveAutoScalerParams(
-        ttw_ticks=int(data.pop("ttw_ticks", 1)),
+        ticks_per_window=ticks_per_window,
         feature_window=int(data.pop("feature_window", 60 if predictor == "tcn_delta" else 10)),
-        horizon_H=int(data.pop("horizon_H", 5 if predictor == "tcn_delta" else 3)),
+        forecast_horizon=forecast_horizon,
         theta_up=float(data.pop("theta_up", 0.80)),
         theta_down=float(data.pop("theta_down", 0.30)),
         theta_target=float(data.pop("theta_target", 0.60)),
-        sustained_tau=int(data.pop("sustained_tau", 2)),
+        sustained_steps=sustained_steps,
         cooldown_C=int(data.pop("cooldown_C", 5 if predictor == "tcn_delta" else 3)),
         predictor=predictor,
         model_dir=str(data.pop("model_dir", "models/tcn_delta_v1")),
         time_tick_offset=int(data.pop("time_tick_offset", 0)),
         ladder=validate_ladder_params(data),
     )
-    if params.ttw_ticks < 1:
-        raise ValueError("ttw_ticks must be >= 1")
+    if params.ticks_per_window < 1:
+        raise ValueError("ticks_per_window must be >= 1")
     if params.feature_window < 1:
         raise ValueError("feature_window must be >= 1")
-    if params.horizon_H < 1:
-        raise ValueError("horizon_H must be >= 1")
-    if params.sustained_tau < 1:
-        raise ValueError("sustained_tau must be >= 1")
+    if params.forecast_horizon < 1:
+        raise ValueError("forecast_horizon must be >= 1")
+    if params.sustained_steps < 1:
+        raise ValueError("sustained_steps must be >= 1")
     if params.cooldown_C < 0:
         raise ValueError("cooldown_C must be >= 0")
     if not (0.0 < params.theta_down < params.theta_target < params.theta_up <= 1.0):
@@ -73,10 +93,10 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
     if params.predictor not in _PREDICTORS:
         raise ValueError(f"predictor must be one of {_PREDICTORS}")
     if params.predictor == "tcn_delta":
-        if params.ttw_ticks != 1:
-            raise ValueError("tcn_delta requires ttw_ticks=1 (one Alibaba minute per sample)")
+        if params.ticks_per_window != 1:
+            raise ValueError("tcn_delta requires ticks_per_window=1 (one Alibaba minute per sample)")
         if params.feature_window != 60:
             raise ValueError("tcn_delta requires feature_window=60")
-        if params.horizon_H != 5:
-            raise ValueError("tcn_delta requires horizon_H=5")
+        if params.forecast_horizon != 5:
+            raise ValueError("tcn_delta requires forecast_horizon=5")
     return params

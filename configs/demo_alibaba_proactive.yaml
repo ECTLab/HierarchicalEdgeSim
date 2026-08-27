@@ -48,18 +48,18 @@ autoscaler:
   name: proactive_auto_scaler
   decision_every_k_ticks: 1
   params:
-    ttw_ticks: 1
+    ticks_per_window: 1
     feature_window: 60
-    horizon_H: 5
+    forecast_horizon: 5
     theta_up: 0.80
     theta_down: 0.30
     theta_target: 0.60
-    # TCN's upward bias keeps most hats ≥ θ_up, so a small sustained_tau
+    # TCN's upward bias keeps most hats ≥ θ_up, so a small sustained_steps
     # skips BEV and dumps residual into cpu_min BEH replicas (μ=0). Keep
     # BEV-first; BEH still fires when vertical room is gone.
-    sustained_tau: 99
+    sustained_steps: 99
     # Scale-down only (K8s HPA: scaleUp stabilization 0s, scaleDown 300s).
-    # 1 TTW = 1 min here, so 5 ≈ five minutes. Scale-up is not delayed.
+    # 1 window = 1 min here, so 5 ≈ five minutes. Scale-up is not delayed.
     cooldown_C: 5
     predictor: tcn_delta
     model_dir: models/tcn_delta_v1

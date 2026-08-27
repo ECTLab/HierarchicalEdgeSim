@@ -10,14 +10,14 @@ if TYPE_CHECKING:
 
 def forecast_horizon(
     x: list[float],
-    horizon_h: int,
+    steps: int,
     predictor: "OneStepRpsPredictor",
     *,
     feature_window: int | None = None,
 ) -> list[float]:
-    """Return H predictions; never mutates ``x``."""
-    if horizon_h < 1:
-        raise ValueError("horizon_h must be >= 1")
+    """Return ``steps`` predictions; never mutates ``x``."""
+    if steps < 1:
+        raise ValueError("forecast steps must be >= 1")
     if not x:
         raise ValueError("feature window must be non-empty")
     if feature_window is not None and len(x) != feature_window:
@@ -26,7 +26,7 @@ def forecast_horizon(
         )
     z = list(x)
     preds: list[float] = []
-    for _ in range(horizon_h):
+    for _ in range(steps):
         y = float(predictor.predict_next(z))
         preds.append(y)
         z = z[1:] + [y]

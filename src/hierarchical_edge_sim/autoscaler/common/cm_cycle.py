@@ -25,7 +25,7 @@ class CycleIntent:
     need_cpu: float
     need_ram: float
     sustained: bool = False
-    ttw_t: int | None = None
+    window_index: int | None = None
 
 
 def cluster_manager_cycle(

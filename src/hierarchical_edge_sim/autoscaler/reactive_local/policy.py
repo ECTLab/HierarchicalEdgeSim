@@ -34,6 +34,7 @@ class _MsState:
 class ReactiveLocalAutoscaler:
     name: str = "reactive_local"
     cycle: str = "cluster_manager"
+    allocate: str = "allocate_resources"
     params: ReactiveLocalParams = field(default_factory=ReactiveLocalParams)
     decision_every_k_ticks: int = 1
     _state: dict[str, _MsState] = field(default_factory=dict)
@@ -84,6 +85,8 @@ class ReactiveLocalAutoscaler:
             return None
 
         def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
+            # Algorithm 4 (AllocateResources): local BEV then BEH; Up leftover
+            # is ρ. Cooldown starts in on_actions_applied, not here.
             obs = obs_by[intent.ms_id]
             if intent.kind == "up":
                 return ladder_up(

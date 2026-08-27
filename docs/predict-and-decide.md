@@ -83,7 +83,7 @@ Hottest-replica \(u\) is the wrong signal here. Load is fleet-routed; one hot re
 
 Leave these in AllocateResources / cooldown. Do not fold them into `decide.py` to “match the paper.”
 
-- \(\alpha_{up}/\alpha_{down}\) clip so one tick does not jump to full \(A_{\mathrm{req}}\)
+- \(\alpha_{up}/\alpha_{down}\) clip so one tick does not jump to full \(A_{\mathrm{req}}\) ([allocate-resources.md](./allocate-resources.md))
 - success-gated / HPA-style down-only cooldown (tex `StartCooldown(m,c,H)` every window)
 - packed spawn and surplus-down (they recovered the 69% drop, but they are ladder rules)
 

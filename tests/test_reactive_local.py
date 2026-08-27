@@ -237,7 +237,15 @@ def test_yaml_loads_reactive_local(tmp_path):
     scaler = load_autoscaler_from_yaml(path)
     assert scaler is not None
     assert scaler.name == "reactive_local"
+    assert scaler.cycle == "cluster_manager"
+    assert scaler.allocate == "allocate_resources"
     assert scaler.params.sustained_up_streak == 4
+    from hierarchical_edge_sim.env.api import _autoscaler_meta
+
+    meta = _autoscaler_meta(scaler)
+    assert meta["allocate"] == "allocate_resources"
+    assert meta["cycle"] == "cluster_manager"
+    assert "decide" not in meta
     _ = env
 
 

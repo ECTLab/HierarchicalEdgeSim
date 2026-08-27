@@ -113,6 +113,8 @@ No new coding on this branch except docs/cleanup unless a bug blocks S1.
 
 ### S2 — Reactive local ladder (BEV → BEH inside one cluster)
 
+**v1 status:** done — see [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md). How Algorithm 4 is mapped: [allocate-resources.md](./allocate-resources.md).
+
 **Policy:** evolve beyond vertical-only (new scaler name or extend `reactive_vertical` → e.g. `reactive_local`).
 
 **Behavior (Up)**

@@ -40,6 +40,7 @@ class ProactiveAutoScaler:
     name: str = "proactive_auto_scaler"
     cycle: str = "cluster_manager"
     decide: str = "predict_and_decide"
+    allocate: str = "allocate_resources"
     params: ProactiveAutoScalerParams = field(default_factory=ProactiveAutoScalerParams)
     decision_every_k_ticks: int = 1
     _predictor: OneStepRpsPredictor | HorizonRpsPredictor = field(default_factory=PersistencePredictor)
@@ -161,6 +162,7 @@ class ProactiveAutoScaler:
             return None
 
         def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
+            # Algorithm 4 (AllocateResources): same ladder as reactive_local.
             obs = obs_by[intent.ms_id]
             if intent.kind == "up":
                 ms_actions, leftover = ladder_up(

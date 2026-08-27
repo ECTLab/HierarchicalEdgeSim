@@ -1152,6 +1152,9 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     decide = getattr(autoscaler, "decide", None)
     if decide:
         meta["decide"] = decide
+    allocate = getattr(autoscaler, "allocate", None)
+    if allocate:
+        meta["allocate"] = allocate
     return meta
 
 

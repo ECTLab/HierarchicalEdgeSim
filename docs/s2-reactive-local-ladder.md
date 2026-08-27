@@ -5,6 +5,8 @@
 **Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S2  
 **Depends on:** [s1-horizontal-mutation-apis.md](./s1-horizontal-mutation-apis.md)
 
+**Algorithm 4 mapping:** [allocate-resources.md](./allocate-resources.md)
+
 S2 adds a **policy** that uses S1 mutations. `reactive_vertical` stays as a BEV-only baseline. The new scaler is `reactive_local`.
 
 Shared `autoscaler.params` (streaks, θ, α, δ, weights): [reactive-local-params.md](./reactive-local-params.md).

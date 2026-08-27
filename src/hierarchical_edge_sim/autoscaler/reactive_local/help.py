@@ -7,6 +7,12 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class HelpRequest:
+    """Paper ρ after AllocateResources (leftover Up residual).
+
+    Tex also carries forecast hats for lender Reserve; this env has no
+    Reserve/safe_j, so hats are omitted. ``t_det`` is Algorithm 2 FCFS.
+    """
+
     seq: int
     tau: int
     ms_id: str

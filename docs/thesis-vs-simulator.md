@@ -3,7 +3,7 @@
 **Status:** review draft (comparison as of 2026-08-26)  
 **Tex:** `proposed_method_complete.tex` (Proposed Method — Consolidated Draft 3, Summer 2026)  
 **Code:** current HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
-**Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [predict-and-decide.md](./predict-and-decide.md) · [naming-refactor.md](./naming-refactor.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
+**Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [predict-and-decide.md](./predict-and-decide.md) · [allocate-resources.md](./allocate-resources.md) · [naming-refactor.md](./naming-refactor.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
 
 This note compares every named algorithm and clarification in the proposed-method tex with the simulator. It also lists places where the implementation is *more reasonable* than the algorithm (tex holes that showed up against this env’s serving model).
 
@@ -25,13 +25,12 @@ Several algorithms are **lite** relative to the tex, and a handful of control-pa
 
 | Count | Status | Meaning |
 |---|---|---|
-| 4 | Stronger than the tex | Same job, but the code closes a hole the algorithm omitted |
-| 1 | Structural match | Same control flow |
+| 5 | Stronger than the tex | Same job, but the code closes a hole the algorithm omitted |
 | 5 | Implemented lite | Same job; paper pieces stubbed |
 
 **Implemented as specified (structure):** VicinityPartitionAndLeaderElection at bootstrap, AllocateResources, reusable BEV/BEH, loan registry, owner-mediated mutation, cost-ordered scale-down, CheckCascadingMigration, a vicinity-wide FCFS help round, and BEG outside the home vicinity.
 
-**Implemented, but not the way the tex writes them:** PredictAndDecide, BEV packing, BEH spawn sizing, cooldown, FCFS, and BEG ranking. In these places the code is usually *stricter* than the algorithm, for reasons that showed up in real runs.
+**Implemented, but not the way the tex writes them:** PredictAndDecide, AllocateResources cooldown/step caps, BEV packing, BEH spawn sizing, FCFS, and BEG ranking. In these places the code is usually *stricter* than the algorithm, for reasons that showed up in real runs.
 
 **Not implemented:** lender `Reserve` / `safe_j` (clarification 7), confidence \(\kappa\) / predictor ensemble, BEG’s expected-response-time gate, root application admission, periodic re-partition \(T_{\mathit{repart}}\), and leader heartbeat failover. Inter-cluster distance exists for Algorithm 1; BEG and the vicinity help round still do not rank by it.
 
@@ -57,7 +56,7 @@ That split matches what the project’s own stage docs already call “lite vs p
 | VicinityPartitionAndLeaderElection | Alg. vicinity | `env/partition.py` | Implemented lite | Listing mapped at bootstrap from coords or `latency_ms`. YAML `vicinities:` remains an experiment override. No \(T_{\mathit{repart}}\), heartbeat, or RPCs. |
 | ClusterManagerCycle | Alg. cmcycle | `autoscaler/common/cm_cycle.py` | Implemented lite | Per-cluster \(Q_c\) then one vicinity round + BEG in one hook. \(t_{det}=\tau\). No CM processes, barrier, or \(\Delta t_{plan}\). |
 | PredictAndDecide | Alg. predict | `proactive_auto_scaler/decide.py` | Stronger than tex | Same Up/Down/None + sustained shape, but util/residual use serving headroom \(\sum(A-\min)\), not total alloc. No \(\kappa\) ensemble; TCN or persistence, not LSTM pool. Mapping: [predict-and-decide.md](./predict-and-decide.md). |
-| AllocateResources | Alg. allocate | `reactive_local/allocate.py` | Matches tex | BEV → BEH → \(\rho\) for Up; Down never leaves home. Cooldown is success-gated (and proactive Up/Down is asymmetric), not `StartCooldown(H)` every window. |
+| AllocateResources | Alg. allocate | `reactive_local/allocate.py` | Stronger than tex | BEV → BEH → \(\rho\) for Up; Down never leaves home. Cooldown is success-gated (and proactive Up/Down is asymmetric), not `StartCooldown(H)` every window. Mapping: [allocate-resources.md](./allocate-resources.md). |
 | BEV | Alg. bev | `common/distribute.py` | Stronger than tex | Hottest-first packing with \(\mu\)-matched CPU/RAM, skip \(\mu=0\) resizes, last-replica surplus floor. Borrowed Grow/Shrink goes through owner API at apply time. |
 | BEH | Alg. beh | `reactive_local/beh.py` | Stronger than tex | Same host-then-free ranking and global→vicinity→local reclaim. Spawns above minima so \(\mu>0\). Never kills the last replica; extras die only if remaining \(\mu\) still covers \(\mu_{\text{tgt}}\). |
 | CheckCascadingMigration | Alg. cascade | `reactive_local/cascade.py` | Stronger than tex | At most one borrowed replica home after local free ≥ minima. Extra `LAST_REPLICA` guard, pending-free snapshot, `cascade_home` flag. Still per-MS (tex prose vs algorithm). |
@@ -150,11 +149,13 @@ Routing is CPU-headroom weighted, so a replica at `cpu_min` gets share 0. Using 
 
 See [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md). How the listing is mapped (gate vs residual, what the tex should absorb, sample runs): [predict-and-decide.md](./predict-and-decide.md). Letter collisions (`r*` vs `peak_rps`): [naming-refactor.md](./naming-refactor.md).
 
-### 4. AllocateResources — structural match
+### 4. AllocateResources — implemented, cooldown and step caps differ
 
 Up: BEV (unless `sustained`) → BEH → leftover \(\rho\) for vicinity. Down: BEV/BEH only, then clamp; never escalate. That is exactly the tex’s “down cannot leave the home cluster.”
 
-Differences: cooldown is **success-gated**; proactive cooldown is **down-only after an Up** (Kubernetes HPA-style), not `StartCooldown(m,c,H)` after every window. Rate caps \(\alpha_{up}/\alpha_{down}\) clip the tex residual to one step per tick so the ladder does not jump to \(A_{\text{req}}\) in one decision.
+Differences: cooldown is **success-gated**; proactive cooldown is **down-only after an Up** (Kubernetes HPA-style), not `StartCooldown(m,c,H)` after every window. Rate caps \(\alpha_{up}/\alpha_{down}\) clip the tex residual to one step per tick so the ladder does not jump to \(A_{\text{req}}\) in one decision. Down with extra replicas skips BEV-shrink of the seed in the same tick as a terminate.
+
+How the listing is mapped (what to keep in the sim, what the tex should absorb, \(\alpha\)/\(\delta\) discussion): [allocate-resources.md](./allocate-resources.md).
 
 ### 5. BEV — implemented, packing is stricter
 
@@ -349,13 +350,14 @@ Claims to qualify or drop:
 - You **can** claim Algorithm 1 (bootstrap partition + capacity-first election) when the world is built from coords/`latency_ms`. Still do **not** claim \(T_{\mathit{repart}}\), heartbeat failover, or distributed leader RPCs.
 - You **can** claim Algorithm 2 (`ClusterManagerCycle`) as the per-cluster intent queue + local allocate + one vicinity round + BEG inside the tick hook. Still do **not** claim CM processes, a leader barrier, or \(\Delta t_{plan}\).
 - You **can** claim Algorithm 3 (`PredictAndDecide`) as the Up/Down/None + `sustained` gate in front of that cycle. Still do **not** claim the tex residual \(A\tilde u/\theta-A\), hottest-replica \(u\), or \(\kappa\) ensemble. Residual is serving-headroom \(A_{\mathrm{req}}\). See [predict-and-decide.md](./predict-and-decide.md).
+- You **can** claim Algorithm 4 (`AllocateResources`) as BEV → BEH → leftover \(\rho\) on Up only; Down never leaves home. Still do **not** claim `StartCooldown(H)` after every call, or applying the full residual in one tick. See [allocate-resources.md](./allocate-resources.md).
 - Do **not** claim lender Reserve / \(\mathrm{safe}_j\).
 - Do **not** claim \(\kappa\)-gated ensemble switching. Cold start is reactive-until-\(W\), then one model.
 - Do **not** claim load–distance BEG. Say least-loaded (free CPU) among clusters outside \(V_{\text{home}}\).
 
 For the \(\mu=0\) / headroom / last-replica rules, the honest framing is: **the algorithms specified resource floors but not a serving model.** Once \(\mu=(A-\min)/\rho\) and headroom routing are the physics, seeding at minima and shrinking to minima are bugs. The simulator made the method operational; those rules should probably move **into** a later draft of the algorithms rather than stay as “implementation details.”
 
-If you want a next step, the highest-value tex updates would be: (1) packed spawn above minima, (2) residual from serving headroom, (3) last-replica + surplus down, (4) coupled CPU/RAM through \(\rho\). The highest-value **code** remaining vs the current tex is Reserve/`safe_j` — only if you still want that as a thesis contribution rather than future work.
+If you want a next step, the highest-value tex updates would be: (1) packed spawn above minima, (2) residual from serving headroom, (3) last-replica + surplus down, (4) coupled CPU/RAM through \(\rho\), (5) success-gated cooldown and a per-window \(\alpha\)/\(\delta\) step on AllocateResources. The highest-value **code** remaining vs the current tex is Reserve/`safe_j` — only if you still want that as a thesis contribution rather than future work.
 
 ---
 
@@ -369,3 +371,4 @@ If you want a next step, the highest-value tex updates would be: (1) packed spaw
 | v4 | 2026-08-27 | Algorithm 2 mapped as in-process ClusterManagerCycle |
 | v5 | 2026-08-27 | Pointer to cluster-manager-cycle.md demo checklist and samples |
 | v6 | 2026-08-27 | Algorithm 3 mapped; pointer to predict-and-decide.md |
+| v7 | 2026-08-27 | Algorithm 4 mapped; pointer to allocate-resources.md |

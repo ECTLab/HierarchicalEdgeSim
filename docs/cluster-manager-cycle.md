@@ -23,7 +23,7 @@ This is **not** `run_env_only.py`. Algorithm 1 (partition) can run with no autos
 
 `M_c` is the set of microservices whose **app-owner cluster** is \(c\). A lender cluster does not run a second decide for a loaned replica (clarification 6: single writer). Fleet metrics already include borrowed containers.
 
-The decide plug-in is reactive streaks or `PredictAndDecide` (Algorithm 3). How that listing is mapped, and why the residual uses serving headroom: [predict-and-decide.md](./predict-and-decide.md). The cycle does not own the predictor ensemble.
+The decide plug-in is reactive streaks or `PredictAndDecide` (Algorithm 3). How that listing is mapped, and why the residual uses serving headroom: [predict-and-decide.md](./predict-and-decide.md). The cycle does not own the predictor ensemble. Local BEV then BEH is Algorithm 4: [allocate-resources.md](./allocate-resources.md).
 
 ---
 
@@ -129,20 +129,21 @@ Run ids are `{seed}_{UTC}`. Folders below are from 2026-08-27 checks.
 
 ### `demo_60_reactive_local.yaml` — local BEV/BEH
 
-Sample: `results/reactive_local_60/42_20260827T062448Z`
+Sample: `results/reactive_local_60/42_20260827T194609Z` (`allocate: allocate_resources`; actions match `42_20260827T062448Z`)
 
 ```yaml
 autoscaler:
   enabled: true
   name: reactive_local
   cycle: cluster_manager
+  allocate: allocate_resources
 ```
 
 `actions.csv`: 7× `bev_up`, 1× `beh_spawn` (plus seed). No `vicinity_spawn` / `beg_spawn`. The BEH replica landed on **c1-w1** (already hosting), not empty sibling `c1-w2` — BEH prefer-hosting, not a cycle miss. Conservation held.
 
 ### `demo_60_vicinity_help.yaml` — leftover → vicinity
 
-Sample: `results/vicinity_help_60/42_20260827T062448Z`
+Sample: `results/vicinity_help_60/42_20260827T194610Z` (`allocate: allocate_resources`; actions match `42_20260827T062448Z`)
 
 `cycle: cluster_manager`. 5× `vicinity_spawn` onto **c2** (`c-api-c2-w1-*`). No `beg_spawn`. Also some `bev_up` on the home replica. Conservation held.
 
@@ -154,13 +155,14 @@ Sample: `results/global_help_60/42_20260827T062449Z`
 
 ### `demo_60_proactive.yaml` — same cycle, Algorithm 3 decide
 
-Sample: `results/proactive_60/42_20260827T185431Z` (`decide: predict_and_decide`; actions match `42_20260827T062449Z`)
+Sample: `results/proactive_60/42_20260827T194610Z` (`decide: predict_and_decide`, `allocate: allocate_resources`; actions match `42_20260827T062449Z`)
 
 ```yaml
 autoscaler:
   name: proactive_auto_scaler
   cycle: cluster_manager
   decide: predict_and_decide
+  allocate: allocate_resources
 ```
 
 Local `beh_spawn` / `beh_terminate` / `bev_up` on **c1** only. Two `need_vicinity_help` log lines after the home cluster filled (no root). No `vicinity_spawn` / `beg_spawn`. More local spawns than reactive_local, so fewer drops on the same trace. Conservation held.
@@ -185,3 +187,4 @@ python3 -m pytest tests/test_cm_cycle.py tests/test_reactive_local.py tests/test
 | v2 | 2026-08-27 | Cycle moved to `autoscaler/common/cm_cycle.py` |
 | v3 | 2026-08-27 | Why the tex gaps stay stubbed; how to read runs; 60-tick sample excerpts |
 | v4 | 2026-08-27 | Pointer to Algorithm 3 decide field on the proactive sample |
+| v5 | 2026-08-27 | Pointer to Algorithm 4 allocate field |

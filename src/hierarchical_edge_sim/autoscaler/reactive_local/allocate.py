@@ -1,4 +1,13 @@
-"""AllocateResources: BEV → BEH → vicinity → BEG, plus cost-ordered down."""
+"""AllocateResources (paper Algorithm allocate / Algorithm 4).
+
+The listing is the local escalator only: BEV then BEH, leftover ρ on Up,
+clamp on Down (never escalate). Vicinity and BEG are Algorithm 2's
+``resolve_help``, not this listing — they live in this file because the
+leftover tuple is built here.
+
+Cooldown and α/δ step caps sit outside this module (policy apply hook /
+``up_delta`` / ``_clip_step``). See ``docs/allocate-resources.md``.
+"""
 
 from __future__ import annotations
 
@@ -228,6 +237,7 @@ def ladder_up(
     need_ram: float,
     sustained: bool,
 ) -> tuple[list[Any], HelpRequest | None]:
+    """Algorithm 4 Up: BEV (unless sustained) → BEH → optional leftover ρ."""
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     actions: list[Any] = []
@@ -292,6 +302,12 @@ def ladder_down(
     delta_cpu: float,
     delta_ram: float,
 ) -> list[Any]:
+    """Algorithm 4 Down: BEV/BEH at home only; leftover is dropped (no ρ).
+
+    Extra replicas: skip BEV-shrink of the seed in the same tick as a
+    terminate (tex would shrink and kill together). Cascade is Algorithm
+    cascade, invoked from here after local free.
+    """
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     ram_modeled = spec.ram_per_request_mb > EPS

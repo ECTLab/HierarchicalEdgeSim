@@ -44,6 +44,7 @@ def cluster_manager_cycle(
 
     ``allocate`` is AllocateResources (BEV then BEH). Leftover ρ is merged
     FCFS and passed to ``resolve_help`` (VicinityLeaderSchedule then BEG).
+    Mapping: ``docs/allocate-resources.md``.
     """
     by_cluster: dict[str, list[str]] = {}
     for ms_id in env.list_microservices():

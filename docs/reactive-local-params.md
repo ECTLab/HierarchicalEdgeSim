@@ -1,6 +1,6 @@
 # Reactive scaler params (plain language)
 
-These keys live under `autoscaler.params` for `reactive_vertical` and `reactive_local`. They answer three questions: **when** to move, **how big** a step, and **which replica** gets it.
+These keys live under `autoscaler.params` for `reactive_vertical` and `reactive_local`. They answer three questions: **when** to move, **how big** a step, and **which replica** gets it. Why \(\alpha\)/\(\delta_{\min}\) exist as a speed limit (Algorithm 4 discussion): [allocate-resources.md](./allocate-resources.md).
 
 Triangle demos use the values below. Toy tests may use smaller streaks/cooldowns.
 

@@ -14,6 +14,7 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 | Names | VerticalScaling, HorizontalScaling, VicinityRound | Action reasons `vertical_*`, `horizontal_*`, `vicinity_*`. Module `horizontal.py`. |
 | Borrowed scale-down | Eq. split: \(L=\min(R,B)\) becomes \(\xi\); local tiers see only \(N_c\); ScheduleReleases farthest-first then shrink | `ReleaseIntent` + `schedule_releases`. Local `vertical_*` / `horizontal_*` on home replicas only. `vicinity_terminate` / `vicinity_down` from the vicinity round. |
 | Vicinity leader | Only \(\ell(V)\) runs the body; barrier on all \(\lvert V\rvert\) reports including empty offers; broadcast \(\Pi\); members ApplyVicinityPlan | `VicinityReport` per member (empty Q/R is an offer). `env.is_leader` is the only cluster that calls `schedule_vicinity_plan`. `ApplyVicinityPlan` emits env actions. One-process stand-in: no RPC, barrier is “all local allocate finished”. |
+| SchedulePlacements | Grow existing (local hosts before remote loans), then spawn; search all of \(N_V\) including \(N_{c'}\) so Phase 1 frees can recycle home; rank home, hosting, \(d\) ascending | `grow_existing_instances` then `place_packed_spawns` over `rank_placement_servers`. Home recycle is `horizontal_spawn` with no loan; remote is `vicinity_spawn`. Grow reason `vicinity_up`. Ceiling is post-release free (no `safe_j` yet). Spawn stays packed, not minima. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 
@@ -51,7 +52,6 @@ Do **not** treat these as tex bugs. They are paper designs the simulator has not
 - Confidence \(\kappa\) / MAPE
 - Decrease-before-Increase in \(Q_c\)
 - Cross-MS cascade via Evict
-- Grow-existing and distance ranking inside VicinityRound placements
 - Periodic re-partition \(T_{\mathit{repart}}\) and root admission
 
 ---
@@ -60,6 +60,7 @@ Do **not** treat these as tex bugs. They are paper designs the simulator has not
 
 | Date | Note |
 |---|---|
-| 2026-09-16 | VicinityRound matches the leader listing: every member reports (empty offers included), only \(\ell(V)\) computes \(\Pi\), ApplyVicinityPlan emits actions. Grow / \(safe_j\) / home recycle still paper-ahead. Packed spawn stays. |
+| 2026-09-16 | SchedulePlacements matches Alg. place: grow existing (home then nearer loans, μ-matched), then packed spawn over all of \(N_V\) including home recycle after Phase 1. Distance ranking replaces YAML member order. Packed spawn and free-not-\(safe_j\) stay. |
+| 2026-09-16 | VicinityRound matches the leader listing: every member reports (empty offers included), only \(\ell(V)\) computes \(\Pi\), ApplyVicinityPlan emits actions. Packed spawn stays. |
 | 2026-09-16 | Borrowed scale-down matches the paper: Eq. split \(\xi\), local tiers on \(N_c\), ScheduleReleases farthest-first then shrink. Floor extras stay fully releasable. |
 | 2026-09-16 | Started the align-sim-to-tex pass: dropped the global rung and renamed Vertical / Horizontal / Vicinity. Packed spawn and serving-headroom rules stay in the sim. |

@@ -2,8 +2,9 @@
 
 One-process mapping: every member of V produces a report (empty offers
 included). Only ℓ(V) runs ScheduleReleases then SchedulePlacements into a
-plan Π. ApplyVicinityPlan turns Π into env actions. Grow / safe_j / home
-recycle are later rows; packed spawn stays.
+plan Π. ApplyVicinityPlan turns Π into env actions. Placements grow existing
+hosts (local then nearer loans) then packed-spawn over all of N_V, including
+home after Phase 1 frees room. Spawn stays packed, not minima; safe_j is later.
 """
 
 from __future__ import annotations
@@ -18,10 +19,9 @@ from hierarchical_edge_sim.env.api import (
     TerminateAction,
     UnmetDemandAction,
 )
-from hierarchical_edge_sim.env.config import EPS
 
 from .help import HelpRequest, ReleaseIntent, help_fcfs_key
-from .place import place_packed_spawns, snapshot_free, subtract_pending
+from .place import schedule_placements, snapshot_free, subtract_pending
 from .release import schedule_releases
 
 __all__ = [
@@ -201,22 +201,16 @@ def schedule_vicinity_plan(
 
     free_cpu, free_ram = snapshot_free(env, members)
     subtract_pending(env, pending + list(rel_actions), free_cpu, free_ram)
-    unmet: list[HelpRequest] = []
-    for req in requests:
-        ranked = _rank_neighbor_servers(env, members, req.home_cluster_id, free_cpu)
-        placed, req.remain_cpu, req.remain_ram = place_packed_spawns(
-            env,
-            req,
-            ranked_servers=ranked,
-            free_cpu=free_cpu,
-            free_ram=free_ram,
-            tau=tau,
-            reason="vicinity_spawn",
-            loan_tier="vicinity",
-        )
-        entries.extend(plan_entry_from_action(env, action) for action in placed)
-        if req.remain_cpu > EPS or req.remain_ram > EPS:
-            unmet.append(req)
+    placed, unmet = schedule_placements(
+        env,
+        requests,
+        members=members,
+        pending=pending + list(rel_actions),
+        free_cpu=free_cpu,
+        free_ram=free_ram,
+        tau=tau,
+    )
+    entries.extend(plan_entry_from_action(env, action) for action in placed)
     return VicinityPlan(
         vicinity_id=vicinity_id,
         leader_cluster_id=leader,
@@ -354,20 +348,3 @@ def leftover_to_unmet_demand(req: HelpRequest) -> UnmetDemandAction:
         residual_ram_mb=req.remain_ram,
         cluster_id=req.home_cluster_id,
     )
-
-
-def _rank_neighbor_servers(
-    env: Env,
-    members: list[str],
-    home_cluster_id: str,
-    free_cpu: dict[str, float],
-) -> list[str]:
-    """Config member order (skip home), then free CPU descending, then server id."""
-    ranked: list[str] = []
-    for cluster_id in members:
-        if cluster_id == home_cluster_id:
-            continue
-        sids = list(env.get_cluster(cluster_id).server_ids)
-        sids.sort(key=lambda sid: (-free_cpu.get(sid, 0.0), sid))
-        ranked.extend(sids)
-    return ranked

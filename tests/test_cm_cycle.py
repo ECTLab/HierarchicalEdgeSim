@@ -58,7 +58,7 @@ def test_cycle_allocates_per_cluster_then_merges_help_by_ms_id():
             need_ram=1.0,
         )
 
-    def allocate(intent: CycleIntent):
+    def allocate(intent: CycleIntent, queued_releases=None):
         allocate_order.append(intent.ms_id)
         leftover = HelpRequest(
             seq=0,
@@ -100,7 +100,7 @@ def test_cycle_same_cluster_fcfs_by_ms_id():
             need_ram=0.0,
         )
 
-    def allocate(intent: CycleIntent):
+    def allocate(intent: CycleIntent, queued_releases=None):
         allocate_order.append(intent.ms_id)
         return [SimpleNamespace(type="resize", ms_id=intent.ms_id)], None
 
@@ -113,6 +113,37 @@ def test_cycle_same_cluster_fcfs_by_ms_id():
     )
     assert allocate_order == ["api", "web"]
     assert [a.ms_id for a in actions] == ["api", "web"]
+
+
+def test_cycle_decrease_before_increase_same_window():
+    env = _FakeEnv(
+        owners={"api": "c1", "web": "c1"},
+        ms_order=["api", "web"],
+    )
+    allocate_order: list[str] = []
+
+    def scan_ms(ms_id: str) -> CycleIntent:
+        return CycleIntent(
+            ms_id=ms_id,
+            cluster_id="c1",
+            t_det=7,
+            kind="up" if ms_id == "api" else "down",
+            need_cpu=1.0,
+            need_ram=0.0,
+        )
+
+    def allocate(intent: CycleIntent, queued_releases=None):
+        allocate_order.append((intent.kind, intent.ms_id))
+        return [], None
+
+    cluster_manager_cycle(
+        env,
+        7,
+        scan_ms=scan_ms,
+        allocate=allocate,
+        resolve_help=lambda *_args, **_kwargs: [],
+    )
+    assert allocate_order == [("down", "web"), ("up", "api")]
 
 
 def test_cycle_passes_release_intents_before_help():
@@ -129,7 +160,7 @@ def test_cycle_passes_release_intents_before_help():
             need_ram=256.0,
         )
 
-    def allocate(intent: CycleIntent):
+    def allocate(intent: CycleIntent, queued_releases=None):
         return [], ReleaseIntent(
             seq=0,
             tau=3,

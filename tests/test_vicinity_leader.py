@@ -161,7 +161,7 @@ def test_apply_vicinity_plan_turns_entries_into_env_actions(tmp_path):
     assert spawns[0].server_id == "c2-w1"
     assert spawns[0].reason == "vicinity_spawn"
     assert spawns[0].loan_tier == "vicinity"
-    assert spawns[0].actor_cluster_id == "c1"
+    assert spawns[0].actor_cluster_id == "c2"
 
 
 def test_neighbor_leader_places_packed_spawn_for_home_request(tmp_path):

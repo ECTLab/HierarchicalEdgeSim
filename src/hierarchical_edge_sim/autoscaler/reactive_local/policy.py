@@ -86,7 +86,8 @@ class ReactiveLocalAutoscaler:
 
         def allocate(
             intent: CycleIntent,
-        ) -> tuple[list[Any], HelpRequest | ReleaseIntent | None]:
+            queued_releases: list | None = None,
+        ) -> tuple[list[Any], HelpRequest | ReleaseIntent | list | None]:
             # AllocateResources: local Vertical then Horizontal; Up leftover is ρ.
             # Cooldown starts in on_actions_applied, not here.
             obs = obs_by[intent.ms_id]
@@ -109,6 +110,7 @@ class ReactiveLocalAutoscaler:
                 self.params,
                 delta_cpu=intent.need_cpu,
                 delta_ram=intent.need_ram,
+                queued_releases=queued_releases,
             )
 
         actions = cluster_manager_cycle(

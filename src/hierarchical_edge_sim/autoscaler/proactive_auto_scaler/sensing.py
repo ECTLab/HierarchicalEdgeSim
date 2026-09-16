@@ -7,6 +7,7 @@ from typing import Any
 
 from hierarchical_edge_sim.env.api import Env
 
+from .confidence import CountConfidence
 from .history import RpsHistory
 from .params import ProactiveAutoScalerParams
 from .predictors.window import time_window
@@ -21,6 +22,8 @@ class SenseCloseResult:
     forecast_rps: tuple[float, ...] | None
     history_full: bool
     history_len: int
+    kappa: float = 0.0
+    mape: float = 0.0
 
 
 @dataclass(slots=True)
@@ -28,6 +31,7 @@ class ProactiveSensing:
     params: ProactiveAutoScalerParams
     predictor: Any
     _histories: dict[str, RpsHistory] = field(default_factory=dict)
+    _confidence: dict[str, CountConfidence] = field(default_factory=dict)
     _window_request_totals: dict[str, float] = field(default_factory=dict)
 
     def on_tick(self, env: Env, tau: int) -> list[SenseCloseResult]:
@@ -66,6 +70,12 @@ class ProactiveSensing:
                         close_time_tick=close_time_tick,
                     )
                 )
+            w_kappa = self.params.window_kappa or self.params.feature_window
+            tracker = self._confidence.setdefault(ms_id, CountConfidence(w_kappa))
+            next_count = None
+            if predicted:
+                next_count = predicted[0] * window_len * tick_sec
+            kappa = tracker.observe(n_requests, next_count)
             closed.append(
                 SenseCloseResult(
                     ms_id=ms_id,
@@ -74,6 +84,8 @@ class ProactiveSensing:
                     forecast_rps=predicted,
                     history_full=history.is_full(),
                     history_len=len(history),
+                    kappa=kappa,
+                    mape=tracker.mape(),
                 )
             )
         return closed

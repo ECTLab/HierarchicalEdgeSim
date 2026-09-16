@@ -125,8 +125,8 @@ def _write_three_replica_world(
     return env
 
 
-def _push_slack(env: Env, tau: int) -> None:
-    for cid in env.get_microservice("api").container_ids:
+def _push_slack(env: Env, tau: int, ms_id: str = "api") -> None:
+    for cid in env.get_microservice(ms_id).container_ids:
         c = env.get_container(cid)
         c.append_history(
             ContainerTickRecord(
@@ -140,6 +140,26 @@ def _push_slack(env: Env, tau: int) -> None:
                 ram_alloc_mb=c.ram_alloc_mb,
                 q_cpu=0.1,
                 q_ram=0.1,
+            )
+        )
+    env.state.current_tau = tau
+
+
+def _push_busy(env: Env, tau: int, ms_id: str) -> None:
+    for cid in env.get_microservice(ms_id).container_ids:
+        c = env.get_container(cid)
+        c.append_history(
+            ContainerTickRecord(
+                tau=tau,
+                lambda_in=80.0,
+                lambda_served=80.0,
+                lambda_dropped=0.0,
+                cpu_usage_cores=c.cpu_alloc_cores,
+                ram_usage_mb=c.ram_alloc_mb,
+                cpu_alloc_cores=c.cpu_alloc_cores,
+                ram_alloc_mb=c.ram_alloc_mb,
+                q_cpu=1.0,
+                q_ram=1.0,
             )
         )
     env.state.current_tau = tau
@@ -184,38 +204,193 @@ def test_down_releases_farthest_borrowed_before_local(tmp_path):
     assert "c-api-3" not in env.world.containers
 
 
-def test_cascade_pulls_older_borrowed_home_when_local_minima_freed(tmp_path):
-    env = _write_three_replica_world(tmp_path, local_cpu=4.0, local_ram=2048.0)
-    spec = env.get_ms_spec("api")
-    actions = check_cascading_migration(
+def _write_cross_ms_world(tmp_path: Path) -> Env:
+    cfg: dict[str, Any] = {
+        "sim": {"tick_sec": 1.0, "results_dir": str(tmp_path / "results"), "seed": 1},
+        "traces_dir": "traces/demo/",
+        "topology": {
+            "clusters": [
+                {
+                    "id": "c1",
+                    "coords": [0.0, 0.0],
+                    "servers": [{"id": "c1-w1", "cpu_cap_cores": 16.0, "ram_cap_mb": 8192}],
+                },
+                {
+                    "id": "c3",
+                    "coords": [10.0, 0.0],
+                    "servers": [{"id": "c3-w1", "cpu_cap_cores": 8.0, "ram_cap_mb": 4096}],
+                },
+            ],
+            "vicinities": [{"id": "v1", "members": ["c1", "c3"], "leader": "c1"}],
+        },
+        "apps": [
+            {
+                "id": "demo_app",
+                "microservices": [
+                    {
+                        "id": "api",
+                        "cpu_min_cores": 0.5,
+                        "cpu_max_cores": 8.0,
+                        "ram_min_mb": 256,
+                        "ram_max_mb": 4096,
+                        "cpu_per_request_cores": 0.01,
+                        "ram_per_request_mb": 0.5,
+                        "trace_file": "api.csv",
+                        "containers": [
+                            {
+                                "id": "c-api-1",
+                                "server_id": "c1-w1",
+                                "cpu_alloc_cores": 0.5,
+                                "ram_alloc_mb": 256,
+                            },
+                            {
+                                "id": "c-api-2",
+                                "server_id": "c1-w1",
+                                "cpu_alloc_cores": 0.5,
+                                "ram_alloc_mb": 256,
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "id": "media_app",
+                "microservices": [
+                    {
+                        "id": "ingest",
+                        "cpu_min_cores": 0.5,
+                        "cpu_max_cores": 8.0,
+                        "ram_min_mb": 256,
+                        "ram_max_mb": 4096,
+                        "cpu_per_request_cores": 0.01,
+                        "ram_per_request_mb": 0.5,
+                        "trace_file": "ingest.csv",
+                        "containers": [
+                            {
+                                "id": "c-ingest-1",
+                                "server_id": "c1-w1",
+                                "cpu_alloc_cores": 0.5,
+                                "ram_alloc_mb": 256,
+                            },
+                            {
+                                "id": "c-ingest-2",
+                                "server_id": "c3-w1",
+                                "cpu_alloc_cores": 0.5,
+                                "ram_alloc_mb": 256,
+                            },
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+    tdir = tmp_path / "traces" / "demo"
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "api.csv").write_text(VALID_TRACE, encoding="utf-8")
+    (tdir / "ingest.csv").write_text(VALID_TRACE, encoding="utf-8")
+    path = tmp_path / "cross.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    env = Env.from_config(path)
+    add_loan(
+        env.get_server("c3-w1"),
+        borrower_cluster_id="c1",
+        ms_id="ingest",
+        tier=LoanTier.VICINITY,
+        ts=1,
+    )
+    return env
+
+
+def test_cascade_pulls_other_ms_home_via_evict(tmp_path):
+    env = _write_cross_ms_world(tmp_path)
+    assert env.get_app_owner_cluster_id("api") == "c1"
+    assert env.get_app_owner_cluster_id("ingest") == "c1"
+    spawns, evict = check_cascading_migration(
         env,
-        ms_id="api",
+        shrinking_ms_id="api",
         owner_cluster_id="c1",
-        spec=spec,
         freed_cpu=0.5,
         freed_ram=256.0,
         pending=[],
         tau=1,
     )
-    terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
-    spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
-    assert [a.container_id for a in terms] == ["c-api-3"]
-    assert terms[0].reason == "cascade_terminate"
+    assert evict is not None
+    assert evict.kind == "evict"
+    assert evict.ms_id == "ingest"
+    assert evict.evict_container_id == "c-ingest-2"
     assert len(spawns) == 1
-    assert spawns[0].reason == "cascade_spawn"
+    assert spawns[0].ms_id == "ingest"
     assert spawns[0].server_id == "c1-w1"
-    assert spawns[0].cpu_alloc_cores == 0.5
+    assert spawns[0].reason == "cascade_spawn"
+    assert spawns[0].cpu_alloc_cores is not None and spawns[0].cpu_alloc_cores > 0.5
+
+
+def test_cascade_skips_ms_already_in_release_queue(tmp_path):
+    env = _write_cross_ms_world(tmp_path)
+    from hierarchical_edge_sim.autoscaler.reactive_local.help import ReleaseIntent
+
+    queued = [
+        ReleaseIntent(
+            seq=0,
+            tau=1,
+            ms_id="ingest",
+            home_cluster_id="c1",
+            remain_cpu=0.5,
+            remain_ram=256.0,
+            t_det=1,
+        )
+    ]
+    spawns, evict = check_cascading_migration(
+        env,
+        shrinking_ms_id="api",
+        owner_cluster_id="c1",
+        freed_cpu=0.5,
+        freed_ram=256.0,
+        pending=[],
+        tau=1,
+        queued_releases=queued,
+    )
+    assert spawns == []
+    assert evict is None
+
+
+def test_cascade_never_pulls_the_shrinking_ms(tmp_path):
+    env = _write_three_replica_world(tmp_path, local_cpu=4.0, local_ram=2048.0)
+    spawns, evict = check_cascading_migration(
+        env,
+        shrinking_ms_id="api",
+        owner_cluster_id="c1",
+        freed_cpu=0.5,
+        freed_ram=256.0,
+        pending=[],
+        tau=1,
+    )
+    assert spawns == []
+    assert evict is None
+
+
+def test_end_to_end_api_down_evicts_ingest_loan(tmp_path):
+    env = _write_cross_ms_world(tmp_path)
+    scaler = _down_scaler(cascade_home=True, alpha_down=0.5)
+    _push_slack(env, 1, ms_id="api")
+    _push_busy(env, 1, ms_id="ingest")
+    actions = scaler.on_tick_end(env, 1)
+    spawns = [a for a in actions if getattr(a, "reason", "") == "cascade_spawn"]
+    terms = [a for a in actions if getattr(a, "reason", "") == "cascade_terminate"]
+    assert len(spawns) == 1
+    assert spawns[0].ms_id == "ingest"
+    assert len(terms) == 1
+    assert terms[0].container_id == "c-ingest-2"
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert all(getattr(r, "ok", False) for r in results)
-    assert "c-api-3" not in env.world.containers
-    assert not has_loan(env.get_server("c3-w1"), "c1", "api")
-    assert has_loan(env.get_server("c2-w1"), "c1", "api")
-    home_ids = [
+    assert "c-ingest-2" not in env.world.containers
+    assert not has_loan(env.get_server("c3-w1"), "c1", "ingest")
+    home_ingest = [
         cid
-        for cid in env.get_microservice("api").container_ids
+        for cid in env.get_microservice("ingest").container_ids
         if env.get_container(cid).server_id == "c1-w1"
     ]
-    assert len(home_ids) == 2
+    assert len(home_ingest) == 2
 
 
 def test_cascade_home_flag_off_does_not_migrate(tmp_path):

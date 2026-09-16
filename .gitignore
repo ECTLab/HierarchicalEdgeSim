@@ -9,4 +9,4 @@ build/
 results/
 .venv/
 .mplconfig/
-proposed_method_complete.tex
+proposed_method_complete*.tex

@@ -10,7 +10,7 @@ from typing import Any
 
 from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml, quantize_resource
 from .engine import EngineState, run_ticks, tick
-from .loans import add_loan, count_ms_on_server, drop_loan, has_loan
+from .loans import add_loan, count_ms_on_server, drop_loan
 from .metrics_log import make_run_id, write_run_outputs
 from .models import App, Cluster, Container, LoanTier, Microservice, Server, Vicinity
 from .root import RootOrchestrator
@@ -372,12 +372,12 @@ class Env:
         tau: int | None = None,
         loan_tier: str = "",
     ) -> ResizeResult | SpawnResult | TerminateResult:
-        """Single writer for a worker: only the worker-owner or a loaned borrower may mutate.
+        """Single writer for a worker: only owner(j) mutates j (Alg. applyplan).
 
-        Direct ``resize`` / ``spawn`` / ``terminate`` remain the physical ops; this is the
-        authorized path (paper RequestWorkerOwnerScale). Foreign actors without a loan are
-        rejected. Passing ``loan_tier="vicinity"`` grants a fresh loan and
-        then spawns; a failed spawn rolls the grant back.
+        Direct ``resize`` / ``spawn`` / ``terminate`` remain the physical ops. A
+        borrower cannot mutate even with a loan; it may only ask via ρ/ξ. When
+        the owner spawns a replica of a foreign app, a loan is recorded for
+        that app owner. A failed spawn does not leave a loan behind.
         """
         if act == "resize":
             return self._owner_resize(
@@ -406,10 +406,8 @@ class Env:
         raise ValueError(f"unknown owner-scale act '{act}'")
 
     def _authorized_for_server(self, actor_cluster_id: str, server_id: str, ms_id: str) -> bool:
-        server = self.world.servers[server_id]
-        if actor_cluster_id == server.cluster_id:
-            return True
-        return has_loan(server, actor_cluster_id, ms_id)
+        _ = ms_id
+        return actor_cluster_id == self.world.servers[server_id].cluster_id
 
     def _owner_resize(
         self,
@@ -466,22 +464,25 @@ class Env:
                 cpu_alloc_cores=0.0,
                 ram_alloc_mb=0.0,
             )
-        granted_new_loan = False
         if not self._authorized_for_server(actor_cluster_id, server_id, ms_id):
-            tier = _parse_loan_tier(loan_tier)
-            if tier is None:
-                return SpawnResult(
-                    ok=False,
-                    code=SpawnResultCode.NOT_AUTHORIZED,
-                    container_id=container_id or "",
-                    ms_id=ms_id,
-                    server_id=server_id,
-                    cpu_alloc_cores=0.0,
-                    ram_alloc_mb=0.0,
-                )
+            return SpawnResult(
+                ok=False,
+                code=SpawnResultCode.NOT_AUTHORIZED,
+                container_id=container_id or "",
+                ms_id=ms_id,
+                server_id=server_id,
+                cpu_alloc_cores=0.0,
+                ram_alloc_mb=0.0,
+            )
+        borrower = ""
+        if ms_id in self.world.microservices:
+            borrower = self.get_app_owner_cluster_id(ms_id)
+        granted_new_loan = False
+        if borrower and borrower != actor_cluster_id:
+            tier = _parse_loan_tier(loan_tier) or LoanTier.VICINITY
             add_loan(
                 self.world.servers[server_id],
-                borrower_cluster_id=actor_cluster_id,
+                borrower_cluster_id=borrower,
                 ms_id=ms_id,
                 tier=tier,
                 ts=int(tau or self.state.current_tau or 0),
@@ -495,7 +496,7 @@ class Env:
             container_id=container_id or None,
         )
         if not result.ok and granted_new_loan:
-            drop_loan(self.world.servers[server_id], actor_cluster_id, ms_id)
+            drop_loan(self.world.servers[server_id], borrower, ms_id)
         return result
 
     def _owner_terminate(
@@ -533,10 +534,13 @@ class Env:
         result = self.terminate(container_id, ms_id=ms_id)
         if result.ok:
             server = self.world.servers[server_id]
-            if server.cluster_id != actor_cluster_id and count_ms_on_server(
-                server, self.world.containers, ms
-            ) == 0:
-                drop_loan(server, actor_cluster_id, ms)
+            borrower = self.get_app_owner_cluster_id(ms) if ms in self.world.microservices else ""
+            if (
+                borrower
+                and server.cluster_id != borrower
+                and count_ms_on_server(server, self.world.containers, ms) == 0
+            ):
+                drop_loan(server, borrower, ms)
         return result
 
     def resize(
@@ -998,14 +1002,17 @@ class Env:
         return results
 
     def _actor_for_action(self, action: Any) -> str:
+        """Writer is owner(j). Explicit actor is honored so a borrower is rejected."""
         explicit = getattr(action, "actor_cluster_id", "") or ""
         if explicit:
             return explicit
+        server_id = getattr(action, "server_id", "") or ""
+        if server_id and server_id in self.world.servers:
+            return self.world.servers[server_id].cluster_id
+        cid = getattr(action, "container_id", "") or ""
+        if cid in self.world.containers:
+            return self.world.servers[self.world.containers[cid].server_id].cluster_id
         ms_id = getattr(action, "ms_id", "") or ""
-        if not ms_id:
-            cid = getattr(action, "container_id", "") or ""
-            if cid in self.world.containers:
-                ms_id = self.world.containers[cid].microservice_id
         if ms_id and ms_id in self.world.microservices:
             return self.get_app_owner_cluster_id(ms_id)
         return ""

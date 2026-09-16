@@ -67,19 +67,56 @@ def schedule_releases(
     for intent in queued:
         vid = env.vicinity_of(intent.home_cluster_id)
         members = set(env.list_vicinity_members(vid))
-        actions.extend(
-            _release_one(
-                env,
-                intent,
-                members=members,
-                pending_term=pending_term,
-                tau=tau,
+        if intent.kind == "evict" or intent.evict_container_id:
+            actions.extend(
+                _evict_one(
+                    env,
+                    intent,
+                    pending_term=pending_term,
+                    tau=tau,
+                )
             )
-        )
+        else:
+            actions.extend(
+                _release_one(
+                    env,
+                    intent,
+                    members=members,
+                    pending_term=pending_term,
+                    tau=tau,
+                )
+            )
         pending_term.update(
             a.container_id for a in actions if getattr(a, "type", "") == "terminate"
         )
     return actions
+
+
+def _evict_one(
+    env: Env,
+    intent: ReleaseIntent,
+    *,
+    pending_term: set[str],
+    tau: int,
+) -> list[TerminateAction]:
+    cid = intent.evict_container_id
+    if not cid or cid in pending_term or cid not in env.world.containers:
+        return []
+    container = env.get_container(cid)
+    if intent.evict_server_id and container.server_id != intent.evict_server_id:
+        return []
+    if _n_live(env, intent.ms_id, pending_term) <= 1:
+        return []
+    return [
+        TerminateAction(
+            type="terminate",
+            ms_id=intent.ms_id,
+            container_id=cid,
+            reason="cascade_terminate",
+            tau=tau,
+            actor_cluster_id=intent.home_cluster_id,
+        )
+    ]
 
 
 def _release_one(

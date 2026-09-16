@@ -1,8 +1,27 @@
 # Tex follow-ups
 
-Living list of places where the **simulator is the operational method** and `proposed_method_complete.tex` should be updated later. The working rule: change the simulator to match the paper, except when a run showed the paper would mis-serve this env; those exceptions land here instead of being ported into the code.
+Living list of places where the **simulator is the operational method** and the original `proposed_method_complete.tex` should be updated. The working rule: change the simulator to match the paper, except when a run showed the paper would mis-serve this env; those exceptions land here instead of being ported into the code.
+
+**Review draft:** those “Update the paper” items are applied in [`proposed_method_complete-v2.tex`](../proposed_method_complete-v2.tex). The original tex is unchanged so the two can be diffed.
 
 This is not a full paper-vs-sim comparison. Use it as the punch list for the next tex draft.
+
+## Canvas “Update the paper” rows (sim-ahead)
+
+These are exactly the amber-filter rows in the comparison canvas. All of them are listed again as numbered items below; this table is the 1:1 map.
+
+| Canvas topic | md item | Absorbed in v2? |
+|---|---|---|
+| Horizontal spawn size | 1. Packed spawn above minima | yes |
+| Utilization and residual | 2. Serving-headroom $u$ and $\delta$ | yes |
+| Load balancer | 4. Headroom-weighted routing | yes |
+| Scale-down stopping conditions | 5. Last-replica and surplus-down | yes |
+| Vertical packing | 3. $\mu$-matched CPU/RAM; hottest-first | yes |
+| Observation during cooldown | 7. Keep observing; delay Down only | yes |
+| Per-window step size | 8. $\alpha/\delta$ step caps | yes |
+| Resource quantum | 9. Quantum $0.01$ | yes |
+
+Related (not a separate canvas row, but the same punch list): floor extras fully releasable (item 6); no $T_{\mathit{repart}}$ (item 10). The canvas admission/partition rows are already **match** under a static world; v2 drops the leftover $T_{\mathit{repart}}$ prose so the tex agrees.
 
 ---
 
@@ -14,15 +33,21 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 | Names | VerticalScaling, HorizontalScaling, VicinityRound | Action reasons `vertical_*`, `horizontal_*`, `vicinity_*`. Module `horizontal.py`. |
 | Borrowed scale-down | Eq. split: \(L=\min(R,B)\) becomes \(\xi\); local tiers see only \(N_c\); ScheduleReleases farthest-first then shrink | `ReleaseIntent` + `schedule_releases`. Local `vertical_*` / `horizontal_*` on home replicas only. `vicinity_terminate` / `vicinity_down` from the vicinity round. |
 | Vicinity leader | Only \(\ell(V)\) runs the body; barrier on all \(\lvert V\rvert\) reports including empty offers; broadcast \(\Pi\); members ApplyVicinityPlan | `VicinityReport` per member (empty Q/R is an offer). `env.is_leader` is the only cluster that calls `schedule_vicinity_plan`. `ApplyVicinityPlan` emits env actions. One-process stand-in: no RPC, barrier is “all local allocate finished”. |
-| SchedulePlacements | Grow existing (local hosts before remote loans), then spawn; search all of \(N_V\) including \(N_{c'}\) so Phase 1 frees can recycle home; rank home, hosting, \(d\) ascending | `grow_existing_instances` then `place_packed_spawns` over `rank_placement_servers`. Home recycle is `horizontal_spawn` with no loan; remote is `vicinity_spawn`. Grow reason `vicinity_up`. Ceiling is post-release free (no `safe_j` yet). Spawn stays packed, not minima. |
+| SchedulePlacements | Grow existing (local hosts before remote loans), then spawn; search all of \(N_V\) including \(N_{c'}\) so Phase 1 frees can recycle home; rank home, hosting, \(d\) ascending | `grow_existing_instances` then `place_packed_spawns` over `rank_placement_servers`. Home recycle is `horizontal_spawn` with no loan; remote is `vicinity_spawn`. Grow reason `vicinity_up`. Ceiling is `safe_j`. Spawn stays packed, not minima. |
+| Owner(j) writer | Borrower cannot mutate a lent worker except as \(\rho\)/\(\xi\); owner applies the plan | `actor_cluster_id` must equal `owner(j)`. Borrower remote mutate is `NOT_AUTHORIZED`. Owner spawn of a foreign app records the loan. |
+| CheckCascadingMigration | After \(m\) shrinks, at most one borrowed replica of a different \(m^*\) comes home; Evict via the leader | `check_cascading_migration` → packed local spawn + Evict \(\xi\). Never \(m\), never \(m^*\) already in \(R_V\). LAST_REPLICA stays. |
+| Same-window FCFS | \(Q_c\) Decrease before Increase, then id | `intents.sort(key=(t_det, 0 if down else 1, ms_id))`. |
+| Lender Reserve / \(safe_j\) | Leftover own \(\rho\) → \(\mathrm{Reserve}_c\) → \(safe_j\); leader never offers raw free | `member_safe_ceilings`. VicinityRound places against `safe_j`. Phase-1 releases raise remaining safe. |
+| Predictor confidence \(\kappa\) | \(\kappa=0\) until \(W_\kappa\), else \(1/(1+\mathrm{MAPE})\); below \(\kappa_{\min}\) ignore hats | `CountConfidence` + `trust_forecast`. Predictor still runs every window. |
+| Admission + partition | Least-loaded stamp; Algorithm 1 at init | `env/admission.py` + `build_world` once. YAML \(V\) remains an experiment override. Clusters/workers/\(V\) are static. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 
 ---
 
-## Keep in the sim; absorb into the tex later
+## Keep in the sim; absorbed into `proposed_method_complete-v2.tex`
 
-These are the cases where the simulator is right and a literal reading of the current algorithms is not, under \(\mu=\min((A-\min)/\rho)\) and CPU-headroom routing.
+These are the cases where the simulator is right and a literal reading of the original `proposed_method_complete.tex` is not, under \(\mu=\min((A-\min)/\rho)\) and CPU-headroom routing. The review draft applies all eight canvas rows plus items 6 and 10. Keep the sim; do not revert these if you reject a particular v2 edit.
 
 1. **Packed spawn above minima.** Paper HorizontalScaling and SchedulePlacements seed at \((cpu_{\min},ram_{\min})\). Code uses `packed_spawn_size` (floor + leftover headroom; skip a worker that can only fit the floor). A minima replica has \(\mu=0\) and routing weight 0.
 
@@ -42,17 +67,13 @@ These are the cases where the simulator is right and a literal reading of the cu
 
 9. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
 
+10. **No \(T_{\mathit{repart}}\).** Clusters, workers, and vicinities are static parameters of a run. Algorithm 1 (or the YAML override) runs once at world build. Drop the slow re-partition, join/leave drain, and straddling-loan two-step from the tex for this deployment.
+
 ---
 
 ## Still paper-ahead (next sim steps, not this file)
 
-Do **not** treat these as tex bugs. They are paper designs the simulator has not implemented yet:
-
-- `Reserve` / `safe_j`
-- Confidence \(\kappa\) / MAPE
-- Decrease-before-Increase in \(Q_c\)
-- Cross-MS cascade via Evict
-- Periodic re-partition \(T_{\mathit{repart}}\) and root admission
+None of the remaining canvas “update the sim” rows. Leader heartbeat failover and distributed CM RPCs stay sim cuts, not paper-ahead work.
 
 ---
 
@@ -60,7 +81,9 @@ Do **not** treat these as tex bugs. They are paper designs the simulator has not
 
 | Date | Note |
 |---|---|
-| 2026-09-16 | SchedulePlacements matches Alg. place: grow existing (home then nearer loans, μ-matched), then packed spawn over all of \(N_V\) including home recycle after Phase 1. Distance ranking replaces YAML member order. Packed spawn and free-not-\(safe_j\) stay. |
+| 2026-09-16 | Review draft `proposed_method_complete-v2.tex` absorbs the eight canvas ``Update the paper'' rows plus floor extras and no $T_{\mathit{repart}}$. Original tex left in place. |
+| 2026-09-16 | Remaining six paper-ahead rows: owner(j) writer, cross-MS cascade, Decrease-before-Increase, Reserve/\(safe_j\), \(\kappa\), static admission (no \(T_{\mathit{repart}}\)). |
+| 2026-09-16 | SchedulePlacements matches Alg. place: grow existing (home then nearer loans, μ-matched), then packed spawn over all of \(N_V\) including home recycle after Phase 1. Distance ranking replaces YAML member order. Packed spawn stays. Ceiling is now \(safe_j\). |
 | 2026-09-16 | VicinityRound matches the leader listing: every member reports (empty offers included), only \(\ell(V)\) computes \(\Pi\), ApplyVicinityPlan emits actions. Packed spawn stays. |
 | 2026-09-16 | Borrowed scale-down matches the paper: Eq. split \(\xi\), local tiers on \(N_c\), ScheduleReleases farthest-first then shrink. Floor extras stay fully releasable. |
 | 2026-09-16 | Started the align-sim-to-tex pass: dropped the global rung and renamed Vertical / Horizontal / Vicinity. Packed spawn and serving-headroom rules stay in the sim. |

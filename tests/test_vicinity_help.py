@@ -201,7 +201,7 @@ def test_home_saturated_spawns_on_neighbor_with_vicinity_loan(tmp_path):
     assert spawn.server_id == "c2-w1"
     assert spawn.reason == "vicinity_spawn"
     assert spawn.loan_tier == "vicinity"
-    assert spawn.actor_cluster_id == "c1"
+    assert spawn.actor_cluster_id == "c2"
     assert spawn.cpu_alloc_cores is not None and spawn.cpu_alloc_cores > 0.5
     assert spawn.ram_alloc_mb is not None and spawn.ram_alloc_mb > 256.0
     assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
@@ -295,7 +295,7 @@ def test_scale_down_prefers_borrowed_replica(tmp_path):
 def test_loan_grant_rolls_back_when_spawn_fails(tmp_path):
     env = _write_vicinity_world(tmp_path, c2_cpu=0.1, c2_ram=256.0)
     result = env.request_worker_owner_scale(
-        actor_cluster_id="c1",
+        actor_cluster_id="c2",
         act="spawn",
         ms_id="api",
         server_id="c2-w1",
@@ -319,7 +319,7 @@ def test_apply_actions_grants_loan_from_spawn_action(tmp_path):
         ram_alloc_mb=256.0,
         reason="vicinity_spawn",
         tau=1,
-        actor_cluster_id="c1",
+        actor_cluster_id="c2",
         loan_tier="vicinity",
     )
     results = env.apply_actions([action], tau=1, autoscaler_name="scripted")

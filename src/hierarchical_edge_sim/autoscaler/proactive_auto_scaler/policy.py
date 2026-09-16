@@ -83,6 +83,7 @@ class ProactiveAutoScaler:
             # Cold start below is reactive streaks, not this listing.
             if rec.history_full and rec.forecast_rps is not None:
                 spec = obs["spec"]
+                trust = rec.kappa >= self.params.kappa_min
                 decision = predict_and_decide(
                     observed_rps=rec.observed_rps,
                     forecast_rps=rec.forecast_rps,
@@ -101,6 +102,7 @@ class ProactiveAutoScaler:
                     n_replicas=max(1, len(obs["replicas"])),
                     headroom_cpu=obs["sum_h_cpu"],
                     headroom_ram=obs.get("sum_h_ram", 0.0),
+                    trust_forecast=trust,
                 )
                 down_in_cd = rec.window_index < self._next_down_window.get(ms_id, 0)
                 if decision.direction is Direction.UP:
@@ -161,7 +163,9 @@ class ProactiveAutoScaler:
                 )
             return None
 
-        def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | ReleaseIntent | None]:
+        def allocate(
+            intent: CycleIntent, queued_releases: list | None = None
+        ) -> tuple[list[Any], HelpRequest | ReleaseIntent | list | None]:
             # Algorithm 4 (AllocateResources): same ladder as reactive_local.
             obs = obs_by[intent.ms_id]
             if intent.kind == "up":
@@ -186,6 +190,7 @@ class ProactiveAutoScaler:
                 ladder,
                 delta_cpu=intent.need_cpu,
                 delta_ram=intent.need_ram,
+                queued_releases=queued_releases,
             )
 
         actions = cluster_manager_cycle(

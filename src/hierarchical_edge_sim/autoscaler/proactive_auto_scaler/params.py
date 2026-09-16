@@ -28,6 +28,8 @@ class ProactiveAutoScalerParams:
     predictor: str = "persistence"
     model_dir: str = "models/tcn_delta_v1"
     time_tick_offset: int = 0
+    kappa_min: float = 0.5
+    window_kappa: int | None = None
     ladder: ReactiveLocalParams = field(default_factory=ReactiveLocalParams)
 
 
@@ -64,6 +66,9 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         )
     )
     sustained_steps = int(_pop_alias(data, "sustained_steps", "sustained_tau", 2))
+    kappa_min = float(data.pop("kappa_min", 0.5))
+    window_kappa_raw = data.pop("window_kappa", None)
+    window_kappa = None if window_kappa_raw is None else int(window_kappa_raw)
     params = ProactiveAutoScalerParams(
         ticks_per_window=ticks_per_window,
         feature_window=int(data.pop("feature_window", 60 if predictor == "tcn_delta" else 10)),
@@ -76,6 +81,8 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         predictor=predictor,
         model_dir=str(data.pop("model_dir", "models/tcn_delta_v1")),
         time_tick_offset=int(data.pop("time_tick_offset", 0)),
+        kappa_min=kappa_min,
+        window_kappa=window_kappa,
         ladder=validate_ladder_params(data),
     )
     if params.ticks_per_window < 1:
@@ -88,6 +95,10 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         raise ValueError("sustained_steps must be >= 1")
     if params.cooldown_C < 0:
         raise ValueError("cooldown_C must be >= 0")
+    if not (0.0 < params.kappa_min <= 1.0):
+        raise ValueError("kappa_min must be in (0, 1]")
+    if params.window_kappa is not None and params.window_kappa < 1:
+        raise ValueError("window_kappa must be >= 1")
     if not (0.0 < params.theta_down < params.theta_target < params.theta_up <= 1.0):
         raise ValueError("require 0 < theta_down < theta_target < theta_up <= 1")
     if params.predictor not in _PREDICTORS:

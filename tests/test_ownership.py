@@ -152,7 +152,7 @@ def test_non_owner_without_loan_rejected(tmp_path):
     assert as_owner.ok
 
 
-def test_borrower_with_loan_can_mutate(tmp_path):
+def test_borrower_with_loan_cannot_mutate(tmp_path):
     env = Env.from_config(_write_two_cluster(tmp_path))
     add_loan(
         env.get_server("c2-w1"),
@@ -169,18 +169,37 @@ def test_borrower_with_loan_can_mutate(tmp_path):
         container_id="c-borrowed",
         cpu_alloc_cores=0.5,
         ram_alloc_mb=256.0,
+        loan_tier="vicinity",
+    )
+    assert not spawned.ok
+    assert spawned.code == SpawnResultCode.NOT_AUTHORIZED
+    assert "c-borrowed" not in env.world.containers
+
+
+def test_owner_spawns_for_borrower_and_records_loan(tmp_path):
+    env = Env.from_config(_write_two_cluster(tmp_path))
+    spawned = env.request_worker_owner_scale(
+        actor_cluster_id="c2",
+        act="spawn",
+        ms_id="api",
+        server_id="c2-w1",
+        container_id="c-borrowed",
+        cpu_alloc_cores=0.5,
+        ram_alloc_mb=256.0,
+        loan_tier="vicinity",
+        tau=1,
     )
     assert spawned.ok
+    assert has_loan(env.get_server("c2-w1"), "c1", "api")
     resized = env.request_worker_owner_scale(
-        actor_cluster_id="c1",
+        actor_cluster_id="c2",
         act="resize",
         container_id="c-borrowed",
         cpu_alloc_cores=1.0,
     )
     assert resized.ok
-    # Keep a local replica so terminate is not LAST_REPLICA.
     gone = env.request_worker_owner_scale(
-        actor_cluster_id="c1",
+        actor_cluster_id="c2",
         act="terminate",
         container_id="c-borrowed",
         ms_id="api",
@@ -214,6 +233,7 @@ def test_apply_actions_infers_app_owner_and_rejects_foreign(tmp_path):
                 container_id="c-foreign",
                 cpu_alloc_cores=0.5,
                 ram_alloc_mb=256.0,
+                actor_cluster_id="c1",
             )
         ],
         tau=1,

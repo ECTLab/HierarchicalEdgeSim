@@ -45,6 +45,7 @@ def cluster_manager_cycle(
     ``allocate`` is AllocateResources (Vertical then Horizontal). Leftover ρ is merged
     FCFS with leftover ξ (release intents) and passed to ``resolve_help``
     (VicinityRound: every member reports, only ℓ(V) computes Π).
+    Same-window packing: Q_c is Decrease before Increase, then microservice id.
     Mapping: ``docs/allocate-resources.md``.
     """
     by_cluster: dict[str, list[str]] = {}
@@ -66,18 +67,19 @@ def cluster_manager_cycle(
                     f"CycleIntent cluster_id {intent.cluster_id!r} != owner {cid!r} for {ms_id}"
                 )
             intents.append(intent)
-        intents.sort(key=lambda item: (item.t_det, item.ms_id))
+        intents.sort(key=lambda item: (item.t_det, 0 if item.kind == "down" else 1, item.ms_id))
+        cluster_releases: list[Any] = []
         for intent in intents:
-            ms_actions, leftover = allocate(intent)
+            ms_actions, leftover = allocate(intent, cluster_releases)
             actions.extend(ms_actions)
-            if leftover is None:
-                continue
-            leftover.t_det = intent.t_det
-            leftover.tau = tau
-            if getattr(leftover, "kind", "rho") == "release":
-                release_q.append(leftover)
-            else:
-                help_q.append(leftover)
+            for item in _as_leftovers(leftover):
+                item.t_det = intent.t_det if getattr(item, "t_det", None) is None else item.t_det
+                item.tau = tau
+                if getattr(item, "kind", "rho") == "rho":
+                    help_q.append(item)
+                else:
+                    cluster_releases.append(item)
+                    release_q.append(item)
 
     help_q.sort(key=_help_fcfs_key)
     for seq, req in enumerate(help_q):
@@ -87,6 +89,14 @@ def cluster_manager_cycle(
         req.seq = seq
     actions.extend(resolve_help(env, help_q, actions, tau, release_q))
     return actions
+
+
+def _as_leftovers(leftover: Any) -> list[Any]:
+    if leftover is None:
+        return []
+    if isinstance(leftover, list):
+        return leftover
+    return [leftover]
 
 
 def _help_fcfs_key(req: Any) -> tuple[int, str]:

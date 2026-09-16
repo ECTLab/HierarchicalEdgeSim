@@ -34,6 +34,10 @@ def test_params_defaults_and_unknown_predictor():
     assert p.feature_window == 10
     assert p.ladder.cascade_home is True
     assert p.cooldown_C == 3
+    assert p.kappa_min == 0.5
+    assert p.window_kappa is None
+    with pytest.raises(ValueError, match="kappa_min"):
+        validate_params({"kappa_min": 0.0})
     tcn = validate_params({"predictor": "tcn_delta", "feature_window": 60, "forecast_horizon": 5})
     assert tcn.cooldown_C == 5
     assert tcn.ticks_per_window == 1
@@ -294,6 +298,7 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
             "x_up_streak": 99,
             "y_down_streak": 99,
             "sustained_steps": 99,
+            "kappa_min": 0.01,
         },
         predictor=_FixedPredictor(100.0),
     )
@@ -316,6 +321,44 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
     _push(env, 3, incoming=10.0, drop=0.0, q=0.1)
     second = scaler.on_tick_end(env, 3)
     assert any(getattr(a, "reason", "") == "vertical_up" for a in second)
+
+
+def test_low_kappa_ignores_horizon_spike(tmp_path: Path):
+    """Paper: κ < κ_min → ignore hats and decide on current λ."""
+    env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0)
+    scaler = build(
+        {
+            "feature_window": 2,
+            "forecast_horizon": 3,
+            "sustained_steps": 99,
+            "x_up_streak": 99,
+            "y_down_streak": 99,
+            "cooldown_ticks": 0,
+            "kappa_min": 0.5,
+        },
+        predictor=_FixedPredictor(100.0),
+    )
+    _push(env, 1, incoming=10.0, drop=0.0, q=0.1)
+    scaler.on_tick_end(env, 1)
+    _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
+    first = scaler.on_tick_end(env, 2)
+    assert any(getattr(a, "reason", "") == "vertical_up" for a in first)
+    scaler.on_actions_applied(
+        [
+            ResizeResult(
+                ok=True,
+                code=ResizeResultCode.OK,
+                container_id="c-api-1",
+                cpu_alloc_cores=1.2,
+                ram_alloc_mb=512.0,
+            )
+        ]
+    )
+    _push(env, 3, incoming=10.0, drop=0.0, q=0.1)
+    second = scaler.on_tick_end(env, 3)
+    assert not any(getattr(a, "reason", "") == "vertical_up" for a in second)
+    assert scaler._sensing is not None
+    assert scaler._sensing._confidence["api"].kappa() < 0.5
 
 
 def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):

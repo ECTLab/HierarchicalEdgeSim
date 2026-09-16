@@ -9,8 +9,8 @@ from dataclasses import dataclass
 class HelpRequest:
     """Paper ρ after AllocateResources (leftover Up residual).
 
-    Tex also carries forecast hats for lender Reserve; this env has no
-    Reserve/safe_j, so hats are omitted. ``t_det`` is Algorithm 2 FCFS.
+    Reserve_c sums these leftovers (Eq. reserve); hats are not required.
+    ``t_det`` is Algorithm 2 FCFS.
     """
 
     seq: int
@@ -44,6 +44,8 @@ class ReleaseIntent:
     t_det: int | None = None
     mu_tgt: float | None = None
     kind: str = "release"
+    evict_container_id: str = ""
+    evict_server_id: str = ""
 
 
 def help_fcfs_key(req: HelpRequest | ReleaseIntent) -> tuple[int, str]:

@@ -4,7 +4,8 @@ One-process mapping: every member of V produces a report (empty offers
 included). Only ℓ(V) runs ScheduleReleases then SchedulePlacements into a
 plan Π. ApplyVicinityPlan turns Π into env actions. Placements grow existing
 hosts (local then nearer loans) then packed-spawn over all of N_V, including
-home after Phase 1 frees room. Spawn stays packed, not minima; safe_j is later.
+home after Phase 1 frees room. Spawn stays packed, not minima. Leader
+schedules against safe_j, not raw free.
 """
 
 from __future__ import annotations
@@ -21,8 +22,9 @@ from hierarchical_edge_sim.env.api import (
 )
 
 from .help import HelpRequest, ReleaseIntent, help_fcfs_key
-from .place import schedule_placements, snapshot_free, subtract_pending
+from .place import schedule_placements, subtract_pending
 from .release import schedule_releases
+from .reserve import member_safe_ceilings
 
 __all__ = [
     "HelpRequest",
@@ -47,6 +49,8 @@ class VicinityReport:
     tau: int
     requests: list[HelpRequest] = field(default_factory=list)
     releases: list[ReleaseIntent] = field(default_factory=list)
+    safe_cpu: dict[str, float] = field(default_factory=dict)
+    safe_ram: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -199,15 +203,15 @@ def schedule_vicinity_plan(
             entries=entries,
         )
 
-    free_cpu, free_ram = snapshot_free(env, members)
-    subtract_pending(env, pending + list(rel_actions), free_cpu, free_ram)
+    safe_cpu, safe_ram = member_safe_ceilings(env, members, pending, requests)
+    subtract_pending(env, list(rel_actions), safe_cpu, safe_ram)
     placed, unmet = schedule_placements(
         env,
         requests,
         members=members,
         pending=pending + list(rel_actions),
-        free_cpu=free_cpu,
-        free_ram=free_ram,
+        free_cpu=safe_cpu,
+        free_ram=safe_ram,
         tau=tau,
     )
     entries.extend(plan_entry_from_action(env, action) for action in placed)
@@ -221,10 +225,15 @@ def schedule_vicinity_plan(
 
 
 def apply_vicinity_plan(env: Env, plan: VicinityPlan) -> tuple[list, list[HelpRequest]]:
-    """Alg. applyplan. One-process: every entry is applied (broadcast is the plan)."""
+    """Alg. applyplan. Writer is owner(j); c' is the capacity-for / cooldown set.
+
+    One-process: every entry is applied (broadcast is the plan). No Ack, lock,
+    or rollback path — a planned action is an applied action.
+    """
     _ = env
     actions: list = []
     for entry in plan.entries:
+        writer = entry.owner_cluster_id
         if entry.act == "terminate":
             actions.append(
                 TerminateAction(
@@ -233,7 +242,7 @@ def apply_vicinity_plan(env: Env, plan: VicinityPlan) -> tuple[list, list[HelpRe
                     container_id=entry.container_id,
                     reason=entry.reason or "vicinity_terminate",
                     tau=entry.tau,
-                    actor_cluster_id=entry.for_cluster_id,
+                    actor_cluster_id=writer,
                 )
             )
         elif entry.act in {"shrink", "grow"}:
@@ -247,7 +256,7 @@ def apply_vicinity_plan(env: Env, plan: VicinityPlan) -> tuple[list, list[HelpRe
                     reason=entry.reason
                     or ("vicinity_down" if entry.act == "shrink" else "vicinity_up"),
                     tau=entry.tau,
-                    actor_cluster_id=entry.for_cluster_id,
+                    actor_cluster_id=writer,
                 )
             )
         elif entry.act == "spawn":
@@ -260,7 +269,7 @@ def apply_vicinity_plan(env: Env, plan: VicinityPlan) -> tuple[list, list[HelpRe
                     ram_alloc_mb=entry.ram_alloc_mb,
                     reason=entry.reason or "vicinity_spawn",
                     tau=entry.tau,
-                    actor_cluster_id=entry.for_cluster_id,
+                    actor_cluster_id=writer,
                     loan_tier=entry.loan_tier,
                 )
             )

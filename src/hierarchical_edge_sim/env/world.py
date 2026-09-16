@@ -181,12 +181,7 @@ def _register_microservice_containers(
 
 
 def _stamp_app_owner(world: World, app: App) -> None:
-    """Paper stamp: owning cluster is where the app was first placed."""
-    for ms_id in app.microservice_ids:
-        ms = world.microservices[ms_id]
-        if not ms.container_ids:
-            continue
-        first = sorted(ms.container_ids)[0]
-        server_id = world.containers[first].server_id
-        app.owner_cluster_id = world.servers[server_id].cluster_id
-        return
+    """Paper stamp: seed replica cluster, else least-loaded (env/admission.py)."""
+    from .admission import stamp_app_owner
+
+    stamp_app_owner(world, app)

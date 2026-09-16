@@ -57,6 +57,7 @@ def predict_and_decide(
     headroom_cpu: float | None = None,
     headroom_ram: float | None = None,
     eps: float = EPS,
+    trust_forecast: bool = True,
 ) -> DecideResult:
     """Paper Algorithm 3 gate: Up / Down / None + sustained + residuals.
 
@@ -68,6 +69,8 @@ def predict_and_decide(
     if n_replicas < 1:
         raise ValueError("n_replicas must be >= 1")
     hats = [max(0.0, float(x)) for x in forecast_rps]
+    if not trust_forecast:
+        hats = []
     observed_rps = max(0.0, float(observed_rps))
     n = int(n_replicas)
     head_cpu = (

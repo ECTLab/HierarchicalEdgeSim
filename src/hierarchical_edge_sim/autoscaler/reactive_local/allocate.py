@@ -302,13 +302,13 @@ def ladder_down(
     *,
     delta_cpu: float,
     delta_ram: float,
-) -> tuple[list[Any], ReleaseIntent | None]:
+    queued_releases: list | None = None,
+) -> tuple[list[Any], ReleaseIntent | list[ReleaseIntent] | None]:
     """Algorithm allocate Down: split ξ first, then Vertical/Horizontal on N_c.
 
     Extra local replicas: skip vertical shrink of the seed in the same tick as a
     terminate (tex would shrink and kill together). Cascade is Algorithm
-    cascade, invoked from here after local free — skipped when this m already
-    queued ξ (paper: never m itself).
+    cascade: a different m* comes home via Evict ξ, never m itself.
     """
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
@@ -372,21 +372,29 @@ def ladder_down(
         fleet_replicas=replicas,
     )
     actions: list[Any] = [*bev, *terms]
-    if params.cascade_home and xi is None:
+    leftovers: list[ReleaseIntent] = []
+    if xi is not None:
+        leftovers.append(xi)
+    if params.cascade_home:
         freed_cpu, freed_ram = _freed_local(env, replicas, actions, owner)
-        actions.extend(
-            check_cascading_migration(
-                env,
-                ms_id=ms_id,
-                owner_cluster_id=owner,
-                spec=spec,
-                freed_cpu=freed_cpu,
-                freed_ram=freed_ram,
-                pending=actions,
-                tau=tau,
-            )
+        spawn, evict = check_cascading_migration(
+            env,
+            shrinking_ms_id=ms_id,
+            owner_cluster_id=owner,
+            freed_cpu=freed_cpu,
+            freed_ram=freed_ram,
+            pending=actions,
+            tau=tau,
+            queued_releases=[*(queued_releases or []), *leftovers],
         )
-    return actions, xi
+        actions.extend(spawn)
+        if evict is not None:
+            leftovers.append(evict)
+    if not leftovers:
+        return actions, None
+    if len(leftovers) == 1:
+        return actions, leftovers[0]
+    return actions, leftovers
 
 
 def resolve_help(

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from hierarchical_edge_sim.autoscaler.common.cm_cycle import CycleIntent, cluster_manager_cycle
 from hierarchical_edge_sim.autoscaler.reactive_local.allocate import resolve_help
-from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest, help_fcfs_key
+from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest, ReleaseIntent, help_fcfs_key
 from hierarchical_edge_sim.env.api import NeedVicinityHelpAction
 
 
@@ -113,3 +113,43 @@ def test_cycle_same_cluster_fcfs_by_ms_id():
     )
     assert allocate_order == ["api", "web"]
     assert [a.ms_id for a in actions] == ["api", "web"]
+
+
+def test_cycle_passes_release_intents_before_help():
+    env = _FakeEnv(owners={"api": "c1"}, ms_order=["api"])
+    seen: dict[str, list] = {}
+
+    def scan_ms(ms_id: str) -> CycleIntent:
+        return CycleIntent(
+            ms_id=ms_id,
+            cluster_id="c1",
+            t_det=3,
+            kind="down",
+            need_cpu=0.5,
+            need_ram=256.0,
+        )
+
+    def allocate(intent: CycleIntent):
+        return [], ReleaseIntent(
+            seq=0,
+            tau=3,
+            ms_id=intent.ms_id,
+            home_cluster_id=intent.cluster_id,
+            remain_cpu=0.5,
+            remain_ram=256.0,
+            t_det=intent.t_det,
+        )
+
+    def resolve(env, help_q, pending, tau, releases=None):
+        seen["help"] = list(help_q)
+        seen["releases"] = list(releases or [])
+        seen["tau"] = tau
+        _ = env, pending
+        return []
+
+    cluster_manager_cycle(env, 3, scan_ms=scan_ms, allocate=allocate, resolve_help=resolve)
+    assert seen["help"] == []
+    assert len(seen["releases"]) == 1
+    assert seen["releases"][0].kind == "release"
+    assert seen["releases"][0].ms_id == "api"
+    assert seen["tau"] == 3

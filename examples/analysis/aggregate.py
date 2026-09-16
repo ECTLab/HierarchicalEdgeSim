@@ -214,6 +214,7 @@ ACTION_FAMILY: dict[str, str] = {
     "horizontal_terminate": "horizontal terminate",
     "vicinity_spawn": "vicinity",
     "vicinity_terminate": "vicinity terminate",
+    "vicinity_down": "vicinity down",
     "cascade_spawn": "cascade",
     "cascade_terminate": "cascade",
     "need_horizontal": "escalate",

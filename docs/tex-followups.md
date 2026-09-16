@@ -12,6 +12,8 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 |---|---|---|
 | No global / fourth tier | Ladder stops at VicinityRound; unmet demand is logged | `resolve_help` runs VicinityRound then `UnmetDemandAction`. No `beg.py`, no `loan_tier=global`. |
 | Names | VerticalScaling, HorizontalScaling, VicinityRound | Action reasons `vertical_*`, `horizontal_*`, `vicinity_*`. Module `horizontal.py`. |
+| Borrowed scale-down | Eq. split: \(L=\min(R,B)\) becomes \(\xi\); local tiers see only \(N_c\); ScheduleReleases farthest-first then shrink | `ReleaseIntent` + `schedule_releases`. Local `vertical_*` / `horizontal_*` on home replicas only. `vicinity_terminate` / `vicinity_down` from the vicinity round. |
+| Vicinity leader | Only \(\ell(V)\) runs the body; barrier on all \(\lvert V\rvert\) reports including empty offers; broadcast \(\Pi\); members ApplyVicinityPlan | `VicinityReport` per member (empty Q/R is an offer). `env.is_leader` is the only cluster that calls `schedule_vicinity_plan`. `ApplyVicinityPlan` emits env actions. One-process stand-in: no RPC, barrier is “all local allocate finished”. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 
@@ -31,11 +33,13 @@ These are the cases where the simulator is right and a literal reading of the cu
 
 5. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, do not vertical-shrink the seed in the same tick as a terminate.
 
-6. **Success-gated cooldown, but keep observing.** Paper now arms cooldown only if something applied (good) and still `continue`s PredictAndDecide during cooldown. Code updates streaks every tick and only suppresses emission. Proactive also uses HPA-style `cooldown_C` (never delay Up; delay Down after a successful Up).
+6. **Floor extras are fully releasable.** Paper ScheduleReleases terminates only when \(L\) covers a whole instance. A minima replica has \(\mu=0\), so the sim still terminates it when \(L>0\) even if \(L\) is smaller than the instance. Otherwise a leftover loan at the floor would sit forever while local headroom was the only surplus.
 
-7. **Per-window \(\alpha/\delta\) step caps.** Paper may apply the full residual in one window. Code clips with \(\alpha_{\mathrm{up}}/\alpha_{\mathrm{down}}\).
+7. **Success-gated cooldown, but keep observing.** Paper now arms cooldown only if something applied (good) and still `continue`s PredictAndDecide during cooldown. Code updates streaks every tick and only suppresses emission. Proactive also uses HPA-style `cooldown_C` (never delay Up; delay Down after a successful Up).
 
-8. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
+8. **Per-window \(\alpha/\delta\) step caps.** Paper may apply the full residual in one window. Code clips with \(\alpha_{\mathrm{up}}/\alpha_{\mathrm{down}}\).
+
+9. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
 
 ---
 
@@ -43,12 +47,11 @@ These are the cases where the simulator is right and a literal reading of the cu
 
 Do **not** treat these as tex bugs. They are paper designs the simulator has not implemented yet:
 
-- Leader-scheduled releases \(\xi\) (borrowed scale-down through VicinityRound)
 - `Reserve` / `safe_j`
 - Confidence \(\kappa\) / MAPE
 - Decrease-before-Increase in \(Q_c\)
 - Cross-MS cascade via Evict
-- Grow-existing and distance ranking inside VicinityRound
+- Grow-existing and distance ranking inside VicinityRound placements
 - Periodic re-partition \(T_{\mathit{repart}}\) and root admission
 
 ---
@@ -57,4 +60,6 @@ Do **not** treat these as tex bugs. They are paper designs the simulator has not
 
 | Date | Note |
 |---|---|
+| 2026-09-16 | VicinityRound matches the leader listing: every member reports (empty offers included), only \(\ell(V)\) computes \(\Pi\), ApplyVicinityPlan emits actions. Grow / \(safe_j\) / home recycle still paper-ahead. Packed spawn stays. |
+| 2026-09-16 | Borrowed scale-down matches the paper: Eq. split \(\xi\), local tiers on \(N_c\), ScheduleReleases farthest-first then shrink. Floor extras stay fully releasable. |
 | 2026-09-16 | Started the align-sim-to-tex pass: dropped the global rung and renamed Vertical / Horizontal / Vicinity. Packed spawn and serving-headroom rules stay in the sim. |

@@ -52,20 +52,22 @@ def _write_three_replica_world(
             "clusters": [
                 {
                     "id": "c1",
+                    "coords": [0.0, 0.0],
                     "servers": [{"id": "c1-w1", "cpu_cap_cores": c1_cpu, "ram_cap_mb": c1_ram}],
                 },
                 {
                     "id": "c2",
+                    "coords": [1.0, 0.0],
                     "servers": [{"id": "c2-w1", "cpu_cap_cores": 8.0, "ram_cap_mb": 4096}],
                 },
                 {
                     "id": "c3",
+                    "coords": [10.0, 0.0],
                     "servers": [{"id": "c3-w1", "cpu_cap_cores": 8.0, "ram_cap_mb": 4096}],
                 },
             ],
             "vicinities": [
-                {"id": "v1", "members": ["c1", "c2"], "leader": "c1"},
-                {"id": "v2", "members": ["c3"], "leader": "c3"},
+                {"id": "v1", "members": ["c1", "c2", "c3"], "leader": "c1"},
             ],
         },
         "apps": [
@@ -161,15 +163,18 @@ def test_cascade_home_param_default():
     assert validate_params({"cascade_home": False}).cascade_home is False
 
 
-def test_down_terminates_older_borrowed_before_local(tmp_path):
+def test_down_releases_farthest_borrowed_before_local(tmp_path):
     env = _write_three_replica_world(tmp_path)
     assert env.get_app_owner_cluster_id("api") == "c1"
+    assert env.distance("c1", "c3") > env.distance("c1", "c2")
     scaler = _down_scaler()
     _push_slack(env, 1)
     actions = scaler.on_tick_end(env, 1)
     terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
     assert [a.container_id for a in terms] == ["c-api-3"]
     assert terms[0].reason == "vicinity_terminate"
+    local_terms = [a for a in terms if a.reason == "horizontal_terminate"]
+    assert local_terms == []
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert results[0].ok
     assert not has_loan(env.get_server("c3-w1"), "c1", "api")

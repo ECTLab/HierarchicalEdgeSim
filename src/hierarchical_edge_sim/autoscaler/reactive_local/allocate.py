@@ -1,9 +1,10 @@
 """AllocateResources (paper Algorithm allocate).
 
 The listing is the local escalator only: VerticalScaling then
-HorizontalScaling, leftover ρ on Up, clamp on Down (never escalate).
-VicinityRound is Algorithm 2's ``resolve_help``, not this listing — it
-lives in this file because the leftover tuple is built here.
+HorizontalScaling on workers the cluster owns. Up leftover is ρ; Down
+splits the remote share L into ξ (Eq. split) before touching N_c.
+VicinityRound is Algorithm 2's ``resolve_help``: every member reports,
+only ℓ(V) schedules, ApplyVicinityPlan emits the actions.
 
 Cooldown and α/δ step caps sit outside this module (policy apply hook /
 ``up_delta`` / ``_clip_step``). See ``docs/allocate-resources.md``.
@@ -25,9 +26,10 @@ from hierarchical_edge_sim.env.api import Env
 from hierarchical_edge_sim.env.config import EPS, quantize_resource
 
 from .cascade import check_cascading_migration
-from .help import HelpRequest
-from .horizontal import home_cluster_id, horizontal_down, horizontal_up
+from .help import HelpRequest, ReleaseIntent
+from .horizontal import home_cluster_id, home_replicas, horizontal_down, horizontal_up
 from .params import ReactiveLocalParams
+from .release import borrowed_footprint, split_borrowed_share
 from .vicinity import leftover_to_help_action, leftover_to_unmet_demand, schedule_vicinity_help
 
 
@@ -238,11 +240,12 @@ def ladder_up(
 ) -> tuple[list[Any], HelpRequest | None]:
     """Algorithm allocate Up: Vertical (unless sustained) → Horizontal → optional leftover ρ."""
     spec = obs["spec"]
-    replicas: list[ReplicaView] = obs["replicas"]
+    cluster_id = home_cluster_id(env, ms_id)
+    replicas: list[ReplicaView] = home_replicas(env, obs["replicas"], cluster_id)
     actions: list[Any] = []
     remain_cpu, remain_ram = need_cpu, need_ram
 
-    if not sustained and (need_cpu > EPS or need_ram > EPS):
+    if not sustained and replicas and (need_cpu > EPS or need_ram > EPS):
         bev = distribute_up(
             env=env,
             ms_id=ms_id,
@@ -259,7 +262,6 @@ def ladder_up(
             remain_cpu, remain_ram = 0.0, 0.0
         actions.extend(strip_need_horizontal(bev))
 
-    cluster_id = home_cluster_id(env, ms_id)
     spawns, remain_cpu, remain_ram = horizontal_up(
         env=env,
         ms_id=ms_id,
@@ -300,44 +302,63 @@ def ladder_down(
     *,
     delta_cpu: float,
     delta_ram: float,
-) -> list[Any]:
-    """Algorithm allocate Down: Vertical/Horizontal at home only; leftover is dropped (no ρ).
+) -> tuple[list[Any], ReleaseIntent | None]:
+    """Algorithm allocate Down: split ξ first, then Vertical/Horizontal on N_c.
 
-    Extra replicas: skip vertical shrink of the seed in the same tick as a
+    Extra local replicas: skip vertical shrink of the seed in the same tick as a
     terminate (tex would shrink and kill together). Cascade is Algorithm
-    cascade, invoked from here after local free.
+    cascade, invoked from here after local free — skipped when this m already
+    queued ξ (paper: never m itself).
     """
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     ram_modeled = spec.ram_per_request_mb > EPS
+    owner = home_cluster_id(env, ms_id)
+    local = home_replicas(env, replicas, owner)
+    b_cpu, b_ram = borrowed_footprint(env, replicas, owner)
+    l_cpu, l_ram, local_cpu, local_ram = split_borrowed_share(
+        delta_cpu, delta_ram, b_cpu, b_ram
+    )
+    xi: ReleaseIntent | None = None
+    if l_cpu > EPS or l_ram > EPS:
+        xi = ReleaseIntent(
+            seq=0,
+            tau=tau,
+            ms_id=ms_id,
+            home_cluster_id=owner,
+            remain_cpu=l_cpu,
+            remain_ram=l_ram,
+            t_det=tau,
+            mu_tgt=target_mu(obs, params),
+        )
+
+    remain_cpu = local_cpu
+    remain_ram = local_ram if ram_modeled else 0.0
     cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
-    n_replicas = len(replicas)
     # Extras: reclaim replica count first. Do not vertical-shrink the seed in the
     # same tick as a terminate — that is what left μ too small and bounced UP.
-    if n_replicas > 1:
+    if len(local) > 1:
         bev: list[Any] = []
-        remain_cpu, remain_ram = delta_cpu, delta_ram
     else:
         bev = distribute_down(
             env=env,
             ms_id=ms_id,
             spec=spec,
             params=params,
-            replicas=replicas,
-            delta_cpu=min(delta_cpu, cap_cpu),
-            delta_ram=min(delta_ram, cap_ram) if ram_modeled else 0.0,
+            replicas=local,
+            delta_cpu=min(remain_cpu, cap_cpu),
+            delta_ram=min(remain_ram, cap_ram) if ram_modeled else 0.0,
             tau=tau,
             reason="vertical_down",
             mu_tgt=target_mu(obs, params),
         )
-        granted_cpu, granted_ram = _granted_down(replicas, bev)
-        remain_cpu = max(0.0, delta_cpu - granted_cpu)
-        remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
+        granted_cpu, granted_ram = _granted_down(local, bev)
+        remain_cpu = max(0.0, remain_cpu - granted_cpu)
+        remain_ram = max(0.0, remain_ram - granted_ram) if ram_modeled else 0.0
     skip_ids = {a.container_id for a in bev}
-    owner = home_cluster_id(env, ms_id)
     terms = horizontal_down(
         env=env,
-        replicas=replicas,
+        replicas=local,
         ms_id=ms_id,
         owner_cluster_id=owner,
         remain_cpu=remain_cpu,
@@ -347,9 +368,11 @@ def ladder_down(
         tau=tau,
         spec=spec,
         mu_tgt=target_mu(obs, params),
+        n_live=len(replicas),
+        fleet_replicas=replicas,
     )
     actions: list[Any] = [*bev, *terms]
-    if params.cascade_home:
+    if params.cascade_home and xi is None:
         freed_cpu, freed_ram = _freed_local(env, replicas, actions, owner)
         actions.extend(
             check_cascading_migration(
@@ -363,7 +386,7 @@ def ladder_down(
                 tau=tau,
             )
         )
-    return actions
+    return actions, xi
 
 
 def resolve_help(
@@ -371,14 +394,14 @@ def resolve_help(
     help_q: list[HelpRequest],
     pending: list[Any],
     tau: int,
+    releases: list[ReleaseIntent] | None = None,
 ) -> list[Any]:
-    if not help_q:
-        return []
+    releases = releases or []
     if env.root is None:
         return [leftover_to_help_action(u) for u in help_q]
-    actions: list[Any] = []
-    vspawns, unresolved = schedule_vicinity_help(env, help_q, pending=pending, tau=tau)
-    actions.extend(vspawns)
+    actions, unresolved = schedule_vicinity_help(
+        env, help_q, pending=pending, tau=tau, releases=releases
+    )
     actions.extend(leftover_to_unmet_demand(u) for u in unresolved)
     return actions
 

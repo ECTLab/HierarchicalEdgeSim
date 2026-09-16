@@ -34,7 +34,7 @@ def cluster_manager_cycle(
     *,
     scan_ms: Callable[[str], CycleIntent | None],
     allocate: Callable[[CycleIntent], tuple[list[Any], Any]],
-    resolve_help: Callable[[Env, list[Any], list[Any], int], list[Any]],
+    resolve_help: Callable[..., list[Any]],
 ) -> list[Any]:
     """Run Algorithm 2 for window ``tau``.
 
@@ -43,7 +43,8 @@ def cluster_manager_cycle(
     observes, matching the sim's stronger InCooldown rule.
 
     ``allocate`` is AllocateResources (Vertical then Horizontal). Leftover ρ is merged
-    FCFS and passed to ``resolve_help`` (VicinityRound).
+    FCFS with leftover ξ (release intents) and passed to ``resolve_help``
+    (VicinityRound: every member reports, only ℓ(V) computes Π).
     Mapping: ``docs/allocate-resources.md``.
     """
     by_cluster: dict[str, list[str]] = {}
@@ -53,6 +54,7 @@ def cluster_manager_cycle(
 
     actions: list[Any] = []
     help_q: list[Any] = []
+    release_q: list[Any] = []
     for cid in sorted(by_cluster):
         intents: list[CycleIntent] = []
         for ms_id in sorted(by_cluster[cid]):
@@ -72,12 +74,18 @@ def cluster_manager_cycle(
                 continue
             leftover.t_det = intent.t_det
             leftover.tau = tau
-            help_q.append(leftover)
+            if getattr(leftover, "kind", "rho") == "release":
+                release_q.append(leftover)
+            else:
+                help_q.append(leftover)
 
     help_q.sort(key=_help_fcfs_key)
     for seq, req in enumerate(help_q):
         req.seq = seq
-    actions.extend(resolve_help(env, help_q, actions, tau))
+    release_q.sort(key=_help_fcfs_key)
+    for seq, req in enumerate(release_q):
+        req.seq = seq
+    actions.extend(resolve_help(env, help_q, actions, tau, release_q))
     return actions
 
 

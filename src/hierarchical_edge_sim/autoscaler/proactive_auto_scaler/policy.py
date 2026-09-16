@@ -19,7 +19,7 @@ from hierarchical_edge_sim.autoscaler.reactive_local.allocate import (
     up_delta,
 )
 from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import home_cluster_id
-from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest
+from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest, ReleaseIntent
 
 from .decide import Direction, predict_and_decide
 from .params import ProactiveAutoScalerParams, validate_params
@@ -161,7 +161,7 @@ class ProactiveAutoScaler:
                 )
             return None
 
-        def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
+        def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | ReleaseIntent | None]:
             # Algorithm 4 (AllocateResources): same ladder as reactive_local.
             obs = obs_by[intent.ms_id]
             if intent.kind == "up":
@@ -178,17 +178,14 @@ class ProactiveAutoScaler:
                 if (ms_actions or leftover is not None) and intent.window_index is not None:
                     self._pending_proactive_window[intent.ms_id] = intent.window_index
                 return ms_actions, leftover
-            return (
-                ladder_down(
-                    env,
-                    intent.ms_id,
-                    tau,
-                    obs,
-                    ladder,
-                    delta_cpu=intent.need_cpu,
-                    delta_ram=intent.need_ram,
-                ),
-                None,
+            return ladder_down(
+                env,
+                intent.ms_id,
+                tau,
+                obs,
+                ladder,
+                delta_cpu=intent.need_cpu,
+                delta_ram=intent.need_ram,
             )
 
         actions = cluster_manager_cycle(

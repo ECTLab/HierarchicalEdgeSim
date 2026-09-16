@@ -176,7 +176,7 @@ class _TieredEnv:
         return self._servers[sid]
 
 
-def test_horizontal_down_borrowed_before_local():
+def test_horizontal_down_ignores_borrowed_replicas():
     spec = _spec()
     terms = horizontal_down(
         env=_TieredEnv(),  # type: ignore[arg-type]
@@ -195,7 +195,4 @@ def test_horizontal_down_borrowed_before_local():
         spec=spec,
         mu_tgt=1.0,
     )
-    assert [(a.container_id, a.reason) for a in terms] == [
-        ("c-api-3", "vicinity_terminate"),
-        ("c-api-2", "vicinity_terminate"),
-    ]
+    assert terms == []

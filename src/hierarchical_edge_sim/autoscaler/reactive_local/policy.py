@@ -19,7 +19,7 @@ from .allocate import (
     up_delta,
 )
 from .horizontal import home_cluster_id
-from .help import HelpRequest
+from .help import HelpRequest, ReleaseIntent
 from .params import ReactiveLocalParams, validate_params
 
 
@@ -84,7 +84,9 @@ class ReactiveLocalAutoscaler:
                 )
             return None
 
-        def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
+        def allocate(
+            intent: CycleIntent,
+        ) -> tuple[list[Any], HelpRequest | ReleaseIntent | None]:
             # AllocateResources: local Vertical then Horizontal; Up leftover is ρ.
             # Cooldown starts in on_actions_applied, not here.
             obs = obs_by[intent.ms_id]
@@ -99,17 +101,14 @@ class ReactiveLocalAutoscaler:
                     need_ram=intent.need_ram,
                     sustained=intent.sustained,
                 )
-            return (
-                ladder_down(
-                    env,
-                    intent.ms_id,
-                    tau,
-                    obs,
-                    self.params,
-                    delta_cpu=intent.need_cpu,
-                    delta_ram=intent.need_ram,
-                ),
-                None,
+            return ladder_down(
+                env,
+                intent.ms_id,
+                tau,
+                obs,
+                self.params,
+                delta_cpu=intent.need_cpu,
+                delta_ram=intent.need_ram,
             )
 
         actions = cluster_manager_cycle(

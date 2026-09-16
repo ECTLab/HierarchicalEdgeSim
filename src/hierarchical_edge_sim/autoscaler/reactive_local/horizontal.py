@@ -7,12 +7,23 @@ import math
 from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, replica_mu
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec, quantize_resource
-from hierarchical_edge_sim.env.loans import get_loan
 
 
 def home_cluster_id(env: Env, ms_id: str) -> str:
     """App-owning cluster (paper stamp). Local horizontal stays inside this cluster."""
     return env.get_app_owner_cluster_id(ms_id)
+
+
+def replica_cluster_id(env: Env, replica: ReplicaView) -> str:
+    sid = replica.server_id or env.get_container(replica.container_id).server_id
+    return env.get_server(sid).cluster_id
+
+
+def home_replicas(
+    env: Env, replicas: list[ReplicaView], owner_cluster_id: str
+) -> list[ReplicaView]:
+    """N_c only. Borrowed nodes never enter Vertical/HorizontalScaling."""
+    return [r for r in replicas if replica_cluster_id(env, r) == owner_cluster_id]
 
 
 def rank_servers_for_spawn(env: Env, ms_id: str, cluster_id: str) -> list[str]:
@@ -181,63 +192,51 @@ def horizontal_down(
     tau: int,
     spec: MicroserviceSpec | None = None,
     mu_tgt: float | None = None,
+    n_live: int | None = None,
+    fleet_replicas: list[ReplicaView] | None = None,
 ) -> list[TerminateAction]:
-    """Terminate borrowed replicas first, then local (never the last).
+    """Terminate local extras only (never the last fleet replica).
 
-    Reason is ``vicinity_terminate`` for a replica outside the home cluster,
-    else ``horizontal_terminate``. Unknown remotes (no loan row) still count
-    as borrowed so they die before local.
+    Borrowed scale-down is ScheduleReleases (ξ), not this listing.
     """
-    live = [r for r in replicas if r.container_id not in skip_ids]
+    local = home_replicas(env, replicas, owner_cluster_id)
+    live = [r for r in local if r.container_id not in skip_ids]
+    mu_views = fleet_replicas if fleet_replicas is not None else replicas
     fleet_mu = (
-        sum(replica_mu(r, spec, ram_modeled) for r in replicas)
+        sum(replica_mu(r, spec, ram_modeled) for r in mu_views)
         if mu_tgt is not None and spec is not None
         else 0.0
     )
 
-    def _key(r: ReplicaView) -> tuple[int, int, float, float, float, str]:
+    def _key(r: ReplicaView) -> tuple[float, float, float, str]:
         mu = replica_mu(r, spec, ram_modeled) if spec is not None else 0.0
-        return (*_reclaim_key(env, r, owner_cluster_id, ms_id), mu, r.q, -r.slack, r.container_id)
+        return (mu, r.q, -r.slack, r.container_id)
 
     ranked = sorted(live, key=_key)
     actions: list[TerminateAction] = []
-    n_live = len(replicas)
+    remaining = n_live if n_live is not None else len(local)
     for r in ranked:
         if remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
             break
-        if n_live - len(actions) <= 1:
+        if remaining - len(actions) <= 1:
             break
         if mu_tgt is not None and spec is not None:
             extra_mu = replica_mu(r, spec, ram_modeled)
             if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
                 continue
             fleet_mu = max(0.0, fleet_mu - extra_mu)
-        borrowed, _ = _reclaim_key(env, r, owner_cluster_id, ms_id)
         actions.append(
             TerminateAction(
                 type="terminate",
                 ms_id=ms_id,
                 container_id=r.container_id,
-                reason="vicinity_terminate" if borrowed == 0 else "horizontal_terminate",
+                reason="horizontal_terminate",
                 tau=tau,
             )
         )
         remain_cpu = max(0.0, remain_cpu - r.cpu_alloc)
         remain_ram = max(0.0, remain_ram - r.ram_alloc)
     return actions
-
-
-def _reclaim_key(
-    env: Env, replica: ReplicaView, owner_cluster_id: str, ms_id: str
-) -> tuple[int, int]:
-    """(borrowed, ts): borrowed=0 before local=1; older loan ts first."""
-    sid = replica.server_id or env.get_container(replica.container_id).server_id
-    server = env.get_server(sid)
-    if server.cluster_id == owner_cluster_id:
-        return (1, 0)
-    loan = get_loan(server, owner_cluster_id, ms_id)
-    ts = loan.ts if loan is not None else 0
-    return (0, ts)
 
 
 def _subtract_pending_resizes(

@@ -1,4 +1,4 @@
-"""Leftover scale-up demand after local allocate (VicinityRound payload ρ)."""
+"""VicinityRound payloads: leftover ρ (Up) and release intent ξ (Down)."""
 
 from __future__ import annotations
 
@@ -24,9 +24,29 @@ class HelpRequest:
     min_head_cpu: float = 0.25
     min_head_ram: float = 128.0
     t_det: int | None = None
+    kind: str = "rho"
 
 
-def help_fcfs_key(req: HelpRequest) -> tuple[int, str]:
+@dataclass(slots=True)
+class ReleaseIntent:
+    """Paper ξ after AllocateResources (Eq. split: remote share of a Decrease).
+
+    Local Vertical/Horizontal never see borrowed nodes. The leader's
+    ScheduleReleases consumes this intent: farthest lenders first, then shrink.
+    """
+
+    seq: int
+    tau: int
+    ms_id: str
+    home_cluster_id: str
+    remain_cpu: float
+    remain_ram: float
+    t_det: int | None = None
+    mu_tgt: float | None = None
+    kind: str = "release"
+
+
+def help_fcfs_key(req: HelpRequest | ReleaseIntent) -> tuple[int, str]:
     """Clarification 2: FCFS by detection time, then microservice id.
 
     In this discrete env ``t_det`` is the window index ``τ`` (no wall-clock

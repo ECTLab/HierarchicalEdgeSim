@@ -1,4 +1,4 @@
-"""S5: BEG — leftover after vicinity places outside the home vicinity."""
+"""Leftover after VicinityRound is LogUnmetDemand; no out-of-vicinity spawn."""
 
 from __future__ import annotations
 
@@ -7,13 +7,9 @@ from typing import Any
 
 import yaml
 
-from hierarchical_edge_sim.autoscaler.reactive_local.beg import schedule_beg
-from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest
 from hierarchical_edge_sim.autoscaler.reactive_local.policy import build
-from hierarchical_edge_sim.env.api import Env, NeedGlobalHelpAction, NeedVicinityHelpAction
-from hierarchical_edge_sim.env.loans import has_loan
-from hierarchical_edge_sim.env.models import ContainerTickRecord, LoanTier, Vicinity
-from hierarchical_edge_sim.env.root import RootOrchestrator
+from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction, UnmetDemandAction
+from hierarchical_edge_sim.env.models import ContainerTickRecord
 
 
 VALID_TRACE = "time_unit,requests\n" + "\n".join(f"{i},50" for i in range(1, 11)) + "\n"
@@ -112,72 +108,34 @@ def _up_scaler():
     )
 
 
-def test_rank_beg_candidates_excludes_home_vicinity_and_sorts_by_free():
-    root = RootOrchestrator.from_vicinities(
-        [
-            Vicinity(id="v1", member_cluster_ids=["c1", "c2"], leader_cluster_id="c1"),
-            Vicinity(id="v2", member_cluster_ids=["c3"], leader_cluster_id="c3"),
-            Vicinity(id="v3", member_cluster_ids=["c4"], leader_cluster_id="c4"),
-        ]
-    )
-    ranked = root.rank_beg_candidates(
-        "c1", {"c1": 0.0, "c2": 99.0, "c3": 4.0, "c4": 8.0}
-    )
-    assert ranked == ["c4", "c3"]
-
-
-def test_vicinity_full_spawns_on_outside_cluster_with_global_loan(tmp_path):
+def test_vicinity_exhausted_logs_unmet_demand_not_outside_spawn(tmp_path):
     env = _write_three_cluster(tmp_path)
+    scaler = _up_scaler()
+    _push_drops(env, 1)
+    actions = scaler.on_tick_end(env, 1)
+    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
+    helps = [a for a in actions if isinstance(a, UnmetDemandAction)]
+    assert len(helps) == 1
+    assert helps[0].cluster_id == "c1"
+    assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
+    env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
+    assert any(
+        row.action_type == "unmet_demand" and row.result_code == "LOGGED"
+        for row in env.action_log
+    )
+    assert env.get_server("c3-w1").loans == []
+    assert env.get_server("c2-w1").loans == []
+
+
+def test_fat_outside_cluster_is_not_a_placement_candidate(tmp_path):
+    env = _write_three_cluster(tmp_path, c2_cpu=99.0, c2_ram=8192.0, c3_cpu=8.0)
     scaler = _up_scaler()
     _push_drops(env, 1)
     actions = scaler.on_tick_end(env, 1)
     spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
     assert len(spawns) == 1
-    spawn = spawns[0]
-    assert spawn.server_id == "c3-w1"
-    assert spawn.reason == "beg_spawn"
-    assert spawn.loan_tier == "global"
-    assert spawn.actor_cluster_id == "c1"
-    assert spawn.cpu_alloc_cores is not None and spawn.cpu_alloc_cores > 0.5
-    assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
-    assert not any(isinstance(a, NeedGlobalHelpAction) for a in actions)
-    results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
-    assert results[0].ok
-    assert has_loan(env.get_server("c3-w1"), "c1", "api")
-    assert env.get_server("c3-w1").loans[0].tier == LoanTier.GLOBAL
-    assert env.get_server("c2-w1").loans == []
-
-
-def test_beg_skips_home_vicinity_even_when_neighbor_has_more_free(tmp_path):
-    env = _write_three_cluster(tmp_path, c2_cpu=99.0, c2_ram=8192.0, c3_cpu=8.0)
-    req = HelpRequest(
-        seq=0,
-        tau=1,
-        ms_id="api",
-        home_cluster_id="c1",
-        remain_cpu=0.5,
-        remain_ram=256.0,
-        cpu_min=0.5,
-        ram_min=256.0,
-    )
-    spawns, unresolved = schedule_beg(env, [req], pending=[], tau=1)
-    assert unresolved == []
-    assert len(spawns) == 1
-    assert spawns[0].server_id == "c3-w1"
-    assert spawns[0].loan_tier == "global"
-    assert spawns[0].cpu_alloc_cores is not None and spawns[0].cpu_alloc_cores > 0.5
-
-
-def test_beg_exhausted_logs_need_global_help(tmp_path):
-    env = _write_three_cluster(tmp_path, c3_cpu=0.4, c3_ram=256.0)
-    scaler = _up_scaler()
-    _push_drops(env, 1)
-    actions = scaler.on_tick_end(env, 1)
-    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
-    helps = [a for a in actions if isinstance(a, NeedGlobalHelpAction)]
-    assert len(helps) == 1
-    env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
-    assert any(
-        row.action_type == "need_global_help" and row.result_code == "LOGGED"
-        for row in env.action_log
-    )
+    assert spawns[0].server_id == "c2-w1"
+    assert spawns[0].reason == "vicinity_spawn"
+    assert spawns[0].loan_tier == "vicinity"
+    assert not any(a.server_id == "c3-w1" for a in spawns)
+    assert not any(isinstance(a, UnmetDemandAction) for a in actions)

@@ -111,13 +111,13 @@ def _write_three_replica_world(
         borrower_cluster_id="c1",
         ms_id="api",
         tier=LoanTier.VICINITY,
-        ts=1,
+        ts=10,
     )
     add_loan(
         env.get_server("c3-w1"),
         borrower_cluster_id="c1",
         ms_id="api",
-        tier=LoanTier.GLOBAL,
+        tier=LoanTier.VICINITY,
         ts=1,
     )
     return env
@@ -161,7 +161,7 @@ def test_cascade_home_param_default():
     assert validate_params({"cascade_home": False}).cascade_home is False
 
 
-def test_down_terminates_global_before_vicinity_before_local(tmp_path):
+def test_down_terminates_older_borrowed_before_local(tmp_path):
     env = _write_three_replica_world(tmp_path)
     assert env.get_app_owner_cluster_id("api") == "c1"
     scaler = _down_scaler()
@@ -169,7 +169,7 @@ def test_down_terminates_global_before_vicinity_before_local(tmp_path):
     actions = scaler.on_tick_end(env, 1)
     terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
     assert [a.container_id for a in terms] == ["c-api-3"]
-    assert terms[0].reason == "beg_terminate"
+    assert terms[0].reason == "vicinity_terminate"
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert results[0].ok
     assert not has_loan(env.get_server("c3-w1"), "c1", "api")
@@ -179,7 +179,7 @@ def test_down_terminates_global_before_vicinity_before_local(tmp_path):
     assert "c-api-3" not in env.world.containers
 
 
-def test_cascade_pulls_global_home_when_local_minima_freed(tmp_path):
+def test_cascade_pulls_older_borrowed_home_when_local_minima_freed(tmp_path):
     env = _write_three_replica_world(tmp_path, local_cpu=4.0, local_ram=2048.0)
     spec = env.get_ms_spec("api")
     actions = check_cascading_migration(

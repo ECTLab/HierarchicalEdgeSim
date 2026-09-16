@@ -10,7 +10,7 @@ from .partition import lookup_distance
 
 @dataclass(slots=True)
 class RootOrchestrator:
-    """Owns vicinity membership and leaders; ranks BEG candidates (S5).
+    """Owns vicinity membership and leaders.
 
     ``vicinity_source`` is ``yaml`` (hand groups) or ``algorithm``
     (VicinityPartitionAndLeaderElection). Distances are optional and do not
@@ -62,20 +62,3 @@ class RootOrchestrator:
 
     def list_vicinity_members(self, vicinity_id: str) -> list[str]:
         return list(self.vicinities[vicinity_id].member_cluster_ids)
-
-    def rank_beg_candidates(
-        self, home_cluster_id: str, free_cpu_by_cluster: dict[str, float]
-    ) -> list[str]:
-        """Clusters outside home and its vicinity, most free CPU first, then id.
-
-        Paper BEG ranks by load+distance; S5 uses free CPU as the least-loaded proxy
-        and skips distance/γ. Home vicinity members are never global candidates.
-        """
-        skip = set(self.list_vicinity_members(self.vicinity_of(home_cluster_id)))
-        skip.add(home_cluster_id)
-        candidates = [cid for cid in free_cpu_by_cluster if cid not in skip]
-        return sorted(candidates, key=lambda cid: (-free_cpu_by_cluster[cid], cid))
-
-    def beg_admit(self, *args, **kwargs):
-        """Legacy stub. S5 placement is rank_beg_candidates + scaler schedule_beg."""
-        raise NotImplementedError("beg_admit is not implemented in Part A")

@@ -1,6 +1,9 @@
-# S5 — Global escalation (BEG lite)
+# S5 — Global escalation (removed)
 
-**Status:** done  
+**Status:** removed 2026-09-16 to match `proposed_method_complete.tex` (ladder terminal at VicinityRound).  
+**Replacement:** leftover after vicinity is `UnmetDemandAction` (`LogUnmetDemand`). See [tex-followups.md](./tex-followups.md).
+
+The rest of this note is the old S5 BEG-lite design and should not be followed.  
 **Branch:** `ladder-based-implementation`  
 **Roadmap:** [proposed-implementation-roadmap.md](./proposed-implementation-roadmap.md) §3 S5  
 **Depends on:** [s4-vicinity-help.md](./s4-vicinity-help.md)

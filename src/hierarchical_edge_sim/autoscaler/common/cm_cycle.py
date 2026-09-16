@@ -42,8 +42,8 @@ def cluster_manager_cycle(
     Cooldown/streak bookkeeping belongs in the caller so every tick still
     observes, matching the sim's stronger InCooldown rule.
 
-    ``allocate`` is AllocateResources (BEV then BEH). Leftover ρ is merged
-    FCFS and passed to ``resolve_help`` (VicinityLeaderSchedule then BEG).
+    ``allocate`` is AllocateResources (Vertical then Horizontal). Leftover ρ is merged
+    FCFS and passed to ``resolve_help`` (VicinityRound).
     Mapping: ``docs/allocate-resources.md``.
     """
     by_cluster: dict[str, list[str]] = {}

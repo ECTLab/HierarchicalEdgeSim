@@ -1,4 +1,4 @@
-"""In-cluster best-effort horizontal (BEH) for reactive_local."""
+"""In-cluster HorizontalScaling for reactive_local (paper Alg. hscale)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,10 @@ from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, repl
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec, quantize_resource
 from hierarchical_edge_sim.env.loans import get_loan
-from hierarchical_edge_sim.env.models import LoanTier
 
 
 def home_cluster_id(env: Env, ms_id: str) -> str:
-    """App-owning cluster (paper stamp). BEH stays inside this cluster; S4 places leftovers."""
+    """App-owning cluster (paper stamp). Local horizontal stays inside this cluster."""
     return env.get_app_owner_cluster_id(ms_id)
 
 
@@ -103,7 +102,7 @@ def packed_spawn_size(
     return cpu, ram, head_cpu, head_ram
 
 
-def beh_up(
+def horizontal_up(
     *,
     env: Env,
     ms_id: str,
@@ -152,7 +151,7 @@ def beh_up(
                     server_id=sid,
                     cpu_alloc_cores=cpu,
                     ram_alloc_mb=ram,
-                    reason="beh_spawn",
+                    reason="horizontal_spawn",
                     tau=tau,
                 )
             )
@@ -169,7 +168,7 @@ def beh_up(
     return (actions, remain_cpu, remain_ram)
 
 
-def beh_down(
+def horizontal_down(
     *,
     env: Env,
     replicas: list[ReplicaView],
@@ -183,10 +182,11 @@ def beh_down(
     spec: MicroserviceSpec | None = None,
     mu_tgt: float | None = None,
 ) -> list[TerminateAction]:
-    """Terminate global loans, then vicinity loans, then coldest local (never the last).
+    """Terminate borrowed replicas first, then local (never the last).
 
-    Reason follows the loan rung: ``beg_terminate``, ``vicinity_terminate``, or
-    ``beh_terminate``. Unknown remotes (no loan row) are global, same as rank.
+    Reason is ``vicinity_terminate`` for a replica outside the home cluster,
+    else ``horizontal_terminate``. Unknown remotes (no loan row) still count
+    as borrowed so they die before local.
     """
     live = [r for r in replicas if r.container_id not in skip_ids]
     fleet_mu = (
@@ -212,13 +212,13 @@ def beh_down(
             if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
                 continue
             fleet_mu = max(0.0, fleet_mu - extra_mu)
-        tier, _ = _reclaim_key(env, r, owner_cluster_id, ms_id)
+        borrowed, _ = _reclaim_key(env, r, owner_cluster_id, ms_id)
         actions.append(
             TerminateAction(
                 type="terminate",
                 ms_id=ms_id,
                 container_id=r.container_id,
-                reason=_reclaim_terminate_reason(tier),
+                reason="vicinity_terminate" if borrowed == 0 else "horizontal_terminate",
                 tau=tau,
             )
         )
@@ -227,26 +227,15 @@ def beh_down(
     return actions
 
 
-def _reclaim_terminate_reason(tier: int) -> str:
-    """Stamp terminate with the same rung as spawn: BEG / vicinity / local BEH."""
-    if tier == 2:
-        return "beh_terminate"
-    if tier == 1:
-        return "vicinity_terminate"
-    return "beg_terminate"
-
-
 def _reclaim_key(
     env: Env, replica: ReplicaView, owner_cluster_id: str, ms_id: str
 ) -> tuple[int, int]:
-    """(tier, ts): global=0, vicinity=1, local=2; older loan ts first."""
+    """(borrowed, ts): borrowed=0 before local=1; older loan ts first."""
     sid = replica.server_id or env.get_container(replica.container_id).server_id
     server = env.get_server(sid)
     if server.cluster_id == owner_cluster_id:
-        return (2, 0)
+        return (1, 0)
     loan = get_loan(server, owner_cluster_id, ms_id)
-    if loan is not None and loan.tier == LoanTier.VICINITY:
-        return (1, loan.ts)
     ts = loan.ts if loan is not None else 0
     return (0, ts)
 

@@ -5,11 +5,11 @@
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
 **Related:** [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md), [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md), [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md)
 
-The original triangle demo (`demo_400_triangle_beg.yaml`) is one topology: one
-tiny home worker, one tiny neighbor, one fat BEG worker. That is the **full
-ladder** control. It does not prove local BEH, a fat vicinity (no BEG), or
-skipping a floor-only neighbor. Those are separate slices, not more clusters
-on the same picture.
+The original triangle demo (`demo_400_triangle.yaml`) is one topology: one
+tiny home worker, one tiny neighbor, and an outside cluster that is **not**
+used (leftover is unmet demand). That is the **vicinity-terminal** control.
+It does not prove local HorizontalScaling, a fat vicinity, or skipping a
+floor-only neighbor. Those are separate slices.
 
 Do **not** grow this into a large matrix. Four synthetics plus the existing
 Alibaba `reactive_local` re-run are enough to trust the post-surplus /
@@ -22,14 +22,14 @@ enough for surplus reclaim.
 
 | Config | Isolates | Topology | Must see | Must not see |
 |---|---|---|---|---|
-| `demo_400_triangle_beh.yaml` | In-cluster BEH | c1-w1 filled (1.0); empty sibling c1-w2 (8.0); no vicinities | `beh_spawn` / `beh_terminate` on `c1-w2`; one leftover on c1 | `vicinity_*`, `beg_*` |
-| `demo_400_triangle_vicinity.yaml` | Packed vicinity | c1 filled; fat c2 (8.0) in v1; no c3 | `vicinity_spawn` / `vicinity_terminate` on c2, `cpu_new>0.50` | `beg_*`, `beh_*` |
-| `demo_400_triangle_skip_beg.yaml` | Floor skip → BEG | c1 filled; c2=0.4 (below min); fat c3 outside v1 | `beg_spawn` / `beg_terminate` on c3, no spawn on c2 | `vicinity_*` |
-| `demo_400_triangle_beg.yaml` | Full ladder | c1 1.0 + c2 1.0 + fat c3 | vicinity then BEG (spawn **and** terminate) | local `beh_spawn` / `beh_terminate` |
+| `demo_400_triangle_horizontal.yaml` | In-cluster HorizontalScaling | c1-w1 filled (1.0); empty sibling c1-w2 (8.0); no vicinities | `horizontal_spawn` / `horizontal_terminate` on `c1-w2`; one leftover on c1 | `vicinity_*` |
+| `demo_400_triangle_vicinity.yaml` | Packed vicinity | c1 filled; fat c2 (8.0) in v1; no c3 | `vicinity_spawn` / `vicinity_terminate` on c2, `cpu_new>0.50` | `horizontal_spawn` |
+| `demo_400_triangle_skip_neighbor.yaml` | Floor skip → unmet | c1 filled; c2=0.4 (below min); fat c3 outside v1 | `unmet_demand`; no spawn on c2 or c3 | `vicinity_spawn` |
+| `demo_400_triangle.yaml` | Vicinity then unmet | c1 1.0 + c2 1.0 + unused c3 | vicinity spawn **and** terminate; `unmet_demand` | spawn on c3 |
 
 Every slice: reclaim to **one** live replica in cluster `c1`, last alloc `> cpu_min`, leftover RAM near `ram_min + μ · ρ_ram` (not `ram_max`), no UP after the last extra terminate. Packed extras spawn above the floor (`cpu_new>0.50`) with RAM matched to that μ, not `α_up · seed RAM`.
 
-BEH-only is the exception on *which* replica survives. Vicinity and BEG extras are a cheaper loan tier, so they die first and `c-api-0` on `c1-w1` remains. In-cluster extras are the same tier as the seed; among equal μ the ranker is `(q, -slack, container_id)`, so `c-api-0` can be reclaimed and the leftover sits on the fat sibling (`c1-w2`). That still satisfies LAST_REPLICA and surplus hold. Do not treat it as a keep-seed failure.
+Horizontal-only is the exception on *which* replica survives. Vicinity extras are a cheaper loan tier, so they die first and `c-api-0` on `c1-w1` remains. In-cluster extras are the same tier as the seed; among equal μ the ranker is `(q, -slack, container_id)`, so `c-api-0` can be reclaimed and the leftover sits on the fat sibling (`c1-w2`). That still satisfies LAST_REPLICA and surplus hold. Do not treat it as a keep-seed failure.
 
 `cascade_home` is **off** on all four. Surplus down skips BEV while extras exist and reclaims remotes first, so cascade-home has nothing to pull. That is a separate policy question, not a fifth topology.
 
@@ -37,27 +37,24 @@ BEH-only is the exception on *which* replica survives. Vicinity and BEG extras a
 
 ## Terminate reasons match spawn rungs
 
-Scale-up already stamped the rung (`beh_spawn` / `vicinity_spawn` / `beg_spawn`). Scale-in used to stamp every extra kill as `beh_terminate`, including global loans on `c3`. That was a leftover name from `beh_down`, not a wrong kill order.
-
-`beh_down` still ranks global → vicinity → local. It now stamps the same key:
+Scale-up stamps the rung (`horizontal_spawn` / `vicinity_spawn`). Scale-in stamps the same key:
 
 | Loan rung | Spawn | Terminate |
 |---|---|---|
-| Global (BEG) | `beg_spawn` | `beg_terminate` |
 | Vicinity | `vicinity_spawn` | `vicinity_terminate` |
-| In-cluster extra | `beh_spawn` | `beh_terminate` |
+| In-cluster extra | `horizontal_spawn` | `horizontal_terminate` |
 
-`cascade_terminate` is migrate-home, not this reclaim path. Unknown remotes (no loan row) still rank as global, so they log `beg_terminate`. Plot legends follow the new reasons (`BEG terminate`, `vicinity terminate`); older run dirs that predate this change still show remotes as `beh_terminate`.
+`cascade_terminate` is migrate-home, not this reclaim path. Unknown remotes (no loan row) still count as borrowed, so they log `vicinity_terminate`.
 
 ---
 
 ## How to run
 
 ```bash
-PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_beh.yaml
+PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_horizontal.yaml
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_vicinity.yaml
-PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_skip_beg.yaml
-PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_beg.yaml
+PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle_skip_neighbor.yaml
+PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_400_triangle.yaml
 ```
 
 Plots (needs matplotlib on `PYTHONPATH`):

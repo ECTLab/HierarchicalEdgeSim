@@ -1,14 +1,10 @@
-# Same triangle load as demo_400_triangle_beg.yaml, but the leftover stays
-# in-cluster: seed fills c1-w1; c1-w2 is an empty sibling (BEH). No vicinities.
-#
-# cpu_max=1.0 ⇒ μ_max = 50. Peak Λ=180 needs four full replicas. All extras
-# land on c1-w2. Descent reclaims those BEH replicas; among equal local μ the
-# original seed can be retired (same loan tier). Surplus then sizes whoever
-# remains. Isolates packed local spawn + surplus hold without S4/S5.
+# Same triangle load, but the neighbor cannot host a serving replica.
+# c2-w1 is 0.4 cores (below cpu_min=0.5): packed spawn skips it (would be
+# μ=0). Leftover is unmet demand (c3 is outside v1 and is not used).
 
 sim:
   tick_sec: 1.0
-  results_dir: results/triangle_beh/
+  results_dir: results/triangle_skip_neighbor/
   seed: 42
 
 traces_dir: traces/demo/
@@ -20,9 +16,24 @@ topology:
         - id: c1-w1
           cpu_cap_cores: 1.0
           ram_cap_mb: 512
-        - id: c1-w2
+    - id: c2
+      servers:
+        - id: c2-w1
+          cpu_cap_cores: 0.4
+          ram_cap_mb: 256
+    - id: c3
+      servers:
+        - id: c3-w1
           cpu_cap_cores: 8.0
           ram_cap_mb: 16384
+
+  vicinities:
+    - id: v1
+      members: [c1, c2]
+      leader: c1
+    - id: v2
+      members: [c3]
+      leader: c3
 
 apps:
   - id: demo_app

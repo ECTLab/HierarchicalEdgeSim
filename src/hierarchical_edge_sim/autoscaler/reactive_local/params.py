@@ -1,4 +1,4 @@
-"""Parameters for reactive_local (BEV + in-cluster BEH)."""
+"""Parameters for reactive_local (VerticalScaling + in-cluster HorizontalScaling)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class ReactiveLocalParams:
     prefer_consolidate_down: bool = True
     grow_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
     shrink_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
-    # Prolonged surge: skip BEV and go straight to BEH (paper Alg. BEV).
+    # Prolonged surge: skip VerticalScaling and go straight to HorizontalScaling.
     # Default above x_up_streak so the first UP still tries vertical packing.
     sustained_up_streak: int = 6
     # After a down tick frees local minima, pull at most one borrowed replica home.

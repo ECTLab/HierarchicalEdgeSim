@@ -1,4 +1,4 @@
-"""Re-export shared BEV packing (kept so reactive_vertical.policy imports stay stable)."""
+"""Re-export shared VerticalScaling packing (kept so reactive_vertical.policy imports stay stable)."""
 
 from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, distribute_down, distribute_up
 

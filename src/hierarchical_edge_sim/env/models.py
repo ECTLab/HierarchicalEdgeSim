@@ -68,7 +68,6 @@ class Microservice:
 
 class LoanTier(str, Enum):
     VICINITY = "vicinity"
-    GLOBAL = "global"
 
 
 @dataclass(frozen=True, slots=True)

@@ -38,7 +38,7 @@ from .api import (
     Env,
     NeedHorizontalAction,
     NeedVicinityHelpAction,
-    NeedGlobalHelpAction,
+    UnmetDemandAction,
     RejectReason,
     ResizeAction,
     ResizeResult,
@@ -111,5 +111,5 @@ __all__ = [
     "TerminateAction",
     "NeedHorizontalAction",
     "NeedVicinityHelpAction",
-    "NeedGlobalHelpAction",
+    "UnmetDemandAction",
 ]

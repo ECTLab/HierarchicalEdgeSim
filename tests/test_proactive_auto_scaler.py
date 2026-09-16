@@ -171,7 +171,7 @@ def test_cold_start_uses_reactive_ladder(tmp_path: Path):
     )
     _push(env, 1, incoming=50.0, drop=40.0, q=1.0)
     actions = scaler.on_tick_end(env, 1)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_up" for a in actions)
+    assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)
 
 
@@ -193,10 +193,10 @@ def test_horizon_spike_scales_up_without_drops(tmp_path: Path):
     assert scaler.on_tick_end(env, 1) == []
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     actions = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_up" for a in actions)
+    assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
 
 
-def test_horizon_step_is_clipped_so_beh_does_not_mass_spawn(tmp_path: Path):
+def test_horizon_step_is_clipped_so_horizontal_does_not_mass_spawn(tmp_path: Path):
     env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0)
     scaler = build(
         {
@@ -215,7 +215,7 @@ def test_horizon_step_is_clipped_so_beh_does_not_mass_spawn(tmp_path: Path):
     scaler.on_tick_end(env, 1)
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     actions = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_up" for a in actions)
+    assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)
 
 
@@ -260,7 +260,7 @@ def test_cooldown_blocks_down_not_up(tmp_path: Path):
     scaler.on_tick_end(env, 1)
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     up = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "reason", "") == "bev_up" for a in up)
+    assert any(getattr(a, "reason", "") == "vertical_up" for a in up)
     applied = [
         ResizeResult(
             ok=True,
@@ -274,13 +274,13 @@ def test_cooldown_blocks_down_not_up(tmp_path: Path):
     pred.value = 0.01
     _push(env, 3, incoming=5.0, drop=0.0, q=0.0)
     blocked = scaler.on_tick_end(env, 3)
-    assert not any(getattr(a, "reason", "") == "bev_down" for a in blocked)
+    assert not any(getattr(a, "reason", "") == "vertical_down" for a in blocked)
     _push(env, 4, incoming=5.0, drop=0.0, q=0.0)
     still_blocked = scaler.on_tick_end(env, 4)
-    assert not any(getattr(a, "reason", "") == "bev_down" for a in still_blocked)
+    assert not any(getattr(a, "reason", "") == "vertical_down" for a in still_blocked)
     _push(env, 5, incoming=5.0, drop=0.0, q=0.0)
     released = scaler.on_tick_end(env, 5)
-    assert any(getattr(a, "reason", "") == "bev_down" for a in released)
+    assert any(getattr(a, "reason", "") == "vertical_down" for a in released)
 
 
 def test_scale_up_ignores_cooldown(tmp_path: Path):
@@ -301,7 +301,7 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
     scaler.on_tick_end(env, 1)
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     first = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "reason", "") == "bev_up" for a in first)
+    assert any(getattr(a, "reason", "") == "vertical_up" for a in first)
     scaler.on_actions_applied(
         [
             ResizeResult(
@@ -315,7 +315,7 @@ def test_scale_up_ignores_cooldown(tmp_path: Path):
     )
     _push(env, 3, incoming=10.0, drop=0.0, q=0.1)
     second = scaler.on_tick_end(env, 3)
-    assert any(getattr(a, "reason", "") == "bev_up" for a in second)
+    assert any(getattr(a, "reason", "") == "vertical_up" for a in second)
 
 
 def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
@@ -338,7 +338,7 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
     scaler.on_tick_end(env, 1)
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     up = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "reason", "") == "bev_up" for a in up)
+    assert any(getattr(a, "reason", "") == "vertical_up" for a in up)
     scaler.on_actions_applied(
         [
             ResizeResult(
@@ -352,12 +352,12 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
     )
     pred.value = 0.01
     _push(env, 3, incoming=5.0, drop=0.0, q=0.0)
-    assert not any(getattr(a, "reason", "") == "bev_down" for a in scaler.on_tick_end(env, 3))
+    assert not any(getattr(a, "reason", "") == "vertical_down" for a in scaler.on_tick_end(env, 3))
     _push(env, 4, incoming=5.0, drop=0.0, q=0.0)
-    assert not any(getattr(a, "reason", "") == "bev_down" for a in scaler.on_tick_end(env, 4))
+    assert not any(getattr(a, "reason", "") == "vertical_down" for a in scaler.on_tick_end(env, 4))
     _push(env, 5, incoming=5.0, drop=0.0, q=0.0)
     first_down = scaler.on_tick_end(env, 5)
-    assert any(getattr(a, "reason", "") == "bev_down" for a in first_down)
+    assert any(getattr(a, "reason", "") == "vertical_down" for a in first_down)
     scaler.on_actions_applied(
         [
             ResizeResult(
@@ -371,7 +371,7 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
     )
     _push(env, 6, incoming=5.0, drop=0.0, q=0.0)
     second_down = scaler.on_tick_end(env, 6)
-    assert any(getattr(a, "reason", "") == "bev_down" for a in second_down)
+    assert any(getattr(a, "reason", "") == "vertical_down" for a in second_down)
 
 
 def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):

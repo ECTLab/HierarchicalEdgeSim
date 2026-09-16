@@ -1,4 +1,5 @@
-# Triangle load: climb until BEG, then reclaim to one local replica.
+# Triangle load: climb until VicinityRound, leftover is unmet, then reclaim
+# to one local replica.
 #
 # 400 ticks: Λ 40 → 180 over τ=1–200, 180 → 5 over τ=201–320, then hold at 5
 # until τ=400. Start 40 keeps slack below θ_free on the seed (μ=50) so it does
@@ -7,17 +8,16 @@
 # sizes the last replica from current load (headroom for q ≈ 1-θ_free) instead
 # of walking it through μ=0.
 # cpu_max=1.0 ⇒ μ_max = 50 req/tick. One full replica on c1 and one on c2 give
-# μ=50+50=100. Peak Λ=180 leaves 80 req/tick for BEG on c3 (outside v1).
-# Seed id c-api-0 sorts before spawned c-api-c3-* so a later BEV-up grows the
-# local seed instead of a leftover BEG extra.
+# μ=50+50=100. Peak Λ=180 leaves 80 req/tick unmet (c3 is outside v1 and is
+# not a placement candidate).
 #
-# c1 (home, v1): one worker, seed replica fills it (no local BEH slot).
+# c1 (home, v1): one worker, seed replica fills it (no local horizontal slot).
 # c2 (neighbor, v1): 1.0 / 512 like c1 — room for one vicinity replica at max.
-# c3 (v2): 8 cores — BEG candidate for the leftover 80 req/tick.
+# c3 (v2): present so the run can show that outside-vicinity capacity is unused.
 
 sim:
   tick_sec: 1.0
-  results_dir: results/triangle_beg/
+  results_dir: results/triangle/
   seed: 42
 
 traces_dir: traces/demo/
@@ -83,8 +83,8 @@ autoscaler:
     delta_ram_min_mb: 128
     prefer_consolidate_down: true
     sustained_up_streak: 6
-    # Cascade-home would shrink the seed replica to minima and pull a BEG
-    # replica onto c1-w1, which restarts UP/DOWN thrash on the descent.
+    # Cascade-home would shrink the seed replica to minima and pull a
+    # vicinity replica onto c1-w1, which restarts UP/DOWN thrash on the descent.
     cascade_home: false
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

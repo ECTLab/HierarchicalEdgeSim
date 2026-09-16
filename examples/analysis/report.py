@@ -66,7 +66,7 @@ def analyze_run(
       - one combined requests plot (trace vs sum incoming/served/dropped)
       - per-container CPU and RAM plots
       - ladder QoS (incoming, CPU alloc, drops + action markers)
-      - replica counts by site (home / vicinity / global)
+      - replica counts by site (home / vicinity / outside)
     """
     run_dir = run_dir.resolve()
     if not run_dir.is_dir():

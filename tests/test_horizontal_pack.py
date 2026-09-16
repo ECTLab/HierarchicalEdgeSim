@@ -1,9 +1,9 @@
-"""BEH packs leftover above minima; BEV will not grow a replica that still has μ=0."""
+"""HorizontalScaling packs leftover above minima; VerticalScaling will not grow a replica that still has μ=0."""
 
 from __future__ import annotations
 
 from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, distribute_up
-from hierarchical_edge_sim.autoscaler.reactive_local.beh import packed_spawn_size
+from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import packed_spawn_size
 from hierarchical_edge_sim.autoscaler.reactive_local.params import ReactiveLocalParams
 from hierarchical_edge_sim.env.config import MicroserviceSpec
 
@@ -92,7 +92,7 @@ def test_distribute_up_skips_cpu_only_grow_on_ram_floor():
         delta_cpu=0.5,
         delta_ram=0.0,
         tau=300,
-        reason="bev_up",
+        reason="vertical_up",
     )
     resizes = [a for a in actions if getattr(a, "type", "") == "resize"]
     assert resizes == []
@@ -124,7 +124,7 @@ def test_distribute_up_grows_ram_when_that_is_the_dead_resource():
         delta_cpu=0.5,
         delta_ram=128.0,
         tau=300,
-        reason="bev_up",
+        reason="vertical_up",
     )
     resizes = [a for a in actions if getattr(a, "type", "") == "resize"]
     assert len(resizes) == 1

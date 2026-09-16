@@ -18,7 +18,7 @@ from hierarchical_edge_sim.autoscaler.reactive_local.allocate import (
     resolve_help,
     up_delta,
 )
-from hierarchical_edge_sim.autoscaler.reactive_local.beh import home_cluster_id
+from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import home_cluster_id
 from hierarchical_edge_sim.autoscaler.reactive_local.help import HelpRequest
 
 from .decide import Direction, predict_and_decide

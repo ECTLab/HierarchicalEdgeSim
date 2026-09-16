@@ -16,16 +16,15 @@ from .aggregate import sum_aligned, sum_series
 from .io import ContainerSeries
 
 _FAMILY_STYLE = {
-    "BEV up": {"color": "#1f77b4", "linestyle": "--"},
-    "BEV down": {"color": "#17becf", "linestyle": ":"},
-    "BEH spawn": {"color": "#ff7f0e", "linestyle": "--"},
-    "BEH terminate": {"color": "#ffbb78", "linestyle": ":"},
+    "vertical up": {"color": "#1f77b4", "linestyle": "--"},
+    "vertical down": {"color": "#17becf", "linestyle": ":"},
+    "horizontal spawn": {"color": "#ff7f0e", "linestyle": "--"},
+    "horizontal terminate": {"color": "#ffbb78", "linestyle": ":"},
     "vicinity": {"color": "#2ca02c", "linestyle": "-."},
     "vicinity terminate": {"color": "#98df8a", "linestyle": ":"},
-    "BEG": {"color": "#d62728", "linestyle": "-."},
-    "BEG terminate": {"color": "#ff9896", "linestyle": ":"},
     "cascade": {"color": "#9467bd", "linestyle": ":"},
     "escalate": {"color": "#7f7f7f", "linestyle": ":"},
+    "unmet": {"color": "#d62728", "linestyle": ":"},
 }
 
 _ROUTING_TOP_N = 6
@@ -306,7 +305,7 @@ def plot_replica_sites(
     title: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=(11, 5))
-    order = [s for s in ("home", "vicinity", "global", "remote") if s in counts]
+    order = [s for s in ("home", "vicinity", "outside", "remote") if s in counts]
     for site in order:
         ax.plot(tau, counts[site], label=site, linewidth=2, drawstyle="steps-post")
     marker_ticks = sum(len(v) for v in markers.values())

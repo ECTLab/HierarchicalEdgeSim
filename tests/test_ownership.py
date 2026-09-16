@@ -95,7 +95,7 @@ def test_loan_registry_round_trip(tiny_config_path):
     assert rec.ts == 3
     assert has_loan(server, "cX", "api")
     assert get_loan(server, "cX", "api") == rec
-    assert add_loan(server, borrower_cluster_id="cX", ms_id="api", tier=LoanTier.GLOBAL, ts=9) is rec
+    assert add_loan(server, borrower_cluster_id="cX", ms_id="api", tier=LoanTier.VICINITY, ts=9) is rec
     assert drop_loan(server, "cX", "api")
     assert not has_loan(server, "cX", "api")
     assert not drop_loan(server, "cX", "api")

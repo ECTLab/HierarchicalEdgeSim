@@ -180,7 +180,7 @@ def classify_site(cluster_id: str, owner_cluster_id: str, vmap: dict[str, str]) 
         return "remote"
     if vmap.get(cluster_id) and vmap.get(cluster_id) == vmap.get(owner_cluster_id):
         return "vicinity"
-    return "global"
+    return "outside"
 
 
 def replica_counts_by_site(
@@ -190,7 +190,7 @@ def replica_counts_by_site(
     owner_cluster_id: str,
     vmap: dict[str, str],
 ) -> dict[str, list[float]]:
-    sites = ("home", "vicinity", "global", "remote")
+    sites = ("home", "vicinity", "outside", "remote")
     counts = {site: [0.0] * len(tau_full) for site in sites}
     tau_index = {t: i for i, t in enumerate(tau_full)}
     for container in containers:
@@ -203,24 +203,22 @@ def replica_counts_by_site(
         counts.pop("remote")
     else:
         counts.pop("vicinity")
-        counts.pop("global")
+        counts.pop("outside")
     return counts
 
 
 ACTION_FAMILY: dict[str, str] = {
-    "bev_up": "BEV up",
-    "bev_down": "BEV down",
-    "beh_spawn": "BEH spawn",
-    "beh_terminate": "BEH terminate",
+    "vertical_up": "vertical up",
+    "vertical_down": "vertical down",
+    "horizontal_spawn": "horizontal spawn",
+    "horizontal_terminate": "horizontal terminate",
     "vicinity_spawn": "vicinity",
     "vicinity_terminate": "vicinity terminate",
-    "beg_spawn": "BEG",
-    "beg_terminate": "BEG terminate",
     "cascade_spawn": "cascade",
     "cascade_terminate": "cascade",
     "need_horizontal": "escalate",
     "need_vicinity_help": "escalate",
-    "need_global_help": "escalate",
+    "unmet_demand": "unmet",
 }
 
 

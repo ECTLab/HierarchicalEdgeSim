@@ -144,11 +144,11 @@ def test_cold_start_until_tau_from_meta():
     )
 
 
-def test_classify_site_home_vicinity_global():
+def test_classify_site_home_vicinity_outside():
     vmap = {"c1": "v1", "c2": "v1", "c3": "v2"}
     assert classify_site("c1", "c1", vmap) == "home"
     assert classify_site("c2", "c1", vmap) == "vicinity"
-    assert classify_site("c3", "c1", vmap) == "global"
+    assert classify_site("c3", "c1", vmap) == "outside"
     assert classify_site("c2", "c1", {}) == "remote"
 
 
@@ -219,19 +219,19 @@ def test_replica_counts_by_site_and_action_markers():
         [
             ActionRow(2, "reactive_local", "api", "spawn", "c-v", "vicinity_spawn", "OK"),
             ActionRow(2, "reactive_local", "api", "spawn", "c-v", "vicinity_spawn", "OK"),
-            ActionRow(3, "reactive_local", "other", "spawn", "x", "beg_spawn", "OK"),
-            ActionRow(4, "reactive_local", "api", "resize", "c-home", "bev_up", "OK"),
-            ActionRow(5, "reactive_local", "api", "resize", "c-home", "bev_down", "OK"),
+            ActionRow(3, "reactive_local", "other", "spawn", "x", "vicinity_spawn", "OK"),
+            ActionRow(4, "reactive_local", "api", "resize", "c-home", "vertical_up", "OK"),
+            ActionRow(5, "reactive_local", "api", "resize", "c-home", "vertical_down", "OK"),
             ActionRow(6, "reactive_local", "api", "terminate", "c-v", "vicinity_terminate", "OK"),
-            ActionRow(7, "reactive_local", "api", "terminate", "c-g", "beg_terminate", "OK"),
+            ActionRow(7, "reactive_local", "api", "terminate", "c-g", "horizontal_terminate", "OK"),
         ],
         ms_id="api",
     )
     assert markers["vicinity"] == [2]
-    assert markers["BEV up"] == [4]
-    assert markers["BEV down"] == [5]
+    assert markers["vertical up"] == [4]
+    assert markers["vertical down"] == [5]
     assert markers["vicinity terminate"] == [6]
-    assert markers["BEG terminate"] == [7]
+    assert markers["horizontal terminate"] == [7]
     assert "BEG" not in markers
 
 
@@ -263,7 +263,7 @@ class _KillSpawned:
                 type="terminate",
                 ms_id="api",
                 container_id=self.container_id,
-                reason="beh_terminate",
+                reason="horizontal_terminate",
             )
         ]
 

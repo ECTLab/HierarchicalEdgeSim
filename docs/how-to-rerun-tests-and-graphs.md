@@ -252,7 +252,7 @@ RUN_DIR=$(.venv/bin/python examples/run_env_only.py configs/demo_60_two_clusters
 
 ## 6) Reactive ladder figures (before S7)
 
-`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; BEV/BEH/vicinity/BEG/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest.
+`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; vertical/horizontal/vicinity/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest.
 
 ### Ladder smoke configs
 
@@ -261,7 +261,7 @@ These 60-tick runs are also the Algorithm 2 check (`autoscaler.cycle: cluster_ma
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_60_reactive_local.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_60_vicinity_help.yaml
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_global_help.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_60_unmet_demand.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_60_proactive.yaml
 # then: python examples/compare_trace_vs_log.py <RUN_DIR>
 ```
@@ -272,10 +272,10 @@ do not prove surplus reclaim. For that, use the four 400-tick triangle slices
 [triangle-ladder-scenarios.md](./triangle-ladder-scenarios.md).
 
 ```bash
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_beh.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_horizontal.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_vicinity.yaml
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_skip_beg.yaml
-.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_beg.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle_skip_neighbor.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/demo_400_triangle.yaml
 # then: python examples/compare_trace_vs_log.py <RUN_DIR>
 ```
 

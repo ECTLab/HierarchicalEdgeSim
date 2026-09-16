@@ -116,14 +116,6 @@ def test_run_with_vicinities_does_not_touch_root(tmp_path):
     assert env.root is not None
 
 
-def test_beg_admit_not_implemented(tmp_path):
-    path = _write_config(tmp_path, _two_cluster_dict())
-    env = Env.from_config(path)
-    assert env.root is not None
-    with pytest.raises(NotImplementedError, match="beg_admit"):
-        env.root.beg_admit()
-
-
 @pytest.mark.parametrize(
     ("name", "mutate", "expected_substring"),
     [

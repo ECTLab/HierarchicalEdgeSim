@@ -1,4 +1,4 @@
-"""Per-MS reactive ladder: BEV then BEH then vicinity help then BEG."""
+"""Per-MS reactive ladder: VerticalScaling then HorizontalScaling then VicinityRound."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from .allocate import (
     resolve_help,
     up_delta,
 )
-from .beh import home_cluster_id
+from .horizontal import home_cluster_id
 from .help import HelpRequest
 from .params import ReactiveLocalParams, validate_params
 
@@ -85,8 +85,8 @@ class ReactiveLocalAutoscaler:
             return None
 
         def allocate(intent: CycleIntent) -> tuple[list[Any], HelpRequest | None]:
-            # Algorithm 4 (AllocateResources): local BEV then BEH; Up leftover
-            # is ρ. Cooldown starts in on_actions_applied, not here.
+            # AllocateResources: local Vertical then Horizontal; Up leftover is ρ.
+            # Cooldown starts in on_actions_applied, not here.
             obs = obs_by[intent.ms_id]
             if intent.kind == "up":
                 return ladder_up(

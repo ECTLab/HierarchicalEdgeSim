@@ -5,7 +5,6 @@ from __future__ import annotations
 from hierarchical_edge_sim.env.api import Env, SpawnAction, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 from hierarchical_edge_sim.env.loans import get_loan
-from hierarchical_edge_sim.env.models import LoanTier
 
 from .place import rank_servers_in_clusters, snapshot_free, subtract_pending
 
@@ -87,7 +86,7 @@ def check_cascading_migration(
 def _borrowed_still_live(
     env: Env, ms_id: str, owner_cluster_id: str, pending_term: set[str]
 ) -> str | None:
-    ranked: list[tuple[int, int, str]] = []
+    ranked: list[tuple[int, str]] = []
     for cid in env.get_microservice(ms_id).container_ids:
         if cid in pending_term:
             continue
@@ -96,15 +95,12 @@ def _borrowed_still_live(
         if server.cluster_id == owner_cluster_id:
             continue
         loan = get_loan(server, owner_cluster_id, ms_id)
-        if loan is not None and loan.tier == LoanTier.VICINITY:
-            ranked.append((1, loan.ts, cid))
-        else:
-            ts = loan.ts if loan is not None else 0
-            ranked.append((0, ts, cid))
+        ts = loan.ts if loan is not None else 0
+        ranked.append((ts, cid))
     if not ranked:
         return None
     ranked.sort()
-    return ranked[0][2]
+    return ranked[0][1]
 
 
 def _is_local(env: Env, container_id: str, owner_cluster_id: str) -> bool:

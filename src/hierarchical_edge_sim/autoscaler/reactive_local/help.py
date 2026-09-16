@@ -1,4 +1,4 @@
-"""Leftover scale-up demand after a ladder rung (vicinity help, then BEG)."""
+"""Leftover scale-up demand after local allocate (VicinityRound payload ρ)."""
 
 from __future__ import annotations
 

@@ -31,7 +31,7 @@ _APPLY_RANK: dict[str, int] = {
     "terminate": 0,
     "need_horizontal": 1,
     "need_vicinity_help": 2,
-    "need_global_help": 3,
+    "unmet_demand": 3,
     "resize": 4,
     "spawn": 5,
 }
@@ -133,7 +133,7 @@ class SpawnAction:
     reason: str = ""
     tau: int | None = None
     actor_cluster_id: str = ""
-    loan_tier: str = ""  # "vicinity" | "global"; S4 grant for foreign spawn
+    loan_tier: str = ""  # "vicinity"; grant for a foreign spawn
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +163,7 @@ class NeedHorizontalAction:
 
 @dataclass(frozen=True, slots=True)
 class NeedVicinityHelpAction:
-    """Leftover after local BEV/BEH when there is no vicinity root (S2). Log-only."""
+    """Leftover after local Vertical/Horizontal when there is no vicinity root. Log-only."""
 
     type: str  # "need_vicinity_help"
     ms_id: str
@@ -176,12 +176,12 @@ class NeedVicinityHelpAction:
 
 
 @dataclass(frozen=True, slots=True)
-class NeedGlobalHelpAction:
-    """Leftover after BEG exhausted candidates. Paper LogUnmetDemand; log-only."""
+class UnmetDemandAction:
+    """Leftover after VicinityRound. Paper LogUnmetDemand; log-only."""
 
-    type: str  # "need_global_help"
+    type: str  # "unmet_demand"
     ms_id: str
-    reason: str = "need_global_help"
+    reason: str = "unmet_demand"
     tau: int | None = None
     residual_cpu_cores: float | None = None
     residual_ram_mb: float | None = None
@@ -376,7 +376,7 @@ class Env:
 
         Direct ``resize`` / ``spawn`` / ``terminate`` remain the physical ops; this is the
         authorized path (paper RequestWorkerOwnerScale). Foreign actors without a loan are
-        rejected. Passing ``loan_tier`` (``vicinity`` / ``global``) grants a fresh loan and
+        rejected. Passing ``loan_tier="vicinity"`` grants a fresh loan and
         then spawns; a failed spawn rolls the grant back.
         """
         if act == "resize":
@@ -835,7 +835,7 @@ class Env:
 
         for action in ordered:
             action_type = getattr(action, "type", "")
-            if action_type in ("need_horizontal", "need_vicinity_help", "need_global_help"):
+            if action_type in ("need_horizontal", "need_vicinity_help", "unmet_demand"):
                 self.action_log.append(
                     ActionLogRow(
                         tau=log_tau,

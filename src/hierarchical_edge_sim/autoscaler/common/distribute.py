@@ -1,4 +1,4 @@
-"""Distribute MS-wide vertical deltas across containers (shared BEV packing)."""
+"""Distribute MS-wide vertical deltas across containers (shared VerticalScaling packing)."""
 
 from __future__ import annotations
 
@@ -299,7 +299,7 @@ def replica_mu(replica: ReplicaView, spec: MicroserviceSpec, ram_modeled: bool) 
 
 
 def leftover_from_need_horizontal(actions: list) -> tuple[float, float]:
-    """Return residual cores/MB from a BEV leftover signal, else (0, 0)."""
+    """Return residual cores/MB from a vertical leftover signal, else (0, 0)."""
     for action in actions:
         if getattr(action, "type", "") == "need_horizontal":
             return (

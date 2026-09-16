@@ -1,11 +1,11 @@
-# Same triangle load, but the neighbor cannot host a serving replica.
-# c2-w1 is 0.4 cores (below cpu_min=0.5): packed spawn skips it (would be
-# μ=0). Leftover goes to BEG on c3. Isolates the floor-skip + global loan
-# path that demo_400_triangle_beg.yaml never hits (there c2 is 1.0).
+# Three-cluster 60-tick demo: local and vicinity packed; leftover is unmet.
+#
+# v1: c1 (home, filled) + c2 (neighbor, too small for a packed replica)
+# v2: c3 (empty) — outside the home vicinity, so not a placement candidate
 
 sim:
   tick_sec: 1.0
-  results_dir: results/triangle_skip_beg/
+  results_dir: results/unmet_demand_60/
   seed: 42
 
 traces_dir: traces/demo/
@@ -46,9 +46,9 @@ apps:
         ram_max_mb: 512
         cpu_per_request_cores: 0.01
         ram_per_request_mb: 0.5
-        trace_file: api_400_triangle.csv
+        trace_file: api_60_two.csv
         containers:
-          - id: c-api-0
+          - id: c-api-1
             server_id: c1-w1
             cpu_alloc_cores: 1.0
             ram_alloc_mb: 512
@@ -71,6 +71,5 @@ autoscaler:
     delta_ram_min_mb: 128
     prefer_consolidate_down: true
     sustained_up_streak: 6
-    cascade_home: false
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

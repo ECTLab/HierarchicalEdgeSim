@@ -1,7 +1,8 @@
 # Thesis algorithms vs HierarchicalEdgeSim
 
-**Status:** review draft (comparison as of 2026-08-26)  
-**Tex:** `proposed_method_complete.tex` (Proposed Method — Consolidated Draft 3, Summer 2026)  
+**Status:** stale as of 2026-09-16 — the paper dropped the global rung and renamed Vertical / Horizontal / Vicinity. Current punch list: [tex-followups.md](./tex-followups.md).  
+**Tex:** `proposed_method_complete.tex` (Summer 2026)  
+**Code:** HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
 **Code:** current HierarchicalEdgeSim — `reactive_local` ladder plus `proactive_auto_scaler` front-end  
 **Related:** [vicinity-partition.md](./vicinity-partition.md) · [cluster-manager-cycle.md](./cluster-manager-cycle.md) · [predict-and-decide.md](./predict-and-decide.md) · [allocate-resources.md](./allocate-resources.md) · [naming-refactor.md](./naming-refactor.md) · [s2-reactive-local-ladder.md](./s2-reactive-local-ladder.md) · [s3-ownership-bookkeeping.md](./s3-ownership-bookkeeping.md) · [s4-vicinity-help.md](./s4-vicinity-help.md) · [s5-global-help.md](./s5-global-help.md) · [s6-scale-down-reclaim.md](./s6-scale-down-reclaim.md) · [s7-proactive-front-end.md](./s7-proactive-front-end.md) · [s7-proactive-drop-diagnosis.md](./s7-proactive-drop-diagnosis.md) · [mu-matched-cpu-ram-scale.md](./mu-matched-cpu-ram-scale.md) · [surplus-down-resource-quantum-and-seed-log.md](./surplus-down-resource-quantum-and-seed-log.md)
 

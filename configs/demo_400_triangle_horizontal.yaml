@@ -1,11 +1,16 @@
-# Three-cluster 60-tick demo: local and vicinity packed, BEG on the outside cluster.
+# Same triangle load as demo_400_triangle.yaml, but the leftover stays
+# in-cluster: seed fills c1-w1; c1-w2 is an empty sibling (HorizontalScaling).
+# No vicinities.
 #
-# v1: c1 (home, filled) + c2 (neighbor, too small for another minima replica)
-# v2: c3 (empty) — the only legal BEG candidate
+# cpu_max=1.0 ⇒ μ_max = 50. Peak Λ=180 needs four full replicas. All extras
+# land on c1-w2. Descent reclaims those local replicas; among equal local μ
+# the original seed can be retired (same loan tier). Surplus then sizes
+# whoever remains. Isolates packed local spawn + surplus hold without
+# VicinityRound.
 
 sim:
   tick_sec: 1.0
-  results_dir: results/global_help_60/
+  results_dir: results/triangle_horizontal/
   seed: 42
 
 traces_dir: traces/demo/
@@ -17,24 +22,9 @@ topology:
         - id: c1-w1
           cpu_cap_cores: 1.0
           ram_cap_mb: 512
-    - id: c2
-      servers:
-        - id: c2-w1
-          cpu_cap_cores: 0.4
-          ram_cap_mb: 256
-    - id: c3
-      servers:
-        - id: c3-w1
+        - id: c1-w2
           cpu_cap_cores: 8.0
           ram_cap_mb: 16384
-
-  vicinities:
-    - id: v1
-      members: [c1, c2]
-      leader: c1
-    - id: v2
-      members: [c3]
-      leader: c3
 
 apps:
   - id: demo_app
@@ -46,9 +36,9 @@ apps:
         ram_max_mb: 512
         cpu_per_request_cores: 0.01
         ram_per_request_mb: 0.5
-        trace_file: api_60_two.csv
+        trace_file: api_400_triangle.csv
         containers:
-          - id: c-api-1
+          - id: c-api-0
             server_id: c1-w1
             cpu_alloc_cores: 1.0
             ram_alloc_mb: 512
@@ -71,5 +61,6 @@ autoscaler:
     delta_ram_min_mb: 128
     prefer_consolidate_down: true
     sustained_up_streak: 6
+    cascade_home: false
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

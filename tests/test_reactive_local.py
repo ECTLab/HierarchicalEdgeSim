@@ -1,4 +1,4 @@
-"""S2: reactive_local BEV → in-cluster BEH."""
+"""Reactive local: VerticalScaling then in-cluster HorizontalScaling."""
 
 from __future__ import annotations
 
@@ -195,14 +195,14 @@ def test_sustained_skips_bev(tmp_path):
     assert not any(getattr(a, "type", "") == "resize" for a in actions)
 
 
-def test_non_sustained_uses_bev_when_vertical_room(tmp_path):
+def test_non_sustained_uses_vertical_when_room(tmp_path):
     env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0, w1_cpu=8.0)
     scaler = build(
         {"x_up_streak": 1, "y_down_streak": 99, "cooldown_ticks": 0, "sustained_up_streak": 99}
     )
     _push_drops(env, 1)
     actions = scaler.on_tick_end(env, 1)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "bev_up" for a in actions)
+    assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)
 
 

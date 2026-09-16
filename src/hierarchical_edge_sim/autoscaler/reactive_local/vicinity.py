@@ -1,14 +1,19 @@
-"""Vicinity-leader FCFS help (paper VicinityLeaderSchedule, lite)."""
+"""VicinityRound (paper Alg. leader, lite): one FCFS help round per vicinity."""
 
 from __future__ import annotations
 
-from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction
+from hierarchical_edge_sim.env.api import Env, NeedVicinityHelpAction, UnmetDemandAction
 from hierarchical_edge_sim.env.config import EPS
 
 from .help import HelpRequest, help_fcfs_key
 from .place import place_packed_spawns, snapshot_free, subtract_pending
 
-__all__ = ["HelpRequest", "leftover_to_help_action", "schedule_vicinity_help"]
+__all__ = [
+    "HelpRequest",
+    "leftover_to_help_action",
+    "leftover_to_unmet_demand",
+    "schedule_vicinity_help",
+]
 
 
 def schedule_vicinity_help(
@@ -18,7 +23,7 @@ def schedule_vicinity_help(
     pending: list,
     tau: int,
 ) -> tuple[list, list[HelpRequest]]:
-    """One FCFS round per vicinity. Places on non-home members only (S4: no Reserve)."""
+    """One FCFS round per vicinity. Places on non-home members only (no Reserve)."""
     if env.root is None or not requests:
         return ([], list(requests))
 
@@ -53,10 +58,24 @@ def schedule_vicinity_help(
 
 
 def leftover_to_help_action(req: HelpRequest) -> NeedVicinityHelpAction:
+    """Leftover when there is no root, so VicinityRound cannot run."""
     return NeedVicinityHelpAction(
         type="need_vicinity_help",
         ms_id=req.ms_id,
         reason="need_vicinity_help",
+        tau=req.tau,
+        residual_cpu_cores=req.remain_cpu,
+        residual_ram_mb=req.remain_ram,
+        cluster_id=req.home_cluster_id,
+    )
+
+
+def leftover_to_unmet_demand(req: HelpRequest) -> UnmetDemandAction:
+    """Paper LogUnmetDemand: leftover after the vicinity round."""
+    return UnmetDemandAction(
+        type="unmet_demand",
+        ms_id=req.ms_id,
+        reason="unmet_demand",
         tau=req.tau,
         residual_cpu_cores=req.remain_cpu,
         residual_ram_mb=req.remain_ram,

@@ -1,11 +1,11 @@
-"""Shared packed spawn placement for vicinity help and BEG."""
+"""Shared packed spawn placement for VicinityRound."""
 
 from __future__ import annotations
 
 from hierarchical_edge_sim.env.api import Env, SpawnAction
 from hierarchical_edge_sim.env.config import EPS
 
-from .beh import packed_spawn_size
+from .horizontal import packed_spawn_size
 from .help import HelpRequest
 
 
@@ -48,10 +48,10 @@ def place_packed_spawns(
     reason: str,
     loan_tier: str,
 ) -> tuple[list[SpawnAction], float, float]:
-    """Place leftover demand as serving replicas (floor + headroom), same as BEH.
+    """Place leftover demand as serving replicas (floor + headroom), same as local HorizontalScaling.
 
     Skip a server that can only fit the deployment floor: routing gives it no
-    load until a later BEV-up, and a floor-full worker never gets that up.
+    load until a later vertical grow, and a floor-full worker never gets that up.
     """
     spec = env.get_ms_spec(req.ms_id)
     actions: list[SpawnAction] = []

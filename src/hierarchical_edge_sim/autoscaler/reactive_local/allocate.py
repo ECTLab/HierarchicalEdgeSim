@@ -1,9 +1,9 @@
-"""AllocateResources (paper Algorithm allocate / Algorithm 4).
+"""AllocateResources (paper Algorithm allocate).
 
-The listing is the local escalator only: BEV then BEH, leftover ρ on Up,
-clamp on Down (never escalate). Vicinity and BEG are Algorithm 2's
-``resolve_help``, not this listing — they live in this file because the
-leftover tuple is built here.
+The listing is the local escalator only: VerticalScaling then
+HorizontalScaling, leftover ρ on Up, clamp on Down (never escalate).
+VicinityRound is Algorithm 2's ``resolve_help``, not this listing — it
+lives in this file because the leftover tuple is built here.
 
 Cooldown and α/δ step caps sit outside this module (policy apply hook /
 ``up_delta`` / ``_clip_step``). See ``docs/allocate-resources.md``.
@@ -24,12 +24,11 @@ from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
 from hierarchical_edge_sim.env.api import Env
 from hierarchical_edge_sim.env.config import EPS, quantize_resource
 
-from .beg import leftover_to_global_help, schedule_beg
-from .beh import beh_down, beh_up, home_cluster_id
 from .cascade import check_cascading_migration
 from .help import HelpRequest
+from .horizontal import home_cluster_id, horizontal_down, horizontal_up
 from .params import ReactiveLocalParams
-from .vicinity import leftover_to_help_action, schedule_vicinity_help
+from .vicinity import leftover_to_help_action, leftover_to_unmet_demand, schedule_vicinity_help
 
 
 def aggregate_ms(env: Env, ms_id: str, tau: int) -> dict:
@@ -148,7 +147,7 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
 
     Size each resource's serving headroom to ``μ_tgt · ρ``. Idle RAM (or CPU)
     above that is surplus even when the other resource still binds. Last replica
-    is rate-capped; extras still get a token so BEH can terminate floor replicas.
+    is rate-capped; extras still get a token so HorizontalScaling can terminate floor replicas.
     """
     spec = obs["spec"]
     ram_modeled = spec.ram_per_request_mb > EPS
@@ -237,7 +236,7 @@ def ladder_up(
     need_ram: float,
     sustained: bool,
 ) -> tuple[list[Any], HelpRequest | None]:
-    """Algorithm 4 Up: BEV (unless sustained) → BEH → optional leftover ρ."""
+    """Algorithm allocate Up: Vertical (unless sustained) → Horizontal → optional leftover ρ."""
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
     actions: list[Any] = []
@@ -253,7 +252,7 @@ def ladder_up(
             delta_cpu=need_cpu,
             delta_ram=need_ram,
             tau=tau,
-            reason="bev_up",
+            reason="vertical_up",
         )
         remain_cpu, remain_ram = leftover_from_need_horizontal(bev)
         if not any(getattr(a, "type", "") == "need_horizontal" for a in bev):
@@ -261,7 +260,7 @@ def ladder_up(
         actions.extend(strip_need_horizontal(bev))
 
     cluster_id = home_cluster_id(env, ms_id)
-    spawns, remain_cpu, remain_ram = beh_up(
+    spawns, remain_cpu, remain_ram = horizontal_up(
         env=env,
         ms_id=ms_id,
         spec=spec,
@@ -302,9 +301,9 @@ def ladder_down(
     delta_cpu: float,
     delta_ram: float,
 ) -> list[Any]:
-    """Algorithm 4 Down: BEV/BEH at home only; leftover is dropped (no ρ).
+    """Algorithm allocate Down: Vertical/Horizontal at home only; leftover is dropped (no ρ).
 
-    Extra replicas: skip BEV-shrink of the seed in the same tick as a
+    Extra replicas: skip vertical shrink of the seed in the same tick as a
     terminate (tex would shrink and kill together). Cascade is Algorithm
     cascade, invoked from here after local free.
     """
@@ -313,7 +312,7 @@ def ladder_down(
     ram_modeled = spec.ram_per_request_mb > EPS
     cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
     n_replicas = len(replicas)
-    # Extras: reclaim replica count first. Do not BEV-shrink the seed in the
+    # Extras: reclaim replica count first. Do not vertical-shrink the seed in the
     # same tick as a terminate — that is what left μ too small and bounced UP.
     if n_replicas > 1:
         bev: list[Any] = []
@@ -328,7 +327,7 @@ def ladder_down(
             delta_cpu=min(delta_cpu, cap_cpu),
             delta_ram=min(delta_ram, cap_ram) if ram_modeled else 0.0,
             tau=tau,
-            reason="bev_down",
+            reason="vertical_down",
             mu_tgt=target_mu(obs, params),
         )
         granted_cpu, granted_ram = _granted_down(replicas, bev)
@@ -336,7 +335,7 @@ def ladder_down(
         remain_ram = max(0.0, delta_ram - granted_ram) if ram_modeled else 0.0
     skip_ids = {a.container_id for a in bev}
     owner = home_cluster_id(env, ms_id)
-    terms = beh_down(
+    terms = horizontal_down(
         env=env,
         replicas=replicas,
         ms_id=ms_id,
@@ -380,9 +379,7 @@ def resolve_help(
     actions: list[Any] = []
     vspawns, unresolved = schedule_vicinity_help(env, help_q, pending=pending, tau=tau)
     actions.extend(vspawns)
-    gspawns, still = schedule_beg(env, unresolved, pending=[*pending, *actions], tau=tau)
-    actions.extend(gspawns)
-    actions.extend(leftover_to_global_help(u) for u in still)
+    actions.extend(leftover_to_unmet_demand(u) for u in unresolved)
     return actions
 
 
@@ -408,7 +405,7 @@ def _freed_local(
     actions: list,
     owner_cluster_id: str,
 ) -> tuple[float, float]:
-    """Local CPU/RAM released this tick by BEV shrink or local terminate (not loans)."""
+    """Local CPU/RAM released this tick by vertical shrink or local terminate (not loans)."""
     by_id = {r.container_id: r for r in replicas}
     cpu = ram = 0.0
     for action in actions:

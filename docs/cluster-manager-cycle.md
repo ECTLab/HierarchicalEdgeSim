@@ -1,13 +1,13 @@
 # Cluster manager cycle (Algorithm 2)
 
-**Status:** done  
+**Status:** done (2026-09-16: leftover after VicinityRound is `unmet_demand`, not BEG)  
 **Paper:** `ClusterManagerCycle` in `proposed_method_complete.tex` (`alg:cmcycle`)  
 **Code:** `src/hierarchical_edge_sim/autoscaler/common/cm_cycle.py`  
 **Callers:** `reactive_local/policy.py`, `proactive_auto_scaler/policy.py` (both pass AllocateResources + `resolve_help`)
 
-The cycle lives in `autoscaler/common/` because both scalers share the **window orchestrator**. AllocateResources, vicinity help, and BEG stay in `reactive_local/`; `common` only takes those as callables so it does not import a concrete scaler. Putting the file under `reactive_local/` would hide that proactive uses the same listing.
+The cycle lives in `autoscaler/common/` because both scalers share the **window orchestrator**. AllocateResources and VicinityRound stay in `reactive_local/`; `common` only takes those as callables so it does not import a concrete scaler. Putting the file under `reactive_local/` would hide that proactive uses the same listing.
 
-Each decision window runs the listing of Algorithm 2 in **one process**. There are no CM threads, no leader RPC, no barrier wait, and no plan timeout. Apply is synchronous (`Env.apply_actions` after the hook), so unmet residual goes to BEG in the same tick (\(\Delta t_{plan}=0\)).
+Each decision window runs the listing of Algorithm 2 in **one process**. There are no CM threads, no leader RPC, no barrier wait, and no plan timeout. Apply is synchronous (`Env.apply_actions` after the hook), so unmet residual after VicinityRound is logged in the same tick.
 
 This is **not** `run_env_only.py`. Algorithm 1 (partition) can run with no autoscaler. Algorithm 2 only runs when `run_with_autoscaler.py` loads `reactive_local` or `proactive_auto_scaler`.
 
@@ -106,11 +106,11 @@ print(Counter((r['action_type'], r.get('reason','')) for r in rows))
 ## Demos and sample results
 
 ```bash
-python3 -m pytest tests/test_cm_cycle.py tests/test_reactive_local.py tests/test_vicinity_help.py tests/test_global_help.py -q
+python3 -m pytest tests/test_cm_cycle.py tests/test_reactive_local.py tests/test_vicinity_help.py tests/test_unmet_demand.py -q
 
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_60_reactive_local.yaml
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_60_vicinity_help.yaml
-PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_60_global_help.yaml
+PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_60_unmet_demand.yaml
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/demo_60_proactive.yaml
 ```
 
@@ -172,7 +172,7 @@ Local `beh_spawn` / `beh_terminate` / `bev_up` on **c1** only. Two `need_vicinit
 ## Tests
 
 ```bash
-python3 -m pytest tests/test_cm_cycle.py tests/test_reactive_local.py tests/test_vicinity_help.py tests/test_global_help.py -q
+python3 -m pytest tests/test_cm_cycle.py tests/test_reactive_local.py tests/test_vicinity_help.py tests/test_unmet_demand.py -q
 ```
 
 `test_cm_cycle.py` checks per-cluster allocate order and FCFS help merge by `(t_det, ms_id)` without needing a full 60-tick run.

@@ -108,16 +108,13 @@ class ProactiveAutoScaler:
                 if decision.direction is Direction.UP:
                     if decision.delta_cpu <= EPS and decision.delta_ram <= EPS:
                         return None
-                    need_cpu, need_ram = _clip_step(
-                        decision.delta_cpu, decision.delta_ram, obs, ladder, up=True
-                    )
                     return CycleIntent(
                         ms_id=ms_id,
                         cluster_id=cluster_id,
                         t_det=tau,
                         kind="up",
-                        need_cpu=need_cpu,
-                        need_ram=need_ram,
+                        need_cpu=decision.delta_cpu,
+                        need_ram=decision.delta_ram,
                         sustained=decision.sustained,
                         window_index=rec.window_index,
                     )
@@ -127,7 +124,6 @@ class ProactiveAutoScaler:
                     d_cpu, d_ram = abs(decision.delta_cpu), abs(decision.delta_ram)
                     if d_cpu <= EPS and d_ram <= EPS:
                         return None
-                    d_cpu, d_ram = _clip_step(d_cpu, d_ram, obs, ladder, up=False)
                     return CycleIntent(
                         ms_id=ms_id,
                         cluster_id=cluster_id,
@@ -217,28 +213,6 @@ class ProactiveAutoScaler:
                 self._next_down_window[ms_id] = closed_index + self.params.cooldown_C + 1
         self._pending_ms.clear()
         self._pending_proactive_window.clear()
-
-
-def _clip_step(
-    need_cpu: float,
-    need_ram: float,
-    obs: dict,
-    ladder,
-    *,
-    up: bool,
-) -> tuple[float, float]:
-    """Keep TCN's direction. Up is one α_up step. Down may take the full
-    residual up to α_down of current alloc (Kubernetes scaleDown 100% → 1.0).
-    """
-    if up:
-        cap_cpu = max(ladder.delta_cpu_min_cores, ladder.alpha_up * max(obs["sum_cpu_alloc"], EPS))
-        need_cpu = min(need_cpu, cap_cpu)
-        spec = obs["spec"]
-        if spec.ram_per_request_mb > EPS and spec.cpu_per_request_cores > EPS:
-            need_ram = need_cpu / spec.cpu_per_request_cores * spec.ram_per_request_mb
-        return need_cpu, need_ram
-    cap_cpu, cap_ram = down_delta(obs, ladder)
-    return min(need_cpu, cap_cpu), min(need_ram, cap_ram)
 
 
 def _default_predictor(params: ProactiveAutoScalerParams) -> OneStepRpsPredictor | HorizonRpsPredictor:

@@ -200,7 +200,7 @@ def test_horizon_spike_scales_up_without_drops(tmp_path: Path):
     assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
 
 
-def test_horizon_step_is_clipped_so_horizontal_does_not_mass_spawn(tmp_path: Path):
+def test_horizon_up_applies_full_residual(tmp_path: Path):
     env = _write_world(tmp_path, cpu_max=4.0, cpu_alloc=1.0)
     scaler = build(
         {
@@ -210,7 +210,6 @@ def test_horizon_step_is_clipped_so_horizontal_does_not_mass_spawn(tmp_path: Pat
             "x_up_streak": 99,
             "y_down_streak": 99,
             "cooldown_ticks": 0,
-            "alpha_up": 0.20,
             "delta_cpu_min_cores": 0.25,
         },
         predictor=_FixedPredictor(10_000.0),
@@ -219,8 +218,10 @@ def test_horizon_step_is_clipped_so_horizontal_does_not_mass_spawn(tmp_path: Pat
     scaler.on_tick_end(env, 1)
     _push(env, 2, incoming=10.0, drop=0.0, q=0.1)
     actions = scaler.on_tick_end(env, 2)
-    assert any(getattr(a, "type", "") == "resize" and a.reason == "vertical_up" for a in actions)
-    assert not any(getattr(a, "type", "") == "spawn" for a in actions)
+    resizes = [a for a in actions if getattr(a, "reason", "") == "vertical_up"]
+    assert resizes
+    # Full residual, not α·alloc=0.20: grow the seed toward cpu_max.
+    assert max(a.cpu_alloc_cores for a in resizes) == pytest.approx(4.0)
 
 
 def test_cluster_full_still_escalates(tmp_path: Path):
@@ -373,7 +374,6 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
             "x_up_streak": 99,
             "y_down_streak": 99,
             "sustained_steps": 99,
-            "alpha_down": 1.0,
         },
         predictor=pred,
     )
@@ -442,7 +442,6 @@ def test_yaml_loads_alibaba_tcn(project_root: Path):
     assert scaler.params.feature_window == 60
     assert scaler.params.forecast_horizon == 5
     assert scaler.params.cooldown_C == 5
-    assert scaler.params.ladder.alpha_down == 1.0
 
 
 def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
@@ -456,7 +455,6 @@ def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
     assert scaler.params.predictor == "tcn_delta"
     assert scaler.params.model_dir == "models/tcn_delta_v1_ms150"
     assert scaler.params.cooldown_C == 5
-    assert scaler.params.ladder.alpha_down == 1.0
     pred = TcnDeltaPredictor.from_model_dir(project_root / scaler.params.model_dir)
     assert pred.load_min == 240.0
     assert pred.load_max == 40083.0

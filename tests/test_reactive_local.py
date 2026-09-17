@@ -23,6 +23,8 @@ def test_params_defaults_and_unknown_key():
     assert p.cascade_home is True
     with pytest.raises(ValueError, match="unknown reactive_local"):
         validate_params({"not_a_param": 1})
+    with pytest.raises(ValueError, match="alpha_up/alpha_down were removed"):
+        validate_params({"alpha_up": 0.20})
 
 
 def _write_world(
@@ -148,8 +150,8 @@ def test_ms_max_spawns_on_same_worker_when_server_has_room(tmp_path):
     spawns = [a for a in actions if getattr(a, "type", "") == "spawn"]
     assert spawns
     assert spawns[0].server_id == "c1-w1"
-    assert spawns[0].cpu_alloc_cores == 0.7
-    assert spawns[0].ram_alloc_mb == 266.0
+    assert spawns[0].cpu_alloc_cores == 0.9
+    assert spawns[0].ram_alloc_mb == 276.0
     assert not any(getattr(a, "type", "") == "resize" for a in actions)
 
 
@@ -264,14 +266,14 @@ def _surplus_obs(**kwargs: Any) -> dict[str, Any]:
 
 
 def test_up_delta_ram_follows_cpu_mu_not_fat_alloc():
-    params = ReactiveLocalParams(alpha_up=0.20, delta_cpu_min_cores=0.25, delta_ram_min_mb=128.0)
+    params = ReactiveLocalParams(delta_cpu_min_cores=0.25, delta_ram_min_mb=128.0)
     cpu, ram = up_delta(
         _surplus_obs(D=80.0, sum_cpu_alloc=1.0, sum_ram_alloc=512.0),
         params,
     )
-    # α_up · 1.0 = 0.20 cores → 20 req; RAM is 20 × 0.5 MB, not α_up · 512.
-    assert cpu == pytest.approx(0.20)
-    assert ram == pytest.approx(10.0)
+    # D=80 req → 0.80 cores; RAM is 80 × 0.5 MB, not a fraction of 512.
+    assert cpu == pytest.approx(0.80)
+    assert ram == pytest.approx(40.0)
 
 
 def test_surplus_last_replica_does_not_take_delta_min_past_target():
@@ -284,10 +286,11 @@ def test_surplus_last_replica_does_not_take_delta_min_past_target():
     assert ram == pytest.approx(0.0)
 
 
-def test_surplus_last_replica_rate_caps_oversized_headroom():
+def test_surplus_last_replica_releases_full_overshoot():
     params = ReactiveLocalParams(theta_free=0.35)
     cpu, _ = down_delta(_surplus_obs(sum_h_cpu=0.5), params)
-    assert cpu == pytest.approx(0.25)
+    surplus = 0.5 - 5.0 * 0.01 / 0.65
+    assert cpu == pytest.approx(surplus)
 
 
 def test_surplus_tiny_overshoot_is_the_surplus_not_delta_min():

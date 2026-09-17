@@ -371,7 +371,7 @@ def test_cascade_never_pulls_the_shrinking_ms(tmp_path):
 
 def test_end_to_end_api_down_evicts_ingest_loan(tmp_path):
     env = _write_cross_ms_world(tmp_path)
-    scaler = _down_scaler(cascade_home=True, alpha_down=0.5)
+    scaler = _down_scaler(cascade_home=True)
     _push_slack(env, 1, ms_id="api")
     _push_busy(env, 1, ms_id="ingest")
     actions = scaler.on_tick_end(env, 1)
@@ -395,7 +395,7 @@ def test_end_to_end_api_down_evicts_ingest_loan(tmp_path):
 
 def test_cascade_home_flag_off_does_not_migrate(tmp_path):
     env = _write_three_replica_world(tmp_path, local_cpu=4.0, local_ram=2048.0)
-    scaler = _down_scaler(cascade_home=False, alpha_down=0.5)
+    scaler = _down_scaler(cascade_home=False)
     _push_slack(env, 1)
     actions = scaler.on_tick_end(env, 1)
     assert not any(getattr(a, "type", "") == "spawn" for a in actions)

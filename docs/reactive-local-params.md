@@ -1,6 +1,6 @@
 # Reactive scaler params (plain language)
 
-These keys live under `autoscaler.params` for `reactive_vertical` and `reactive_local`. They answer three questions: **when** to move, **how big** a step, and **which replica** gets it. Why \(\alpha\)/\(\delta_{\min}\) exist as a speed limit (Algorithm 4 discussion): [allocate-resources.md](./allocate-resources.md).
+These keys live under `autoscaler.params` for `reactive_vertical` and `reactive_local`. They answer three questions: **when** to move, **how big** a step, and **which replica** gets it. The window residual is not \(\alpha\)-clipped; see [allocate-resources.md](./allocate-resources.md).
 
 Triangle demos use the values below. Toy tests may use smaller streaks/cooldowns.
 
@@ -12,8 +12,6 @@ eps_drop: 1.0e-9
 theta_free: 0.35
 theta_high: 0.90
 use_near_saturation_up: false
-alpha_up: 0.20
-alpha_down: 0.10
 delta_cpu_min_cores: 0.25
 delta_ram_min_mb: 128
 prefer_consolidate_down: true
@@ -43,13 +41,11 @@ shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }
 
 One scale-up tick is **one serving-μ step**, not two independent CPU and RAM wallets.
 
-The CPU leftover (`ΣA_cpu × α_up`) is the rate limit. That leftover becomes a μ increment (`leftover / ρ_cpu`), then both resources move by `Δμ × ρ`. RAM is not grown toward `ram_max` on its own, and `delta_ram_min_mb` is **not** a second grow floor on the way up.
+Dropped demand (or the decide residual) becomes a μ increment (`leftover / ρ_cpu`), then both resources move by `Δμ × ρ`. There is no \(\alpha_{up}\) fraction of current alloc. RAM is not grown toward `ram_max` on its own, and `delta_ram_min_mb` is **not** a second grow floor on the way up.
 
 | Param | What it does |
 |---|---|
-| `alpha_up` | Largest **CPU** leftover this tick, as a fraction of current fleet CPU. `0.20` → at most 20% more CPU; RAM follows ρ for the same μ. |
-| `alpha_down` | Largest shrink this tick, as a fraction of current alloc (per resource). `0.10` is gentler than grow. |
-| `delta_cpu_min_cores` | Smallest CPU change that counts as a real step (`0.25`). Also the last-replica CPU peel size when `α_down` would be tiny. |
+| `delta_cpu_min_cores` | Smallest CPU change that counts as a real step (`0.25`). Also the extras-at-floor terminate token. |
 | `delta_ram_min_mb` | RAM **idle-trim** chunk on the last replica when CPU is already at the μ target (`128` MB). Not a separate grow target on the way up. |
 
 Floors (`cpu_min`, `ram_min`) buy **no** throughput. Extra above the floor is what makes μ.
@@ -68,4 +64,4 @@ Floors (`cpu_min`, `ram_min`) buy **no** throughput. Extra above the floor is wh
 
 ## Defaults vs the plug-in plan
 
-[autoscaler-implementation-steps.md](./autoscaler-implementation-steps.md) locks these numbers for tests and demos. The examples in [autoscaler-plug-in-plan.md](./autoscaler-plug-in-plan.md) (§6.8 / §7.1) are illustrative and may differ (`theta_free: 0.40`, different alphas). Mechanism lives in the plan; **exact demo numbers** live here and in the implementation-steps table.
+[autoscaler-implementation-steps.md](./autoscaler-implementation-steps.md) locks these numbers for tests and demos. The examples in [autoscaler-plug-in-plan.md](./autoscaler-plug-in-plan.md) (§6.8 / §7.1) are illustrative and may differ (`theta_free: 0.40`). Mechanism lives in the plan; **exact demo numbers** live here and in the implementation-steps table.

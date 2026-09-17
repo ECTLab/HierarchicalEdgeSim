@@ -1,27 +1,8 @@
 # Tex follow-ups
 
-Living list of places where the **simulator is the operational method** and the original `proposed_method_complete.tex` should be updated. The working rule: change the simulator to match the paper, except when a run showed the paper would mis-serve this env; those exceptions land here instead of being ported into the code.
-
-**Review draft:** those “Update the paper” items are applied in [`proposed_method_complete-v2.tex`](../proposed_method_complete-v2.tex). The original tex is unchanged so the two can be diffed.
+Living list of places where the **simulator is the operational method** and `proposed_method_complete.tex` should be updated later. The working rule: change the simulator to match the paper, except when a run showed the paper would mis-serve this env; those exceptions land here instead of being ported into the code.
 
 This is not a full paper-vs-sim comparison. Use it as the punch list for the next tex draft.
-
-## Canvas “Update the paper” rows (sim-ahead)
-
-These are exactly the amber-filter rows in the comparison canvas. All of them are listed again as numbered items below; this table is the 1:1 map.
-
-| Canvas topic | md item | Absorbed in v2? |
-|---|---|---|
-| Horizontal spawn size | 1. Packed spawn above minima | yes |
-| Utilization and residual | 2. Serving-headroom $u$ and $\delta$ | yes |
-| Load balancer | 4. Headroom-weighted routing | yes |
-| Scale-down stopping conditions | 5. Last-replica and surplus-down | yes |
-| Vertical packing | 3. $\mu$-matched CPU/RAM; hottest-first | yes |
-| Observation during cooldown | 7. Keep observing; delay Down only | yes |
-| Per-window step size | 8. $\alpha/\delta$ step caps | yes |
-| Resource quantum | 9. Quantum $0.01$ | yes |
-
-Related (not a separate canvas row, but the same punch list): floor extras fully releasable (item 6); no $T_{\mathit{repart}}$ (item 10). The canvas admission/partition rows are already **match** under a static world; v2 drops the leftover $T_{\mathit{repart}}$ prose so the tex agrees.
 
 ---
 
@@ -40,14 +21,15 @@ Related (not a separate canvas row, but the same punch list): floor extras fully
 | Lender Reserve / \(safe_j\) | Leftover own \(\rho\) → \(\mathrm{Reserve}_c\) → \(safe_j\); leader never offers raw free | `member_safe_ceilings`. VicinityRound places against `safe_j`. Phase-1 releases raise remaining safe. |
 | Predictor confidence \(\kappa\) | \(\kappa=0\) until \(W_\kappa\), else \(1/(1+\mathrm{MAPE})\); below \(\kappa_{\min}\) ignore hats | `CountConfidence` + `trust_forecast`. Predictor still runs every window. |
 | Admission + partition | Least-loaded stamp; Algorithm 1 at init | `env/admission.py` + `build_world` once. YAML \(V\) remains an experiment override. Clusters/workers/\(V\) are static. |
+| Per-window residual | AllocateResources applies \(\delta\) in one window | No \(\alpha_{up}/\alpha_{down}\). \(\delta_{\min}\) is still a dust/token floor, not a speed limit. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 
 ---
 
-## Keep in the sim; absorbed into `proposed_method_complete-v2.tex`
+## Keep in the sim; absorb into the tex later
 
-These are the cases where the simulator is right and a literal reading of the original `proposed_method_complete.tex` is not, under \(\mu=\min((A-\min)/\rho)\) and CPU-headroom routing. The review draft applies all eight canvas rows plus items 6 and 10. Keep the sim; do not revert these if you reject a particular v2 edit.
+These are the cases where the simulator is right and a literal reading of the current algorithms is not, under \(\mu=\min((A-\min)/\rho)\) and CPU-headroom routing.
 
 1. **Packed spawn above minima.** Paper HorizontalScaling and SchedulePlacements seed at \((cpu_{\min},ram_{\min})\). Code uses `packed_spawn_size` (floor + leftover headroom; skip a worker that can only fit the floor). A minima replica has \(\mu=0\) and routing weight 0.
 
@@ -63,11 +45,9 @@ These are the cases where the simulator is right and a literal reading of the or
 
 7. **Success-gated cooldown, but keep observing.** Paper now arms cooldown only if something applied (good) and still `continue`s PredictAndDecide during cooldown. Code updates streaks every tick and only suppresses emission. Proactive also uses HPA-style `cooldown_C` (never delay Up; delay Down after a successful Up).
 
-8. **Per-window \(\alpha/\delta\) step caps.** Paper may apply the full residual in one window. Code clips with \(\alpha_{\mathrm{up}}/\alpha_{\mathrm{down}}\).
+8. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
 
-9. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
-
-10. **No \(T_{\mathit{repart}}\).** Clusters, workers, and vicinities are static parameters of a run. Algorithm 1 (or the YAML override) runs once at world build. Drop the slow re-partition, join/leave drain, and straddling-loan two-step from the tex for this deployment.
+9. **No \(T_{\mathit{repart}}\).** Clusters, workers, and vicinities are static parameters of a run. Algorithm 1 (or the YAML override) runs once at world build. Drop the slow re-partition, join/leave drain, and straddling-loan two-step from the tex for this deployment.
 
 ---
 
@@ -81,7 +61,7 @@ None of the remaining canvas “update the sim” rows. Leader heartbeat failove
 
 | Date | Note |
 |---|---|
-| 2026-09-16 | Review draft `proposed_method_complete-v2.tex` absorbs the eight canvas ``Update the paper'' rows plus floor extras and no $T_{\mathit{repart}}$. Original tex left in place. |
+| 2026-09-17 | Removed \(\alpha_{up}/\alpha_{down}\). AllocateResources applies the window residual; streaks/cooldown/last-replica/safe_j remain. |
 | 2026-09-16 | Remaining six paper-ahead rows: owner(j) writer, cross-MS cascade, Decrease-before-Increase, Reserve/\(safe_j\), \(\kappa\), static admission (no \(T_{\mathit{repart}}\)). |
 | 2026-09-16 | SchedulePlacements matches Alg. place: grow existing (home then nearer loans, μ-matched), then packed spawn over all of \(N_V\) including home recycle after Phase 1. Distance ranking replaces YAML member order. Packed spawn stays. Ceiling is now \(safe_j\). |
 | 2026-09-16 | VicinityRound matches the leader listing: every member reports (empty offers included), only \(\ell(V)\) computes \(\Pi\), ApplyVicinityPlan emits actions. Packed spawn stays. |

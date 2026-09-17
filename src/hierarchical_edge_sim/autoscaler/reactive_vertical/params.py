@@ -15,8 +15,6 @@ class ReactiveVerticalParams:
     theta_free: float = 0.35
     theta_high: float = 0.90
     use_near_saturation_up: bool = False
-    alpha_up: float = 0.20
-    alpha_down: float = 0.10
     delta_cpu_min_cores: float = 0.25
     delta_ram_min_mb: float = 128.0
     prefer_consolidate_down: bool = True
@@ -46,6 +44,10 @@ def _parse_shrink_weights(val: Any) -> tuple[float, float, float]:
 
 def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
     data = dict(raw)
+    if "alpha_up" in data or "alpha_down" in data:
+        raise ValueError(
+            "alpha_up/alpha_down were removed; AllocateResources applies the full residual"
+        )
     grow = _parse_grow_weights(data.pop("grow_weights", None))
     shrink = _parse_shrink_weights(data.pop("shrink_weights", None))
 
@@ -57,8 +59,6 @@ def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
         theta_free=float(data.pop("theta_free", 0.35)),
         theta_high=float(data.pop("theta_high", 0.90)),
         use_near_saturation_up=bool(data.pop("use_near_saturation_up", False)),
-        alpha_up=float(data.pop("alpha_up", 0.20)),
-        alpha_down=float(data.pop("alpha_down", 0.10)),
         delta_cpu_min_cores=float(data.pop("delta_cpu_min_cores", 0.25)),
         delta_ram_min_mb=float(data.pop("delta_ram_min_mb", 128.0)),
         prefer_consolidate_down=bool(data.pop("prefer_consolidate_down", True)),
@@ -75,6 +75,4 @@ def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
         raise ValueError("theta_free must be in (0, 1]")
     if not (0.0 < params.theta_high <= 1.0):
         raise ValueError("theta_high must be in (0, 1]")
-    if params.alpha_up <= 0 or params.alpha_down <= 0:
-        raise ValueError("alpha_up/alpha_down must be > 0")
     return params

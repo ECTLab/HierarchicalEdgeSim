@@ -6,8 +6,9 @@ splits the remote share L into ξ (Eq. split) before touching N_c.
 VicinityRound is Algorithm 2's ``resolve_help``: every member reports,
 only ℓ(V) schedules, ApplyVicinityPlan emits the actions.
 
-Cooldown and α/δ step caps sit outside this module (policy apply hook /
-``up_delta`` / ``_clip_step``). See ``docs/allocate-resources.md``.
+Cooldown sits outside this module (policy apply hook). The residual is
+not α-clipped; AllocateResources applies it in one window.
+See ``docs/allocate-resources.md``.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
 )
 from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
 from hierarchical_edge_sim.env.api import Env
-from hierarchical_edge_sim.env.config import EPS, quantize_resource
+from hierarchical_edge_sim.env.config import EPS
 
 from .cascade import check_cascading_migration
 from .help import HelpRequest, ReleaseIntent
@@ -149,7 +150,8 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
 
     Size each resource's serving headroom to ``μ_tgt · ρ``. Idle RAM (or CPU)
     above that is surplus even when the other resource still binds. Last replica
-    is rate-capped; extras still get a token so HorizontalScaling can terminate floor replicas.
+    releases the full surplus toward ``μ_tgt``; extras still get a token so
+    HorizontalScaling can terminate floor replicas.
     """
     spec = obs["spec"]
     ram_modeled = spec.ram_per_request_mb > EPS
@@ -165,37 +167,11 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     delta_cpu = max(0.0, float(obs.get("sum_h_cpu") or 0.0) - h_cpu_tgt)
     delta_ram = max(0.0, float(obs.get("sum_h_ram") or 0.0) - h_ram_tgt) if ram_modeled else 0.0
     if n_replicas <= 1:
-        return _cap_last_replica_down(
-            obs, params, ram_modeled, delta_cpu, delta_ram, rho_cpu, rho_ram
-        )
+        return delta_cpu, delta_ram
     if mu <= EPS:
-        cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
-        return cap_cpu, cap_ram
+        return params.delta_cpu_min_cores, (params.delta_ram_min_mb if ram_modeled else 0.0)
     if delta_cpu > EPS or delta_ram > EPS:
         return delta_cpu, delta_ram
-    return 0.0, 0.0
-
-
-def _cap_last_replica_down(
-    obs: dict,
-    params: ReactiveLocalParams,
-    ram_modeled: bool,
-    delta_cpu: float,
-    delta_ram: float,
-    rho_cpu: float,
-    rho_ram: float,
-) -> tuple[float, float]:
-    cap_cpu, cap_ram_idle = _down_rate_cap(obs, params, ram_modeled)
-    cpu_moves = rho_cpu > EPS and quantize_resource(delta_cpu) > EPS
-    if cpu_moves:
-        cap_mu = cap_cpu / rho_cpu
-        cap_ram_pair = cap_mu * rho_ram if ram_modeled else 0.0
-        return (
-            min(delta_cpu, cap_cpu),
-            min(delta_ram, cap_ram_pair) if ram_modeled and delta_ram > EPS else 0.0,
-        )
-    if ram_modeled and delta_ram > EPS:
-        return 0.0, min(delta_ram, cap_ram_idle)
     return 0.0, 0.0
 
 
@@ -209,16 +185,6 @@ def _fleet_mu(obs: dict, ram_modeled: bool) -> float:
         return mu_cpu
     mu_ram = float(obs.get("sum_h_ram") or 0.0) / spec.ram_per_request_mb
     return min(mu_cpu, mu_ram)
-
-
-def _down_rate_cap(obs: dict, params: ReactiveLocalParams, ram_modeled: bool) -> tuple[float, float]:
-    cap_cpu = max(params.delta_cpu_min_cores, params.alpha_down * max(obs["sum_cpu_alloc"], EPS))
-    cap_ram = (
-        max(params.delta_ram_min_mb, params.alpha_down * max(obs["sum_ram_alloc"], EPS))
-        if ram_modeled
-        else 0.0
-    )
-    return cap_cpu, cap_ram
 
 
 def target_mu(obs: dict, params: ReactiveLocalParams) -> float:
@@ -334,7 +300,6 @@ def ladder_down(
 
     remain_cpu = local_cpu
     remain_ram = local_ram if ram_modeled else 0.0
-    cap_cpu, cap_ram = _down_rate_cap(obs, params, ram_modeled)
     # Extras: reclaim replica count first. Do not vertical-shrink the seed in the
     # same tick as a terminate — that is what left μ too small and bounced UP.
     if len(local) > 1:
@@ -346,8 +311,8 @@ def ladder_down(
             spec=spec,
             params=params,
             replicas=local,
-            delta_cpu=min(remain_cpu, cap_cpu),
-            delta_ram=min(remain_ram, cap_ram) if ram_modeled else 0.0,
+            delta_cpu=remain_cpu,
+            delta_ram=remain_ram,
             tau=tau,
             reason="vertical_down",
             mu_tgt=target_mu(obs, params),

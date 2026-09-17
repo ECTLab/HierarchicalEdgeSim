@@ -210,13 +210,20 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
             tau=tau,
         )
 
-    # DOWN
-    delta_cpu = max(params.delta_cpu_min_cores, params.alpha_down * obs["sum_cpu_alloc"])
-    delta_ram = (
-        max(params.delta_ram_min_mb, params.alpha_down * obs["sum_ram_alloc"])
-        if spec.ram_per_request_mb > EPS
-        else 0.0
-    )
+    # DOWN: full surplus toward μ_tgt (no α_down rate cap).
+    load = float(obs.get("Lambda") or 0.0)
+    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
+    mu_tgt = load / q_tgt
+    rho_cpu = spec.cpu_per_request_cores
+    rho_ram = spec.ram_per_request_mb
+    ram_modeled = rho_ram > EPS
+    h_cpu = float(obs.get("sum_h_cpu") or 0.0)
+    h_ram = sum(max(0.0, r.ram_alloc - spec.ram_min_mb) for r in replicas)
+    delta_cpu = max(0.0, h_cpu - (mu_tgt * rho_cpu if rho_cpu > EPS else 0.0))
+    delta_ram = max(0.0, h_ram - (mu_tgt * rho_ram if ram_modeled else 0.0)) if ram_modeled else 0.0
+    if delta_cpu <= EPS and delta_ram <= EPS:
+        delta_cpu = params.delta_cpu_min_cores
+        delta_ram = params.delta_ram_min_mb if ram_modeled else 0.0
     return distribute_down(
         env=env,
         ms_id=ms_id,
@@ -226,4 +233,5 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
         delta_cpu=delta_cpu,
         delta_ram=delta_ram,
         tau=tau,
+        mu_tgt=mu_tgt,
     )

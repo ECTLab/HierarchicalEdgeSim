@@ -24,6 +24,8 @@ def test_params_defaults_validate():
 def test_params_reject_bad_theta():
     with pytest.raises(ValueError, match="theta_free"):
         validate_params({"theta_free": 1.5})
+    with pytest.raises(ValueError, match="alpha_up/alpha_down were removed"):
+        validate_params({"alpha_down": 0.10})
 
 
 def _toy_env(tmp_path: Path) -> Env:

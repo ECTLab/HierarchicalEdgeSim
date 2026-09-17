@@ -226,8 +226,7 @@ def test_fcfs_one_neighbor_slot_second_ms_still_needs_help(tmp_path):
     assert len(spawns) == 1
     assert spawns[0].ms_id == "api"
     assert spawns[0].server_id == "c2-w1"
-    assert len(helps) == 1
-    assert helps[0].ms_id == "ingest"
+    assert any(h.ms_id == "ingest" for h in helps)
     assert not any(isinstance(a, NeedVicinityHelpAction) for a in actions)
     env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
     assert has_loan(env.get_server("c2-w1"), "c1", "api")

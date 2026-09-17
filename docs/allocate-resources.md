@@ -67,11 +67,11 @@ The sim starts cooldown in `on_actions_applied`, **only if something actually ap
 
 A full-reject window that still starts cooldown would freeze a saturated MS until \(H\) elapses with no extra capacity. That is worse than the code.
 
-**Do not apply the full residual in one tick.** The tex hands \(\delta\) straight to BEV. The sim clips to one step (`alpha_up` / `alpha_down`, `delta_*_min`) **before** this listing. Without that, one window jumps to full \(A_{\mathrm{req}}\) (or dumps all surplus). See the discussion below.
+**Apply the full residual in one window.** The tex hands \(\delta\) straight to VerticalScaling. The sim no longer clips with \(\alpha_{up}/\alpha_{down}\). Streaks, cooldown, last-replica, and `safe_j` still decide *when* and *where* that residual lands. \(\delta_{\min}\) is a dust/token floor, not a speed limit.
 
 **Do not BEV-shrink the seed in the same tick as a terminate.** The tex always runs BEV, then BEH if leftover remains. The sim: if there is more than one replica, skip BEV that tick and terminate extras first. Shrink+kill together left \(\mu\) too small and bounced Up.
 
-**Keep \(\rho\) without forecast hats.** Tex \(\rho\) carries \(\hat u(t{+}1{:}t{+}H)\) for lender `Reserve`. This env has no `Reserve`/`safe_j`. Mapping the escalator does not require stuffing hats into `HelpRequest`.
+**Keep \(\rho\) without forecast hats.** Tex \(\rho\) carries \(\hat u(t{+}1{:}t{+}H)\) for lender `Reserve`. Mapping the escalator does not require stuffing hats into `HelpRequest`; `Reserve`/`safe_j` is computed from leftover \(\rho\) after local allocate.
 
 ### Adjacent (not Algorithm 4)
 
@@ -88,15 +88,15 @@ Leave these in BEV / BEH / cascade / Algorithm 2. Do not fold them into `ladder_
 
 ## What the algorithm should absorb
 
-A later draft of Algorithm 4 should state the **step** and the **cooldown**, not treat them as implementation details:
+A later draft of Algorithm 4 should state the **cooldown**, not treat it as an implementation detail:
 
 1. **Cooldown after a successful apply only.** Do not `StartCooldown` on a full-reject window. Length is a policy knob (`cooldown_ticks` / `cooldown_C`), not necessarily the forecast horizon \(H\). Proactive may delay **Down after Up** and never delay Up (Kubernetes HPA: scaleUp window 0, scaleDown 300s).
-2. **One window is one rate-limited step**, not the entire residual. Cap grow/shrink as a fraction of current alloc (\(\alpha_{up}/\alpha_{down}\)) with an absolute floor (\(\delta_{\min}\)) so a tiny fleet still moves. Then BEV/BEH see that clipped leftover. The paper residual \(\delta\) (or \(A_{\mathrm{req}}-A\)) remains the *target*, not the *tick action*.
+2. **The window residual is the action.** Do not re-introduce \(\alpha_{up}/\alpha_{down}\) as a fraction of current alloc. \(\delta_{\min}\) stays as a dust/token floor so a tiny fleet still moves.
 3. **Down with extra replicas:** do not BEV-shrink the remaining seed in the same tick as a terminate. Reclaim replica count first; vertical peel the last replica later. (Last-replica / surplus-\(\mu\) stopping conditions still belong in BEV/BEH.)
-4. **\(\rho\) without hats until Reserve exists.** Keep \((c,m,r^{cpu},r^{ram},\min,t_{det})\). Forecast vectors are for `safe_j`, which this sim does not run.
+4. **\(\rho\) without hats.** Keep \((c,m,r^{cpu},r^{ram},\min,t_{det})\). Forecast vectors are for `safe_j`, which is leftover own \(\rho\) after local allocate.
 5. **Down clamp stays.** Unchanged and correct: leftover after local shrink is discarded; Down never builds \(\rho\).
 
-Honest thesis line: **the listing specified the rung order but not a per-window step or a success-gated cooldown.** Once apply can Reject and once \(\delta\) can be a full spike, those two omissions are bugs. The simulator made the escalator operational; that belongs in a later draft of Algorithm 4.
+Honest thesis line: **the listing specified the rung order but not a success-gated cooldown.** Once apply can Reject, starting cooldown on a no-op window is a bug. The simulator made the escalator operational; that belongs in a later draft of Algorithm 4.
 
 Do **not** claim packed spawn or \(\mu\)-matched BEV as part of this mapping. Those are Algorithms 5–6.
 
@@ -106,47 +106,15 @@ Do **not** claim packed spawn or \(\mu\)-matched BEV as part of this mapping. Th
 
 ### Is there any difference between the algorithm and the code?
 
-**The control shape matches.** Differences on *this* listing are cooldown, the \(\alpha\)/\(\delta\) clip, same-tick skip of BEV when extras exist, and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here.
+**The control shape matches.** Differences on *this* listing are cooldown, same-tick skip of BEV when extras exist, and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here. The window residual is no longer \(\alpha\)-clipped.
 
 `allocate.py` also running `resolve_help` is not Algorithm 4 growing a fourth local tier. Algorithm 2 still owns vicinity/BEG.
 
-### What is \(\alpha_{up}/\alpha_{down}\)?
+### What happened to \(\alpha_{up}/\alpha_{down}\)?
 
-They are **speed limits** on how much allocation can change in **one tick**. They are **not** in Algorithm 4 (or anywhere in the tex).
+They were a sim-only speed limit (a fraction of current alloc per tick). They are gone. AllocateResources applies the window residual; streaks, cooldown, last-replica, and `safe_j` are the remaining brakes.
 
-- **`alpha_up`** = largest **grow** this tick, as a **fraction of current fleet CPU**.
-- **`alpha_down`** = largest **shrink** this tick, as a **fraction of current alloc**.
-
-Defaults in the 60-tick demos: `alpha_up: 0.20`, `alpha_down: 0.10`.
-
-Example: the microservice currently has 2.0 CPU cores.
-
-- Up with `0.20` → at most \(0.20\times 2.0=0.40\) extra cores this tick (RAM follows the same serving step). If decide wanted 3 more cores to hit \(A_{\mathrm{req}}\), you still only take 0.40 now and the rest later.
-- Down with `0.10` → at most \(0.10\times 2.0=0.20\) cores released this tick.
-
-There is also a floor so a tiny fleet still moves: `delta_cpu_min_cores` (0.25). The cap is `max(that floor, alpha × current alloc)`.
-
-Alibaba TCN sets `alpha_down: 1.0` so a Down can release **up to 100%** of current alloc in one window (Kubernetes-style “scale down 100% per period”). Grow stays at 20%.
-
-This \(\alpha\) is **not** Algorithm 1’s leader-election \(\alpha\) (that one weights cluster capacity vs distance). Same letter, different knob.
-
-### Why do \(\alpha\) and \(\delta_{\min}\) exist? Why a “speed limit”?
-
-They exist so a **decision to move** is not the same as **jumping all the way to the target in one tick**.
-
-Decide (or reactive `up_delta`) answers: “how much alloc would we **want** to sit at \(\theta_{\mathrm{target}}\) / \(\mu_{\mathrm{tgt}}\)?” That number can be huge — a whole spike’s worth of cores, or a whole valley’s worth to give back. AllocateResources then **does** that leftover. Without a cap, one window would try to install the entire target at once.
-
-That is a bad idea here for three reasons:
-
-1. **The signal is noisy and lagged.** One hot window (or one TCN hat) is not a promise that the next hour needs that much. Instant full \(A_{\mathrm{req}}\) overshoots, then Down (or a cooldown freeze) fights the extra. Streaks/cooldown already answer **when** to act; \(\alpha\)/\(\delta\) answer **how far** that one allowed act may go.
-2. **The ladder is stepwise.** BEV packs onto live replicas; BEH adds **one** packed replica; leftover goes next door. A 3-core residual in one tick is not “grow a little”; it is “skip the stairs.” The 20% grow cap is what makes BEV look like small steps and BEH look like a spawn, instead of one leap to `cpu_max`.
-3. **Down can walk \(\mu\) onto the floor.** Surplus-down already refuses to kill the last replica. A shrink cap is the other half: do not dump all surplus in one tick just because the valley looks idle. That bounce (shrink hard → next wave drops → Up) is the same family as the 69% Alibaba story.
-
-So \(\alpha\) is a **percent of what you already have**, like Kubernetes HPA’s “at most X% of pods per period.” `0.20` up / `0.10` down in the 60-tick demos means: grow at most 20% of current CPU, shrink more slowly. Alibaba TCN later set `alpha_down: 1.0` because 10% stairs kept spike-sized cores through the valley; after a short down-only cooldown they **wanted** a fast shrink. Same knob, different speed.
-
-\(\delta_{\min}\) (`delta_cpu_min_cores` 0.25, `delta_ram_min_mb` 128) exists because \(\alpha\) is a **fraction**. On a 0.5-core replica, 20% is 0.10 cores — too small to be a real step after rounding. The floor says: if we decided to move, move **at least** this much. RAM’s \(\delta_{\min}\) is now an idle-trim chunk on the last replica, not a second grow target.
-
-The paper has none of this. It applies the full residual every window, then `StartCooldown(H)`. The sim split that into: **clip the step**, then **cooldown only if something applied**. The clip is the speed limit; cooldown is the pause after a successful move.
+\(\delta_{\min}\) (`delta_cpu_min_cores` 0.25, `delta_ram_min_mb` 128) is still a dust/token floor: if we decided to move, move at least this much, and extras at the floor still get a terminate token. RAM’s \(\delta_{\min}\) is an idle-trim chunk on the last replica, not a second grow target.
 
 ---
 

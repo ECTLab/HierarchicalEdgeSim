@@ -9,7 +9,7 @@ This file is the map. Run data itself is gitignored.
 | If you want… | Open |
 |---|---|
 | **Latest** triangle (post user-delay eval, 18 Sep 2026) | `09-triangle-post-match/` |
-| QoS plots for that campaign | `09-triangle-post-match/<slice>/42_20260918T1840*/analysis/demo_app/ladder_qos.png` |
+| QoS plots for that campaign | `09-triangle-post-match/<slice>/42_20260918T1916*/analysis/demo_app/ladder_qos.png` |
 | Alibaba MS_588 | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
@@ -36,10 +36,10 @@ This file is the map. Run data itself is gitignored.
 
 | Slice | Config | Latest run |
 |---|---|---|
-| HorizontalScaling | `17-demo_400_triangle_horizontal.yaml` | `horizontal/42_20260918T184024Z` |
-| Fat vicinity | `18-demo_400_triangle_vicinity.yaml` | `vicinity/42_20260918T184024Z` |
-| Floor neighbor | `19-demo_400_triangle_skip_neighbor.yaml` | `skip_neighbor/42_20260918T184025Z` |
-| Vicinity then unmet | `16-demo_400_triangle.yaml` | `vicinity_then_unmet/42_20260918T184025Z` |
+| HorizontalScaling | `17-demo_400_triangle_horizontal.yaml` | `horizontal/42_20260918T191645Z` |
+| Fat vicinity | `18-demo_400_triangle_vicinity.yaml` | `vicinity/42_20260918T191646Z` |
+| Floor neighbor | `19-demo_400_triangle_skip_neighbor.yaml` | `skip_neighbor/42_20260918T191646Z` |
+| Vicinity then unmet | `16-demo_400_triangle.yaml` | `vicinity_then_unmet/42_20260918T191647Z` |
 
 Plots: `<run>/analysis/demo_app/ladder_qos.png` and `user_latency.png`.
 

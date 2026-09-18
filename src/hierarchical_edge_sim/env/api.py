@@ -271,7 +271,14 @@ class Env:
         horizon = self.traces.horizon
         target = min(max_ticks, horizon)
         for tau in range(1, target + 1):
-            tick(world=self.world, traces=self.traces, ms_specs=ms_specs, tau=tau)
+            tick(
+                world=self.world,
+                traces=self.traces,
+                ms_specs=ms_specs,
+                tau=tau,
+                tick_sec=float(self.world_spec.sim.tick_sec),
+                sla_timeout_sec=float(self.world_spec.sim.sla_timeout_sec),
+            )
             self.state.current_tau = tau
             _invoke_autoscaler(self, autoscaler, tau)
 
@@ -347,7 +354,7 @@ class Env:
         return self._require_root().list_vicinity_members(vicinity_id)
 
     def distance(self, cluster_a: str, cluster_b: str) -> float:
-        """Inter-cluster distance d(c,c'). Topology only; does not delay requests."""
+        """Inter-cluster distance d(c,c') in topology units (milliseconds)."""
         return self._require_root().distance(cluster_a, cluster_b)
 
     def _require_root(self) -> RootOrchestrator:

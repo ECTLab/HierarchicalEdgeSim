@@ -54,6 +54,29 @@ def sum_aligned(
     return sum_series(parts)
 
 
+def demand_weighted_aligned(
+    tau_full: list[int],
+    containers: list[ContainerSeries],
+    value_attr: str,
+    weight_attr: str = "incoming",
+) -> list[float]:
+    """Per-tick demand-weighted mean of ``value_attr`` (0 when no weight)."""
+    out: list[float] = []
+    for t in tau_full:
+        num = 0.0
+        den = 0.0
+        for c in containers:
+            by_v = dict(zip(c.tau, getattr(c, value_attr)))
+            by_w = dict(zip(c.tau, getattr(c, weight_attr)))
+            w = float(by_w.get(t, 0.0))
+            if w <= 0.0:
+                continue
+            num += w * float(by_v.get(t, 0.0))
+            den += w
+        out.append(num / den if den > 0.0 else 0.0)
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class MsPhysics:
     cpu_min: float

@@ -224,12 +224,14 @@ Optional: analyze only one app
   web_app/
     trace_vs_log_requests.png
     ladder_qos.png              # top: incoming + drops; bottom: sum CPU alloc; markers
+    user_latency.png            # offered mean/p95/p99 (timeouts included) + SLA miss %
     replicas_by_site.png        # home / vicinity / global (or remote)
     c-web-api-1_cpu.png
     c-web-api-1_ram.png
   media_app/
     trace_vs_log_requests.png
     ladder_qos.png
+    user_latency.png
     replicas_by_site.png
     c-media-ingest-1_cpu.png
     c-media-ingest-1_ram.png
@@ -319,7 +321,7 @@ Single cluster `c1`, two workers (`c1-w1`, `c1-w2`). One app / one MS (`demo_app
 | Cost | `cpu_per_request` 0.01, `ram_per_request` 0.5 |
 | Streaks | `x_up_streak` 3, `sustained_up_streak` 6, `y_down_streak` 8, `cooldown` 5 (glossary: [08-reactive-local-params.md](./08-reactive-local-params.md)) |
 
-Serving capacity per replica is `μ = min((cpu_alloc − cpu_min) / 0.01, (ram_alloc − ram_min) / 0.5)`. CPU is the bottleneck. Routing is CPU-headroom weighted: a replica at `cpu_min` has headroom 0 and receives no share until BEV grows it (equal-share only if *every* replica is at min).
+Serving capacity per replica is `μ = min((cpu_alloc − cpu_min) / 0.01, (ram_alloc − ram_min) / 0.5)`. CPU is the bottleneck. Routing fills home-cluster μ first, then leftover to loans; within a pool it is CPU-headroom weighted.
 
 Actions are decided at the end of tick `τ` and apply on tick `τ+1`. Vertical lines on the plots mark the **decision** tick.
 
@@ -333,6 +335,10 @@ Two stacked panels, shared time axis. Do **not** put requests and CPU cores on o
 - **Bottom (CPU cores):** sum of replica allocs as a step series. BEV is the small stairs; BEH is the jump when a new replica appears (1.73 → 2.5 when the spawn at `cpu_min` 0.5 becomes live). BEV-down is the later dip.
 
 Marker families: `BEV up` / `BEV down` / `BEH spawn` / `BEH terminate` / vicinity / vicinity terminate / BEG / BEG terminate / cascade / escalate. A marker at `τ` and a step at `τ+1` is the apply delay, not a logging bug. Scale-in reasons follow the loan rung (`beg_terminate`, `vicinity_terminate`, `beh_terminate`); they are not all `beh_terminate`.
+
+### `user_latency.png` — what delay does offered load see?
+
+Analytic delay, not a request-level trace. Mean / p95 / p99 are over **offered** load: dropped or \(\lambda\ge\mu\) traffic is a timeout \(T_{\mathrm{slo}}\) (default 1s) plus \(T_{\mathrm{net}}\) from the cluster distance matrix. The lower panel is SLA-miss percent. Do not read survivor-only p99 from `dropped_requests`.
 
 ### `trace_vs_log_requests.png` — is the env honest?
 

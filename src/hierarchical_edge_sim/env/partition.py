@@ -4,8 +4,8 @@ Groups clusters by inter-cluster distance and elects one leader per group.
 Runs once at world build. Clusters, workers, and vicinities stay that
 partition for the whole run — there is no T_repart and no join/leave.
 
-Does not delay user requests and does not send RPCs: it only publishes a
-partition into RootOrchestrator.
+The same distance matrix is T_net on the serving path (milliseconds).
+There are no per-worker request queues and no cross-tick backlog.
 """
 
 from __future__ import annotations

@@ -328,6 +328,58 @@ def plot_ladder_qos(
     _save(fig, out_path)
 
 
+def plot_user_latency(
+    *,
+    tau: list[int],
+    incoming: list[float],
+    mean_sec: list[float],
+    p95_sec: list[float],
+    p99_sec: list[float],
+    sla_miss: list[float],
+    out_path: Path,
+    title: str,
+    sla_timeout_sec: float | None = None,
+    cold_start_until: int | None = None,
+) -> None:
+    """Offered-load delay (timeouts included) and SLA-miss rate."""
+    miss_rate = [
+        (100.0 * m / i) if i else 0.0 for m, i in zip(sla_miss, incoming)
+    ]
+    fig, (ax_t, ax_s) = plt.subplots(
+        2,
+        1,
+        figsize=(11, 7.5),
+        sharex=True,
+        gridspec_kw={"height_ratios": [2.0, 1.0]},
+    )
+    _draw_cold_start_span(ax_t, cold_start_until)
+    ax_t.plot(tau, mean_sec, label="mean offered", linewidth=1.8, color="#1f77b4")
+    ax_t.plot(tau, p95_sec, label="p95 offered", linewidth=1.5, color="#ff7f0e")
+    ax_t.plot(tau, p99_sec, label="p99 offered", linewidth=1.8, color="#d62728")
+    if sla_timeout_sec is not None and sla_timeout_sec > 0:
+        ax_t.axhline(
+            sla_timeout_sec,
+            color="#7f7f7f",
+            linestyle=":",
+            linewidth=1.2,
+            label=f"T_slo={sla_timeout_sec:g}s",
+        )
+    ax_t.set_ylabel("seconds")
+    ax_t.set_title(title)
+    ax_t.grid(True, alpha=0.3)
+    _legend(ax_t, ncol=2)
+    _ylim_from_zero(ax_t)
+
+    _draw_cold_start_span(ax_s, cold_start_until, legend=False)
+    ax_s.plot(tau, miss_rate, label="SLA miss", color="#d62728", linewidth=1.8)
+    ax_s.set_xlabel("time_unit")
+    ax_s.set_ylabel("SLA miss %")
+    ax_s.grid(True, alpha=0.3)
+    _legend(ax_s)
+    _ylim_from_zero(ax_s)
+    _save(fig, out_path)
+
+
 def plot_replica_sites(
     *,
     tau: list[int],

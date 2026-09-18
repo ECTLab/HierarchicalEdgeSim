@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from .config import EPS, MicroserviceSpec, quantize_resource
+from .config import DEFAULT_SLA_TIMEOUT_SEC, EPS, MicroserviceSpec, quantize_resource
+from .latency import offered_delay
 from .models import Container, ContainerTickRecord
 
 
@@ -21,6 +22,10 @@ def apply_tick(
     lambda_in: float,
     spec: MicroserviceSpec,
     tau: int,
+    *,
+    tick_sec: float = 1.0,
+    sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC,
+    t_net_sec: float = 0.0,
 ) -> ContainerTickRecord:
     """Apply one tick of incoming load to a container and append history."""
     cpu_serve_cores = max(0.0, container.cpu_alloc_cores - spec.cpu_min_cores)
@@ -29,6 +34,13 @@ def apply_tick(
 
     lambda_served = min(lambda_in, mu)
     lambda_dropped = lambda_in - lambda_served
+    delay = offered_delay(
+        lambda_in=lambda_in,
+        mu=mu,
+        tick_sec=tick_sec,
+        sla_timeout_sec=sla_timeout_sec,
+        t_net_sec=t_net_sec,
+    )
 
     cpu_usage_cores = quantize_resource(
         min(
@@ -57,6 +69,11 @@ def apply_tick(
         ram_alloc_mb=container.ram_alloc_mb,
         q_cpu=q_cpu,
         q_ram=q_ram,
+        t_net_sec=delay.t_net_sec,
+        t_mean_offered_sec=delay.t_mean_offered_sec,
+        t_p95_offered_sec=delay.t_p95_offered_sec,
+        t_p99_offered_sec=delay.t_p99_offered_sec,
+        sla_miss_requests=delay.sla_miss_requests,
     )
     container.append_history(record)
     return record

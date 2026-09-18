@@ -213,6 +213,11 @@ def _write_container_log(*, container_dir: Path, file_stem: str, history) -> Non
                 "incoming_requests",
                 "served_requests",
                 "dropped_requests",
+                "t_net_sec",
+                "t_mean_offered_sec",
+                "t_p95_offered_sec",
+                "t_p99_offered_sec",
+                "sla_miss_requests",
             ]
         )
         for rec in history:
@@ -226,8 +231,17 @@ def _write_container_log(*, container_dir: Path, file_stem: str, history) -> Non
                     rec.lambda_in,
                     rec.lambda_served,
                     rec.lambda_dropped,
+                    _format_sec(rec.t_net_sec),
+                    _format_sec(rec.t_mean_offered_sec),
+                    _format_sec(rec.t_p95_offered_sec),
+                    _format_sec(rec.t_p99_offered_sec),
+                    rec.sla_miss_requests,
                 ]
             )
+
+
+def _format_sec(value: float) -> str:
+    return f"{float(value):.9g}"
 
 
 def _resolve_results_base(world_spec: WorldSpec) -> Path:

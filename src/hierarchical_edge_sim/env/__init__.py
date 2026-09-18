@@ -1,6 +1,7 @@
 """Part A environment simulator (clusters, servers, containers, traces)."""
 
 from .config import (
+    DEFAULT_SLA_TIMEOUT_SEC,
     EPS,
     AppSpec,
     ClusterSpec,
@@ -31,6 +32,7 @@ from .loans import add_loan, drop_loan, get_loan, has_loan
 from .world import World, build_world, place_container, remove_container, server_free_cpu_cores, server_free_ram_mb
 from .traces import TraceStore, load_traces
 from .usage import apply_tick, serving_capacity
+from .latency import DelayStats, offered_delay, origin_to_replica_delay_sec
 from .routing import distribute
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
@@ -52,6 +54,7 @@ from .api import (
 )
 
 __all__ = [
+    "DEFAULT_SLA_TIMEOUT_SEC",
     "EPS",
     "AppSpec",
     "ClusterSpec",
@@ -92,6 +95,9 @@ __all__ = [
     "load_traces",
     "serving_capacity",
     "apply_tick",
+    "DelayStats",
+    "offered_delay",
+    "origin_to_replica_delay_sec",
     "distribute",
     "EngineState",
     "tick",

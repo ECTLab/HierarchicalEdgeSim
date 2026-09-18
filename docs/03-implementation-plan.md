@@ -16,13 +16,13 @@ Modular Python plan for the hierarchical edge autoscaling workbench.
 
 **Part A locks:**
 
-1. **Capacity-weighted routing** among replicas (CPU serving headroom only — not configurable).  
-2. **Drop overflow** (no cross-tick queue): excess requests are dropped and **logged**.  
+1. **Prefer-local routing**: fill home-cluster \(\mu\) first, leftover to non-home replicas; within each pool, CPU-headroom (or \(\mu\)) weights.  
+2. **Drop overflow** (no cross-tick queue): excess requests are dropped and **logged**. Dropped / \(\lambda\ge\mu\) load counts as SLA timeout \(T_{\mathrm{slo}}\) in offered delay.  
 3. **Serving capacity = resources above deployment minima** (`alloc − min`).  
 4. **Per-MS max** (`cpu_max_cores`, `ram_max_mb`) caps vertical growth; server capacity is the physical ceiling.  
 5. **Traces**: one CSV per microservice under `traces_dir`.  
 6. **Config pre-check**: validate everything before building the world or running ticks.  
-7. **Minimal config**: every YAML field is required for Part A; no optional policy/autoscaler keys yet.
+7. **User delay**: analytic M/M/1 sojourn + \(T_{\mathrm{net}}=d/1000\) from the Algorithm 1 matrix; optional `sim.sla_timeout_sec` (default \(1\,\mathrm{s}\)).
 
 **Naming:** all CPU quantities use a `_cores` suffix in config, code, and logs (e.g. `cpu_alloc_cores`). RAM quantities use `_mb`.
 
@@ -34,13 +34,13 @@ Related: [02-custom-simulator-environment.md](./02-custom-simulator-environment.
 
 | # | Decision | v1 choice |
 |---|---|---|
-| L1 | Trace time unit | One CSV **data row** = one **tick** `τ = 1…N`. Config `tick_sec` is metadata (seconds per tick); **row order** drives τ, not the `time_unit` column value alone. |
+| L1 | Trace time unit | One CSV **data row** = one **tick** `τ = 1…N`. Config `tick_sec` is the physical seconds per tick (RPS and M/M/1 rates); **row order** drives τ, not the `time_unit` column value alone. |
 | L2 | Decision cadence | **Part B only.** Part A runs every tick; no autoscaler hook in v1 code path. |
 | L3 | Resource model | `cpu_min_cores`/`ram_min_mb` = deploy footprint; serving uses headroom `alloc − min` (§4). |
 | L4 | Per-tick capacity | Container fully available each tick (no backlog). |
 | L5 | History + disk logs | In-memory per tick; flushed to per-container files (§8). |
-| L6 | Routing | Capacity-weighted; weight ∝ **CPU serving headroom** `(cpu_alloc_cores − cpu_min_cores)` — **fixed, not configurable**. |
-| L7 | Overflow | **Drop** excess this tick; log drops. No queue. **Not a config parameter.** |
+| L6 | Routing | Prefer-local: fill home \(\mu\) first, leftover to non-home; within a pool, weight ∝ CPU serving headroom (or \(\mu\) when passed). |
+| L7 | Overflow | **Drop** excess this tick; log drops. No queue. Offered delay treats drop / \(\rho\ge 1\) as \(T_{\mathrm{slo}}\). Optional `sim.sla_timeout_sec` (default 1s). |
 | L8 | MS max | `cpu_max_cores`, `ram_max_mb` per microservice type; clamp vertical alloc (§4.1). |
 | L9 | Float compares | `EPS = 1e-9` — **constant in code**, not config. |
 | L10 | Scaling actions | Effective **next tick** — **constant in code** when Part B arrives. |
@@ -250,11 +250,17 @@ def distribute(Λ: float, containers: list[Container], cpu_min_cores: float) -> 
 
 ---
 
-## 5. Overflow (locked: drop only)
+## 5. Overflow (drop) and user delay
 
-Excess requests beyond μ are **dropped and logged**. No queue, no backlog field on `Container`.
+Excess requests beyond μ are **dropped and logged**. No queue, no backlog field on `Container`. Fresh tick: next window ignores prior drops.
 
-Queue-based models are **future ablation only**.
+User delay is an **output metric** on the same tick (`env/latency.py`):
+
+\[
+T = T_{\mathrm{net}} + T_{\mathrm{q+svc}},\qquad T_{\mathrm{net}}=d(\mathrm{home},c_i)/1000
+\]
+
+Stable replicas (\(\lambda<\mu\)) use intra-tick M/M/1 at rates \(\lambda/\texttt{tick\_sec}\), \(\mu/\texttt{tick\_sec}\). Saturated replicas and dropped load are counted as \(T_{\mathrm{net}}+T_{\mathrm{slo}}\) over **offered** load (never survivor-only p99). Default \(T_{\mathrm{slo}}=1\,\mathrm{s}\) (`sim.sla_timeout_sec`). Cross-tick request queues remain out of scope.
 
 ---
 
@@ -310,6 +316,11 @@ class ContainerTickRecord:
     ram_alloc_mb: float
     q_cpu: float               # stored for later autoscaler / plots
     q_ram: float
+    t_net_sec: float = 0.0
+    t_mean_offered_sec: float = 0.0
+    t_p95_offered_sec: float = 0.0
+    t_p99_offered_sec: float = 0.0
+    sla_miss_requests: float = 0.0
 ```
 
 - Store **full run** in memory for v1 (N ticks).  
@@ -369,6 +380,11 @@ Written once at run start from config + placement (not updated in Part A):
 | `incoming_requests` | `λ_in` |
 | `served_requests` | `λ_served` |
 | `dropped_requests` | `λ_dropped` |
+| `t_net_sec` | topology delay (home → replica) |
+| `t_mean_offered_sec` | mean offered delay (timeouts included) |
+| `t_p95_offered_sec` | analytic p95 of offered delay |
+| `t_p99_offered_sec` | analytic p99 of offered delay |
+| `sla_miss_requests` | offered load with \(T > T_{\mathrm{slo}}\) |
 
 Log column names stay human-readable; Python fields use `_cores` / `_mb`.
 

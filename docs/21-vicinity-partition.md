@@ -6,7 +6,7 @@
 
 The root **computes** non-overlapping vicinities from inter-cluster distance and elects a leader. YAML `topology.vicinities` remains an override for ladder experiments that must pin a specific grouping (triangle BEG/vicinity slices).
 
-This is topology only. User requests are still drop-overflow; nothing is delayed by RTT.
+This is topology only for Algorithm 1. User requests are still drop-overflow (no per-worker queue). The same \(d(c,c')\) is \(T_{\mathrm{net}}\) on the serving path (milliseconds \(\to\) seconds).
 
 ---
 
@@ -22,7 +22,7 @@ This is topology only. User requests are still drop-overflow; nothing is delayed
 
 ## Coords vs latency (what is implemented)
 
-**Inter-cluster latency is implemented as topology distance \(d(c,c')\), not as delay on user requests.** Nothing in the serving path waits on RTT. There are no per-worker request queues. `Env.distance(a, b)` and Algorithm 1 read the same matrix.
+**Inter-cluster latency is topology distance \(d(c,c')\), and the same matrix is \(T_{\mathrm{net}}\) on offered delay.** Nothing waits in a per-worker request queue and there is no cross-tick backlog. `Env.distance(a, b)` and Algorithm 1 read the same matrix; serving converts \(d\) as milliseconds.
 
 Two ways to supply \(d\):
 
@@ -87,7 +87,7 @@ A run is fine when:
 A run is **not** a failure because:
 
 - `actions.csv` is empty — you did not pass an autoscaler
-- the container log has drops — Part A is drop-overflow; Algorithm 1 does not add RTT
+- the container log has drops — Part A is drop-overflow; Algorithm 1 still does not queue requests. \(T_{\mathrm{net}}\) is logged separately.
 - serving does not change because a neighbor is in the same vicinity — that only happens with `reactive_local` (S4/S5)
 
 If `vicinity_source` is missing/`null`, or `published_vicinities` is empty while coords or a complete RTT list were set, that is a failure.

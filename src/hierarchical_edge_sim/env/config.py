@@ -11,6 +11,7 @@ import yaml
 
 EPS = 1e-9
 RESOURCE_DECIMALS = 2
+DEFAULT_SLA_TIMEOUT_SEC = 1.0
 
 
 def quantize_resource(value: float) -> float:
@@ -30,6 +31,7 @@ class SimConfig:
     tick_sec: float
     results_dir: str
     seed: int
+    sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,10 +129,14 @@ def load_yaml(path: str | Path) -> RawConfig:
     sim_data = _as_mapping(_require(root, "sim", "root"), path="sim")
     topology_data = _as_mapping(_require(root, "topology", "root"), path="topology")
 
+    sla_timeout_sec = DEFAULT_SLA_TIMEOUT_SEC
+    if "sla_timeout_sec" in sim_data:
+        sla_timeout_sec = _to_float(sim_data["sla_timeout_sec"], "sim.sla_timeout_sec")
     sim = SimConfig(
         tick_sec=_to_float(_require(sim_data, "tick_sec", "sim"), "sim.tick_sec"),
         results_dir=_to_str(_require(sim_data, "results_dir", "sim"), "sim.results_dir"),
         seed=_to_int(_require(sim_data, "seed", "sim"), "sim.seed"),
+        sla_timeout_sec=sla_timeout_sec,
     )
 
     clusters_raw = _as_list(_require(topology_data, "clusters", "topology"), "topology.clusters")

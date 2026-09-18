@@ -22,6 +22,8 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 | Predictor confidence \(\kappa\) | \(\kappa=0\) until \(W_\kappa\), else \(1/(1+\mathrm{MAPE})\); below \(\kappa_{\min}\) ignore hats | `CountConfidence` + `trust_forecast`. Predictor still runs every window. |
 | Admission + partition | Least-loaded stamp; Algorithm 1 at init | `env/admission.py` + `build_world` once. YAML \(V\) remains an experiment override. Clusters/workers/\(V\) are static. |
 | Per-window residual | AllocateResources applies \(\delta\) in one window | No \(\alpha_{up}/\alpha_{down}\). \(\delta_{\min}\) is still a dust/token floor, not a speed limit. |
+| Prefer-local routing | Fill home \(\mu\) first; leftover to loans; headroom-weighted inside each pool | `routing.distribute(..., home_ids, mu)` from the engine. Same-cluster fleets unchanged. |
+| User delay | \(T=T_{\mathrm{net}}+\) M/M/1 sojourn; overflow as \(T_{\mathrm{slo}}\); p99 over offered load | `env/latency.py`. Logs `t_*_offered_sec`, `sla_miss_requests`. Plot `user_latency.png`. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 
@@ -29,7 +31,7 @@ The paper’s §prototype still describes the older `edge_computing_thesis` repo
 
 ## Keep in the sim; absorb into the tex later
 
-These are the cases where the simulator is right and a literal reading of the current algorithms is not, under \(\mu=\min((A-\min)/\rho)\) and CPU-headroom routing.
+These are the cases where the simulator is the operational method.
 
 1. **Packed spawn above minima.** Paper HorizontalScaling and SchedulePlacements seed at \((cpu_{\min},ram_{\min})\). Code uses `packed_spawn_size` (floor + leftover headroom; skip a worker that can only fit the floor). A minima replica has \(\mu=0\) and routing weight 0.
 
@@ -37,7 +39,7 @@ These are the cases where the simulator is right and a literal reading of the cu
 
 3. **μ-matched CPU/RAM.** Paper grows each wallet independently toward `cpu_max` / `ram_max`. Code takes one serving-\(\mu\) step through \(\rho\). `ram_max` is a ceiling, not a fill target.
 
-4. **Headroom-weighted routing.** Paper assumes even spread of \(\lambda_m\) (no hot/cold). Code weights by CPU headroom. Even LB plus minima spawn sends \(1/n\) of load to a \(\mu=0\) replica, which then drops it.
+4. **Headroom-weighted routing (absorbed into v2 tex as prefer-local).** Even LB plus minima spawn sends \(1/n\) of load to a \(\mu=0\) replica, which then drops it. Keep headroom weights inside each pool.
 
 5. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, do not vertical-shrink the seed in the same tick as a terminate.
 
@@ -61,6 +63,7 @@ None of the remaining canvas “update the sim” rows. Leader heartbeat failove
 
 | Date | Note |
 |---|---|
+| 2026-09-18 | Prefer-local routing and analytic offered delay (\(T_{\mathrm{net}}\) + M/M/1, drop as \(T_{\mathrm{slo}}\)). Absorbed into `proposed_method_complete.tex`. |
 | 2026-09-17 | Removed \(\alpha_{up}/\alpha_{down}\). AllocateResources applies the window residual; streaks/cooldown/last-replica/safe_j remain. |
 | 2026-09-16 | Remaining six paper-ahead rows: owner(j) writer, cross-MS cascade, Decrease-before-Increase, Reserve/\(safe_j\), \(\kappa\), static admission (no \(T_{\mathit{repart}}\)). |
 | 2026-09-16 | SchedulePlacements matches Alg. place: grow existing (home then nearer loans, μ-matched), then packed spawn over all of \(N_V\) including home recycle after Phase 1. Distance ranking replaces YAML member order. Packed spawn stays. Ceiling is now \(safe_j\). |

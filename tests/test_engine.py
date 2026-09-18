@@ -6,9 +6,11 @@ from hierarchical_edge_sim.env.config import (
     AppSpec,
     ClusterSpec,
     ContainerSpec,
+    LatencyEdge,
     MicroserviceSpec,
     ServerSpec,
     SimConfig,
+    VicinitySpec,
     WorldSpec,
     load_yaml,
 )
@@ -57,6 +59,81 @@ def test_engine_golden_table(tiny_config_path):
         assert rec.lambda_served == pytest.approx(exp_served)
         assert rec.lambda_dropped == pytest.approx(exp_dropped)
         assert rec.cpu_usage_cores == pytest.approx(exp_cpu_used)
+        if exp_in == 0.0:
+            assert rec.t_p99_offered_sec == pytest.approx(0.0)
+            assert rec.sla_miss_requests == pytest.approx(0.0)
+        elif exp_dropped > 0.0:
+            assert rec.t_p99_offered_sec == pytest.approx(1.0)
+            assert rec.sla_miss_requests == pytest.approx(exp_in)
+
+
+def test_engine_prefer_local_and_remote_t_net():
+    spec = WorldSpec(
+        sim=SimConfig(tick_sec=1.0, results_dir="results/", seed=1, sla_timeout_sec=1.0),
+        traces_dir="unused/",
+        clusters=[
+            ClusterSpec(
+                id="c1",
+                servers=[ServerSpec(id="c1-w1", cpu_cap_cores=8.0, ram_cap_mb=16384.0)],
+                coords=(0.0, 0.0),
+            ),
+            ClusterSpec(
+                id="c2",
+                servers=[ServerSpec(id="c2-w1", cpu_cap_cores=8.0, ram_cap_mb=16384.0)],
+                coords=(0.0, 0.0),
+            ),
+        ],
+        apps=[
+            AppSpec(
+                id="demo_app",
+                microservices=[
+                    MicroserviceSpec(
+                        id="api",
+                        cpu_min_cores=0.5,
+                        cpu_max_cores=4.0,
+                        ram_min_mb=256.0,
+                        ram_max_mb=4096.0,
+                        cpu_per_request_cores=0.01,
+                        ram_per_request_mb=0.5,
+                        trace_file="unused.csv",
+                        containers=[
+                            ContainerSpec(
+                                id="c-home",
+                                server_id="c1-w1",
+                                cpu_alloc_cores=1.0,
+                                ram_alloc_mb=512.0,
+                            ),
+                            ContainerSpec(
+                                id="c-loan",
+                                server_id="c2-w1",
+                                cpu_alloc_cores=3.0,
+                                ram_alloc_mb=1024.0,
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+        source_path=Path("unused/config.yaml"),
+        vicinities=[VicinitySpec(id="v1", members=["c1", "c2"], leader="c1")],
+        latency_ms=[LatencyEdge(a="c1", b="c2", ms=40.0)],
+    )
+    world = build_world(spec)
+    traces = TraceStore(_data={"api": [400.0]})
+    run_ticks(world=world, traces=traces, world_spec=spec)
+
+    home = world.containers["c-home"].history_at(1)
+    loan = world.containers["c-loan"].history_at(1)
+    assert home.lambda_in == pytest.approx(50.0)
+    assert home.lambda_dropped == pytest.approx(0.0)
+    assert home.t_net_sec == pytest.approx(0.0)
+    assert home.t_p99_offered_sec == pytest.approx(1.0)
+    assert loan.lambda_in == pytest.approx(350.0)
+    assert loan.lambda_served == pytest.approx(250.0)
+    assert loan.lambda_dropped == pytest.approx(100.0)
+    assert loan.t_net_sec == pytest.approx(0.04)
+    assert loan.t_p99_offered_sec == pytest.approx(1.04)
+
 
 
 def test_ms_processing_order_deterministic(tiny_config_path):

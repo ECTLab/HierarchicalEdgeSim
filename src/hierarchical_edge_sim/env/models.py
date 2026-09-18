@@ -18,6 +18,11 @@ class ContainerTickRecord:
     ram_alloc_mb: float
     q_cpu: float
     q_ram: float
+    t_net_sec: float = 0.0
+    t_mean_offered_sec: float = 0.0
+    t_p95_offered_sec: float = 0.0
+    t_p99_offered_sec: float = 0.0
+    sla_miss_requests: float = 0.0
 
 
 @dataclass(slots=True)

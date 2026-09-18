@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -26,6 +26,11 @@ class ContainerSeries:
     ram_used: list[float]
     cluster_id: str = ""
     server_id: str = ""
+    t_net_sec: list[float] = field(default_factory=list)
+    t_mean_offered_sec: list[float] = field(default_factory=list)
+    t_p95_offered_sec: list[float] = field(default_factory=list)
+    t_p99_offered_sec: list[float] = field(default_factory=list)
+    sla_miss: list[float] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -52,6 +57,12 @@ def read_trace(path: Path) -> tuple[list[int], list[float]]:
     return [int(r["time_unit"]) for r in rows], [float(r["requests"]) for r in rows]
 
 
+def _floats(rows: list[dict], key: str, default: float = 0.0) -> list[float]:
+    if not rows or key not in rows[0]:
+        return [default] * len(rows)
+    return [float(r[key]) for r in rows]
+
+
 def read_container_log(path: Path) -> ContainerSeries:
     # Expected layout: .../apps/<app_id>/<ms_id>/<container_id>.log.csv
     container_id = path.name.removesuffix(".log.csv")
@@ -72,15 +83,20 @@ def read_container_log(path: Path) -> ContainerSeries:
         container_id=container_id,
         log_path=path,
         tau=[int(r["time_unit"]) for r in rows],
-        incoming=[float(r["incoming_requests"]) for r in rows],
-        served=[float(r["served_requests"]) for r in rows],
-        dropped=[float(r["dropped_requests"]) for r in rows],
-        cpu_capacity=[float(r["cpu_core_capacity"]) for r in rows],
-        cpu_used=[float(r["cpu_core_used"]) for r in rows],
-        ram_capacity=[float(r["ram_size_capacity_mb"]) for r in rows],
-        ram_used=[float(r["ram_size_used_mb"]) for r in rows],
+        incoming=_floats(rows, "incoming_requests"),
+        served=_floats(rows, "served_requests"),
+        dropped=_floats(rows, "dropped_requests"),
+        cpu_capacity=_floats(rows, "cpu_core_capacity"),
+        cpu_used=_floats(rows, "cpu_core_used"),
+        ram_capacity=_floats(rows, "ram_size_capacity_mb"),
+        ram_used=_floats(rows, "ram_size_used_mb"),
         cluster_id=cluster_id,
         server_id=server_id,
+        t_net_sec=_floats(rows, "t_net_sec"),
+        t_mean_offered_sec=_floats(rows, "t_mean_offered_sec"),
+        t_p95_offered_sec=_floats(rows, "t_p95_offered_sec"),
+        t_p99_offered_sec=_floats(rows, "t_p99_offered_sec"),
+        sla_miss=_floats(rows, "sla_miss_requests"),
     )
 
 

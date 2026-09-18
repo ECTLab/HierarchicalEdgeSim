@@ -9,6 +9,7 @@ from .aggregate import (
     action_markers,
     app_owner_cluster_id,
     cluster_to_vicinity,
+    demand_weighted_aligned,
     group_containers_by_app,
     group_containers_by_microservice,
     replica_counts_by_site,
@@ -33,6 +34,7 @@ from .plots import (
     plot_ram,
     plot_replica_sites,
     plot_routing_split,
+    plot_user_latency,
 )
 
 _MAX_REPLICA_RESOURCE_PLOTS = 8
@@ -66,6 +68,7 @@ def analyze_run(
       - one combined requests plot (trace vs sum incoming/served/dropped)
       - per-container CPU and RAM plots
       - ladder QoS (incoming, CPU alloc, drops + action markers)
+      - user latency (offered mean/p95/p99 and SLA-miss rate)
       - replica counts by site (home / vicinity / outside)
     """
     run_dir = run_dir.resolve()
@@ -192,6 +195,23 @@ def analyze_run(
                 markers=markers,
                 out_path=app_out / qos_name,
                 title=f"{app_id}/{ms_id}: load and drops",
+                cold_start_until=until,
+            )
+            sla_timeout = None
+            sim_cfg = (meta.get("config") or {}).get("sim") or {}
+            if sim_cfg.get("sla_timeout_sec") is not None:
+                sla_timeout = float(sim_cfg["sla_timeout_sec"])
+            lat_name = "user_latency.png" if len(by_ms) == 1 else f"user_latency_{ms_id}.png"
+            plot_user_latency(
+                tau=tau_trace,
+                incoming=incoming,
+                mean_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_mean_offered_sec"),
+                p95_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_p95_offered_sec"),
+                p99_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_p99_offered_sec"),
+                sla_miss=sum_aligned(tau_trace, ms_containers, "sla_miss"),
+                out_path=app_out / lat_name,
+                title=f"{app_id}/{ms_id}: offered delay (timeouts included)",
+                sla_timeout_sec=sla_timeout,
                 cold_start_until=until,
             )
             counts = replica_counts_by_site(

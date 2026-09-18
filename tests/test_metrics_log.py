@@ -112,6 +112,11 @@ def test_log_csv_columns(tmp_path: Path):
         "incoming_requests",
         "served_requests",
         "dropped_requests",
+        "t_net_sec",
+        "t_mean_offered_sec",
+        "t_p95_offered_sec",
+        "t_p99_offered_sec",
+        "sla_miss_requests",
     ]
 
 
@@ -127,6 +132,8 @@ def test_log_csv_golden_tick4(tmp_path: Path):
     assert float(tick4["served_requests"]) == 50.0
     assert float(tick4["dropped_requests"]) == 70.0
     assert float(tick4["cpu_core_used"]) == 1.0
+    assert float(tick4["sla_miss_requests"]) == 120.0
+    assert float(tick4["t_p99_offered_sec"]) == 1.0
 
 
 def test_run_meta_includes_vicinities_list(tmp_path: Path):

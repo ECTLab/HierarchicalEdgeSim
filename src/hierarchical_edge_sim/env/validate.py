@@ -207,6 +207,8 @@ def validate_or_raise(config: RawConfig) -> WorldSpec:
 def _validate_sim(config: RawConfig, errors: list[ValidationError]) -> None:
     if config.sim.tick_sec <= 0:
         errors.append(ValidationError(path="sim.tick_sec", message="must be > 0"))
+    if config.sim.sla_timeout_sec <= 0:
+        errors.append(ValidationError(path="sim.sla_timeout_sec", message="must be > 0"))
     if not config.sim.results_dir.strip():
         errors.append(ValidationError(path="sim.results_dir", message="must be a non-empty string"))
     if not isinstance(config.sim.seed, int):

@@ -13,9 +13,9 @@ class RootOrchestrator:
     """Owns vicinity membership and leaders.
 
     ``vicinity_source`` is ``yaml`` (hand groups) or ``algorithm``
-    (VicinityPartitionAndLeaderElection). Distances are optional and do not
-    delay user requests. Membership is frozen after publish; admission stamps
-    live in ``env/admission.py``.
+    (VicinityPartitionAndLeaderElection). Distances are the Algorithm 1
+    matrix and also T_net on the serving path (milliseconds). Membership is
+    frozen after publish; admission stamps live in ``env/admission.py``.
     """
 
     vicinities: dict[str, Vicinity] = field(default_factory=dict)

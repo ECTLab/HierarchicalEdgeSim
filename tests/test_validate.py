@@ -86,6 +86,7 @@ def test_tiny_yaml_validates_clean(tiny_config_path):
     raw = load_yaml(tiny_config_path)
     world_spec = validate_or_raise(raw)
     assert world_spec.sim.seed == 42
+    assert world_spec.sim.sla_timeout_sec == 1.0
     assert world_spec.clusters[0].id == "c1"
 
 
@@ -222,6 +223,11 @@ def test_validate_or_raise_raises_config_error(tmp_path):
             "sim",
             lambda cfg, _t: cfg["sim"].update({"results_dir": "   "}),
             "must be a non-empty string",
+        ),
+        (
+            "sla_timeout",
+            lambda cfg, _t: cfg["sim"].update({"sla_timeout_sec": 0}),
+            "must be > 0",
         ),
     ],
 )

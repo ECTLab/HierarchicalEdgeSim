@@ -74,3 +74,33 @@ def test_routing_plus_usage_end_to_end():
     assert rec_b.lambda_in == pytest.approx(333.3333333333, rel=1e-9)
     assert rec_b.lambda_served == pytest.approx(250.0)
     assert rec_b.lambda_dropped == pytest.approx(83.3333333333, rel=1e-9)
+
+
+def test_prefer_local_fills_home_mu_then_overflow():
+    a = _make_container("c-home", "c1-w1", cpu=1.0, ram=512.0)  # μ=50
+    b = _make_container("c-loan", "c2-w1", cpu=3.0, ram=1024.0)  # μ=250
+    shares = distribute(
+        offer_lambda=400.0,
+        containers=[a, b],
+        cpu_min_cores=0.5,
+        home_ids={"c-home"},
+        mu={"c-home": 50.0, "c-loan": 250.0},
+    )
+    assert shares["c-home"] == pytest.approx(50.0)
+    assert shares["c-loan"] == pytest.approx(350.0)
+    assert sum(shares.values()) == pytest.approx(400.0)
+
+
+def test_prefer_local_all_home_keeps_headroom_split():
+    a = _make_container("c-api-a", "c1-w1", cpu=1.0, ram=512.0)
+    b = _make_container("c-api-b", "c1-w2", cpu=3.0, ram=1024.0)
+    shares = distribute(
+        offer_lambda=400.0,
+        containers=[a, b],
+        cpu_min_cores=0.5,
+        home_ids={"c-api-a", "c-api-b"},
+        mu={"c-api-a": 50.0, "c-api-b": 250.0},
+    )
+    assert shares["c-api-a"] == pytest.approx(66.6666666667, rel=1e-9)
+    assert shares["c-api-b"] == pytest.approx(333.3333333333, rel=1e-9)
+

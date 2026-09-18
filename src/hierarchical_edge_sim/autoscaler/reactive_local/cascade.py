@@ -62,8 +62,7 @@ def check_cascading_migration(
             spec=spec,
             free_cpu=free_cpu.get(sid, 0.0),
             free_ram=free_ram.get(sid, 0.0),
-            min_head_cpu=0.25,
-            min_head_ram=128.0,
+            min_mu_step=0.0,
         )
         if packed is None:
             continue

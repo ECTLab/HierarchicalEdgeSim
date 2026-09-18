@@ -8,7 +8,7 @@ from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 
 
 class UpDeltaParams(Protocol):
-    delta_cpu_min_cores: float
+    min_mu_step: float
 
 
 def deltas_for_mu_step(step_mu: float, spec: MicroserviceSpec) -> tuple[float, float]:
@@ -34,15 +34,14 @@ def remain_to_mu(remain_cpu: float, remain_ram: float, spec: MicroserviceSpec) -
 def up_delta(obs: dict[str, Any], params: UpDeltaParams) -> tuple[float, float]:
     """MS-wide CPU/RAM to add this up tick, from one μ step.
 
-    Convert dropped demand through ρ. Floor at ``δ_cpu_min`` so a tiny D still
-    moves; do not cap as a fraction of current alloc. RAM follows the same μ —
-    do not floor it at ``δ_ram_min``.
+    Convert dropped demand through ρ. Floor at ``min_mu_step`` so a tiny D still
+    moves; do not cap as a fraction of current alloc. RAM follows the same μ.
     """
     spec: MicroserviceSpec = obs["spec"]
     rho_cpu = spec.cpu_per_request_cores
     if rho_cpu <= EPS:
         return 0.0, 0.0
     need_mu = float(obs.get("D") or 0.0)
-    min_mu = params.delta_cpu_min_cores / rho_cpu
+    min_mu = max(0.0, float(params.min_mu_step))
     step_mu = max(need_mu, min_mu)
     return deltas_for_mu_step(step_mu, spec)

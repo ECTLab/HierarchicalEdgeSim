@@ -57,6 +57,8 @@ Code: `src/hierarchical_edge_sim/autoscaler/common/mu_scale.py`, used from `reac
 
 `δ_ram_min` is now an **idle-trim** chunk on the last replica, not a second grow floor. `α_up` is a CPU rate cap; RAM follows ρ for the same μ. See [08-reactive-local-params.md](./08-reactive-local-params.md).
 
+Later those two `delta_*` knobs were removed. The remaining floor is one `min_mu_step` (req/tick): RAM still follows μ×ρ, and floor extras terminate because they add no μ.
+
 This matches the simulator physics (floors buy no μ). It is closer to the proposed method’s “do not buy unused RAM” outcome than the dual-wallet pump was. The tex still sizes independent utilization residuals and seeds BEH at minima; lockstep \(\mu\cdot\rho\) is the env model, not a literal copy of `PredictAndDecide`.
 
 ---

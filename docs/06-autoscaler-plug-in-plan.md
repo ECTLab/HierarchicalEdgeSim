@@ -605,8 +605,7 @@ autoscaler:
     use_near_saturation_up: false
     alpha_up: 0.25
     alpha_down: 0.15
-    delta_cpu_min_cores: 0.25
-    delta_ram_min_mb: 128
+    min_mu_step: 25
     prefer_consolidate_down: true
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

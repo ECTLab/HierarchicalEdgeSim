@@ -21,10 +21,13 @@ def test_params_defaults_and_unknown_key():
     p = validate_params({})
     assert p.sustained_up_streak == 6
     assert p.cascade_home is True
+    assert p.min_mu_step == 25.0
     with pytest.raises(ValueError, match="unknown reactive_local"):
         validate_params({"not_a_param": 1})
     with pytest.raises(ValueError, match="alpha_up/alpha_down were removed"):
         validate_params({"alpha_up": 0.20})
+    with pytest.raises(ValueError, match="min_mu_step"):
+        validate_params({"delta_cpu_min_cores": 0.25})
 
 
 def _write_world(
@@ -303,7 +306,7 @@ def _surplus_obs(**kwargs: Any) -> dict[str, Any]:
 
 
 def test_up_delta_ram_follows_cpu_mu_not_fat_alloc():
-    params = ReactiveLocalParams(delta_cpu_min_cores=0.25, delta_ram_min_mb=128.0)
+    params = ReactiveLocalParams(min_mu_step=25.0)
     cpu, ram = up_delta(
         _surplus_obs(D=80.0, sum_cpu_alloc=1.0, sum_ram_alloc=512.0),
         params,
@@ -311,6 +314,13 @@ def test_up_delta_ram_follows_cpu_mu_not_fat_alloc():
     # D=80 req → 0.80 cores; RAM is 80 × 0.5 MB, not a fraction of 512.
     assert cpu == pytest.approx(0.80)
     assert ram == pytest.approx(40.0)
+
+
+def test_up_delta_floors_tiny_d_at_min_mu_step():
+    params = ReactiveLocalParams(min_mu_step=25.0)
+    cpu, ram = up_delta(_surplus_obs(D=1.0), params)
+    assert cpu == pytest.approx(0.25)
+    assert ram == pytest.approx(12.5)
 
 
 def test_surplus_last_replica_does_not_take_delta_min_past_target():
@@ -344,7 +354,8 @@ def test_surplus_tiny_overshoot_is_the_surplus_not_delta_min():
     assert ram == pytest.approx(extra_mu * 0.5)
 
 
-def test_surplus_extras_at_floor_still_get_a_terminate_token():
+def test_surplus_extras_at_floor_do_not_inject_leftover():
     params = ReactiveLocalParams(theta_free=0.35)
-    cpu, _ = down_delta(_surplus_obs(replicas=[object(), object()], sum_h_cpu=0.0), params)
-    assert cpu == pytest.approx(0.25)
+    cpu, ram = down_delta(_surplus_obs(replicas=[object(), object()], sum_h_cpu=0.0, sum_h_ram=0.0), params)
+    assert cpu == pytest.approx(0.0)
+    assert ram == pytest.approx(0.0)

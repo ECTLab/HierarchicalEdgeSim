@@ -56,6 +56,7 @@ def schedule_releases(
 
     J is N_V \\ N_home. Floor extras (μ=0) are fully releasable even when L is
     smaller than the instance — a minima replica serves nothing in this env.
+    If L is already 0, still terminate those floor extras (no fake leftover).
     Last replica and μ_tgt surplus-down stay in force.
     """
     if env.root is None or not intents:
@@ -133,8 +134,9 @@ def _release_one(
     replicas = _borrowed_replicas(
         env, intent.ms_id, intent.home_cluster_id, members, pending_term
     )
-    if not replicas or (remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS)):
+    if not replicas:
         return []
+    had_budget = remain_cpu > EPS or (ram_modeled and remain_ram > EPS)
 
     fleet_mu = _fleet_mu(env, intent.ms_id, spec, ram_modeled, pending_term)
     ranked_servers = _rank_lender_servers(env, replicas, intent.home_cluster_id)
@@ -149,12 +151,15 @@ def _release_one(
     for sid in ranked_servers:
         live = [r for r in by_server[sid] if r.container_id not in pending_term]
         for replica in list(live):
-            if remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
+            extra_mu = replica_mu(replica, spec, ram_modeled)
+            floor_extra = extra_mu <= EPS
+            remain_gone = remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS)
+            if remain_gone and had_budget:
                 return actions
             if n_live <= 1:
                 return actions
-            extra_mu = replica_mu(replica, spec, ram_modeled)
-            floor_extra = extra_mu <= EPS
+            if remain_gone and not floor_extra:
+                continue
             if not floor_extra and not _covers_instance(
                 remain_cpu, remain_ram, replica, ram_modeled
             ):
@@ -176,10 +181,13 @@ def _release_one(
             live.remove(replica)
             n_live -= 1
             fleet_mu = max(0.0, fleet_mu - extra_mu)
-            remain_cpu = max(0.0, remain_cpu - replica.cpu_alloc)
-            remain_ram = max(0.0, remain_ram - replica.ram_alloc)
+            if not remain_gone:
+                remain_cpu = max(0.0, remain_cpu - replica.cpu_alloc)
+                remain_ram = max(0.0, remain_ram - replica.ram_alloc)
         if remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
-            return actions
+            if had_budget:
+                return actions
+            continue
         if not live:
             continue
         # Too small for a whole instance: shrink the leftover on this host.

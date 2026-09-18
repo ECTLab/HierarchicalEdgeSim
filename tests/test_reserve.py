@@ -81,8 +81,7 @@ def _rho(env: Env, home: str, cpu: float, ram: float, ms_id: str = "api") -> Hel
         remain_ram=ram,
         cpu_min=spec.cpu_min_cores,
         ram_min=spec.ram_min_mb,
-        min_head_cpu=0.25,
-        min_head_ram=128.0,
+        min_mu_step=25.0,
         t_det=1,
     )
 

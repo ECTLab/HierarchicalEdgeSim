@@ -154,6 +154,13 @@ def test_schedule_releases_terminates_farthest_lender_first(tmp_path):
     assert terms[0].reason == "vicinity_terminate"
 
 
+def test_schedule_releases_zero_remain_kills_borrowed_floor_extras(tmp_path):
+    env = _write_world(tmp_path, borrowed_cpu=0.5, borrowed_ram=256.0, two_lenders=True)
+    actions = schedule_releases(env, [_xi(env, 0.0, 0.0)], pending=[], tau=1)
+    terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
+    assert [a.container_id for a in terms] == ["c-api-3", "c-api-2"]
+
+
 def test_schedule_releases_shrinks_leftover_too_small_for_instance(tmp_path):
     env = _write_world(tmp_path, borrowed_cpu=2.0, borrowed_ram=1024.0)
     actions = schedule_releases(env, [_xi(env, 0.3, 128.0, mu_tgt=1.0)], pending=[], tau=1)

@@ -12,8 +12,7 @@ eps_drop: 1.0e-9
 theta_free: 0.35
 theta_high: 0.90
 use_near_saturation_up: false
-delta_cpu_min_cores: 0.25
-delta_ram_min_mb: 128
+min_mu_step: 25
 prefer_consolidate_down: true
 grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
 shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }
@@ -41,12 +40,11 @@ shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }
 
 One scale-up tick is **one serving-μ step**, not two independent CPU and RAM wallets.
 
-Dropped demand (or the decide residual) becomes a μ increment (`leftover / ρ_cpu`), then both resources move by `Δμ × ρ`. There is no \(\alpha_{up}\) fraction of current alloc. RAM is not grown toward `ram_max` on its own, and `delta_ram_min_mb` is **not** a second grow floor on the way up.
+Dropped demand (or the decide residual) becomes a μ increment (`leftover / ρ_cpu`), then both resources move by `Δμ × ρ`. There is no \(\alpha_{up}\) fraction of current alloc. RAM is not grown toward `ram_max` on its own.
 
 | Param | What it does |
 |---|---|
-| `delta_cpu_min_cores` | Smallest CPU change that counts as a real step (`0.25`). Also the extras-at-floor terminate token. |
-| `delta_ram_min_mb` | RAM **idle-trim** chunk on the last replica when CPU is already at the μ target (`128` MB). Not a separate grow target on the way up. |
+| `min_mu_step` | Smallest serving-μ change that counts as a real step (`25` req/tick). On the triangle spec (`ρ_cpu=0.01`) that is `0.25` cores; RAM follows as `Δμ × ρ_ram`. Floor extras (μ=0) terminate because they add no μ — not because a leftover token was invented. Alloc still quantizes to `0.01`. |
 
 Floors (`cpu_min`, `ram_min`) buy **no** throughput. Extra above the floor is what makes μ.
 

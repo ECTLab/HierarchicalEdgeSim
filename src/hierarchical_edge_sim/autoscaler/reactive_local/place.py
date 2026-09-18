@@ -155,8 +155,7 @@ def place_packed_spawns(
                 spec=spec,
                 free_cpu=free_cpu.get(sid, 0.0),
                 free_ram=free_ram.get(sid, 0.0),
-                min_head_cpu=req.min_head_cpu,
-                min_head_ram=req.min_head_ram,
+                min_mu_step=req.min_mu_step,
             )
             if packed is None:
                 continue

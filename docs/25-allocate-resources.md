@@ -114,7 +114,7 @@ Do **not** claim packed spawn or \(\mu\)-matched BEV as part of this mapping. Th
 
 They were a sim-only speed limit (a fraction of current alloc per tick). They are gone. AllocateResources applies the window residual; streaks, cooldown, last-replica, and `safe_j` are the remaining brakes.
 
-\(\delta_{\min}\) (`delta_cpu_min_cores` 0.25, `delta_ram_min_mb` 128) is still a dust/token floor: if we decided to move, move at least this much, and extras at the floor still get a terminate token. RAM’s \(\delta_{\min}\) is an idle-trim chunk on the last replica, not a second grow target.
+`min_mu_step` (`25` req/tick) is the one serving-μ dust floor: if we decided to move, move at least this much. RAM follows `Δμ × ρ`. Floor extras terminate because they add no μ; HorizontalScaling does not need a fake leftover token.
 
 ---
 

@@ -15,8 +15,7 @@ class ReactiveVerticalParams:
     theta_free: float = 0.35
     theta_high: float = 0.90
     use_near_saturation_up: bool = False
-    delta_cpu_min_cores: float = 0.25
-    delta_ram_min_mb: float = 128.0
+    min_mu_step: float = 25.0
     prefer_consolidate_down: bool = True
     grow_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
     shrink_weights: tuple[float, float, float] = (0.5, 0.3, 0.2)
@@ -48,6 +47,11 @@ def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
         raise ValueError(
             "alpha_up/alpha_down were removed; AllocateResources applies the full residual"
         )
+    if "delta_cpu_min_cores" in data or "delta_ram_min_mb" in data:
+        raise ValueError(
+            "delta_cpu_min_cores/delta_ram_min_mb were removed; use min_mu_step "
+            "(req/tick). RAM follows μ×ρ. Floor extras terminate because they add no μ"
+        )
     grow = _parse_grow_weights(data.pop("grow_weights", None))
     shrink = _parse_shrink_weights(data.pop("shrink_weights", None))
 
@@ -59,8 +63,7 @@ def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
         theta_free=float(data.pop("theta_free", 0.35)),
         theta_high=float(data.pop("theta_high", 0.90)),
         use_near_saturation_up=bool(data.pop("use_near_saturation_up", False)),
-        delta_cpu_min_cores=float(data.pop("delta_cpu_min_cores", 0.25)),
-        delta_ram_min_mb=float(data.pop("delta_ram_min_mb", 128.0)),
+        min_mu_step=float(data.pop("min_mu_step", 25.0)),
         prefer_consolidate_down=bool(data.pop("prefer_consolidate_down", True)),
         grow_weights=grow,
         shrink_weights=shrink,
@@ -75,4 +78,6 @@ def validate_params(raw: dict[str, Any]) -> ReactiveVerticalParams:
         raise ValueError("theta_free must be in (0, 1]")
     if not (0.0 < params.theta_high <= 1.0):
         raise ValueError("theta_high must be in (0, 1]")
+    if params.min_mu_step < 0.0:
+        raise ValueError("min_mu_step must be >= 0")
     return params

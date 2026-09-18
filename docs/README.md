@@ -26,7 +26,7 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 | 05 | [05-extension-plan-root-and-vicinity.md](./05-extension-plan-root-and-vicinity.md) | Early root/vicinity plan |
 | 06 | [06-autoscaler-plug-in-plan.md](./06-autoscaler-plug-in-plan.md) | Plug-in scaler plan |
 | 07 | [07-autoscaler-implementation-steps.md](./07-autoscaler-implementation-steps.md) | Vertical scaler build steps |
-| 08 | [08-reactive-local-params.md](./08-reactive-local-params.md) | Streak / θ / δ glossary |
+| 08 | [08-reactive-local-params.md](./08-reactive-local-params.md) | Streak / θ / `min_mu_step` glossary |
 | 09 | [09-proactive-autoscaler-approach.md](./09-proactive-autoscaler-approach.md) | Early proactive approach |
 | 10 | [10-proposed-implementation-roadmap.md](./10-proposed-implementation-roadmap.md) | S1–S7 roadmap (Aug 11) |
 | 11 | [11-s1-horizontal-mutation-apis.md](./11-s1-horizontal-mutation-apis.md) | S1 spawn/terminate |

@@ -26,6 +26,8 @@ def test_params_reject_bad_theta():
         validate_params({"theta_free": 1.5})
     with pytest.raises(ValueError, match="alpha_up/alpha_down were removed"):
         validate_params({"alpha_down": 0.10})
+    with pytest.raises(ValueError, match="min_mu_step"):
+        validate_params({"delta_ram_min_mb": 128.0})
 
 
 def _toy_env(tmp_path: Path) -> Env:
@@ -125,7 +127,7 @@ def test_slack_streak_fires_down(tmp_path):
             "y_down_streak": 2,
             "cooldown_ticks": 0,
             "theta_free": 0.35,
-            "delta_cpu_min_cores": 0.1,
+            "min_mu_step": 10.0,
         }
     )
     # Need alloc above min to shrink
@@ -205,7 +207,7 @@ def test_need_horizontal_logged_on_residual_room(tmp_path):
     # Max out both containers
     env.resize("c-hot", cpu_alloc_cores=4.0, ram_alloc_mb=4096)
     env.resize("c-cold", cpu_alloc_cores=4.0, ram_alloc_mb=4096)
-    scaler = build({"x_up_streak": 1, "cooldown_ticks": 0, "delta_cpu_min_cores": 1.0})
+    scaler = build({"x_up_streak": 1, "cooldown_ticks": 0, "min_mu_step": 100.0})
     _push_history(env, 1, drop_hot=500.0, drop_cold=500.0)
     actions = scaler.on_tick_end(env, 1)
     assert any(getattr(a, "type", "") == "need_horizontal" for a in actions)

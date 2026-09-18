@@ -79,8 +79,7 @@ autoscaler:
 | `use_near_saturation_up` | `false` | v1: scale up on **aggregate drops** only |
 | `alpha_up` | `0.20` | Grow ~20% of current fleet alloc per UP (steady, not jump-to-max) |
 | `alpha_down` | `0.10` | Shrink more gently than grow |
-| `delta_cpu_min_cores` | `0.25` | Meaningful step vs `cpu_min=0.5` |
-| `delta_ram_min_mb` | `128` | Paired with CPU growth under `ram_per_request_mb=0.5` |
+| `min_mu_step` | `25` | Smallest serving-μ step (req/tick). RAM follows `Δμ × ρ`; triangle `ρ_cpu=0.01` ⇒ `0.25` cores |
 | `prefer_consolidate_down` | `true` | Prefer shrinking cold replicas first |
 | `grow_weights` | `{drop: 0.5, util: 0.3, room: 0.2}` | Prefer hot + roomy hosts |
 | `shrink_weights` | `{slack: 0.5, no_drop: 0.3, room: 0.2}` | Prefer cold replicas |
@@ -104,8 +103,7 @@ autoscaler:
     use_near_saturation_up: false
     alpha_up: 0.20
     alpha_down: 0.10
-    delta_cpu_min_cores: 0.25
-    delta_ram_min_mb: 128
+    min_mu_step: 25
     prefer_consolidate_down: true
     grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
     shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

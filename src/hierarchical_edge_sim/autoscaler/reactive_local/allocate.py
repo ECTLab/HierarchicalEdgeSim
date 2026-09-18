@@ -157,8 +157,8 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
 
     Size each resource's serving headroom to ``μ_tgt · ρ``. Idle RAM (or CPU)
     above that is surplus even when the other resource still binds. Last replica
-    releases the full surplus toward ``μ_tgt``; extras still get a token so
-    HorizontalScaling can terminate floor replicas.
+    releases the full surplus toward ``μ_tgt``. Floor extras (μ=0) do not inject
+    leftover; HorizontalScaling terminates them because they add no μ.
     """
     spec = obs["spec"]
     ram_modeled = spec.ram_per_request_mb > EPS
@@ -167,7 +167,6 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     load = float(obs.get("Lambda") or 0.0)
     q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
     mu_tgt = load / q_tgt
-    mu = _fleet_mu(obs, ram_modeled)
     n_replicas = len(obs.get("replicas") or [])
     h_cpu_tgt = mu_tgt * rho_cpu if rho_cpu > EPS else 0.0
     h_ram_tgt = mu_tgt * rho_ram if ram_modeled and rho_ram > EPS else 0.0
@@ -175,23 +174,9 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     delta_ram = max(0.0, float(obs.get("sum_h_ram") or 0.0) - h_ram_tgt) if ram_modeled else 0.0
     if n_replicas <= 1:
         return delta_cpu, delta_ram
-    if mu <= EPS:
-        return params.delta_cpu_min_cores, (params.delta_ram_min_mb if ram_modeled else 0.0)
     if delta_cpu > EPS or delta_ram > EPS:
         return delta_cpu, delta_ram
     return 0.0, 0.0
-
-
-def _fleet_mu(obs: dict, ram_modeled: bool) -> float:
-    spec = obs["spec"]
-    if spec.cpu_per_request_cores <= EPS:
-        mu_cpu = 0.0
-    else:
-        mu_cpu = float(obs.get("sum_h_cpu") or 0.0) / spec.cpu_per_request_cores
-    if not ram_modeled:
-        return mu_cpu
-    mu_ram = float(obs.get("sum_h_ram") or 0.0) / spec.ram_per_request_mb
-    return min(mu_cpu, mu_ram)
 
 
 def target_mu(obs: dict, params: ReactiveLocalParams) -> float:
@@ -244,8 +229,7 @@ def ladder_up(
         remain_ram=remain_ram,
         tau=tau,
         pending_resize=actions,
-        min_head_cpu=params.delta_cpu_min_cores,
-        min_head_ram=params.delta_ram_min_mb,
+        min_mu_step=params.min_mu_step,
     )
     actions.extend(spawns)
     leftover: HelpRequest | None = None
@@ -259,8 +243,7 @@ def ladder_up(
             remain_ram=remain_ram,
             cpu_min=spec.cpu_min_cores,
             ram_min=spec.ram_min_mb,
-            min_head_cpu=params.delta_cpu_min_cores,
-            min_head_ram=params.delta_ram_min_mb,
+            min_mu_step=params.min_mu_step,
             t_det=tau,
         )
     return actions, leftover
@@ -294,8 +277,9 @@ def ladder_down(
     l_cpu, l_ram, local_cpu, local_ram = split_borrowed_share(
         delta_cpu, delta_ram, b_cpu, b_ram
     )
+    has_borrowed = b_cpu > EPS or b_ram > EPS
     xi: ReleaseIntent | None = None
-    if l_cpu > EPS or l_ram > EPS:
+    if l_cpu > EPS or l_ram > EPS or has_borrowed:
         xi = ReleaseIntent(
             seq=0,
             tau=tau,
@@ -399,6 +383,10 @@ def _home_down_actions(
             n_live=len(fleet),
             fleet_replicas=fleet,
         )
+
+    if len(local) < len(fleet) and remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
+        # Lenders first (ξ). Do not invent leftover to kill a local floor extra.
+        return [], []
 
     if len(local) <= 1:
         bev = distribute_down(

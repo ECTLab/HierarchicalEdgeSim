@@ -191,16 +191,16 @@ def test_down_releases_farthest_borrowed_before_local(tmp_path):
     _push_slack(env, 1)
     actions = scaler.on_tick_end(env, 1)
     terms = [a for a in actions if getattr(a, "type", "") == "terminate"]
-    assert [a.container_id for a in terms] == ["c-api-3"]
-    assert terms[0].reason == "vicinity_terminate"
+    assert [a.container_id for a in terms] == ["c-api-3", "c-api-2"]
+    assert {a.reason for a in terms} == {"vicinity_terminate"}
     local_terms = [a for a in terms if a.reason == "horizontal_terminate"]
     assert local_terms == []
     results = env.apply_actions(actions, tau=1, autoscaler_name="reactive_local")
-    assert results[0].ok
+    assert all(r.ok for r in results)
     assert not has_loan(env.get_server("c3-w1"), "c1", "api")
-    assert has_loan(env.get_server("c2-w1"), "c1", "api")
+    assert not has_loan(env.get_server("c2-w1"), "c1", "api")
     assert "c-api-1" in env.get_microservice("api").container_ids
-    assert "c-api-2" in env.world.containers
+    assert "c-api-2" not in env.world.containers
     assert "c-api-3" not in env.world.containers
 
 

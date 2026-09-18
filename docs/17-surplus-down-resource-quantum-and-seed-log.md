@@ -129,7 +129,7 @@ Routing is CPU-headroom weighted. Headroom 0 ⇒ share 0, so the new replica too
 
 ### Solution A — same packer as BEH
 
-`place_packed_spawns` uses `packed_spawn_size`: `alloc = MS floor + leftover headroom`, quantized. A server that can only fit the floor is skipped. `HelpRequest` carries `min_head_cpu` / `min_head_ram` from `delta_*_min` so the sliver matches YAML.
+`place_packed_spawns` uses `packed_spawn_size`: `alloc = MS floor + leftover headroom`, quantized. A server that can only fit the floor is skipped. `HelpRequest` carries `min_mu_step` so leftover packing uses the same serving-μ floor as YAML.
 
 The first remote spawn is **not** a hardcoded `0.70` / `358.40`. At τ=18 home is full (seed 1.0 / 512), so the whole UP delta is leftover. `up_delta` takes one serving-μ step, rate-limited by the **CPU** wallet (`α_up · ΣA_cpu`), then converts both resources through ρ. Independent `α_up · 512` / `δ_ram_min=128` wallets are not used on the way up.
 

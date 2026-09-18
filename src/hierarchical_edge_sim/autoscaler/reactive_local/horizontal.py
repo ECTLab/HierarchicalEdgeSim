@@ -78,8 +78,7 @@ def packed_spawn_size(
     spec: MicroserviceSpec,
     free_cpu: float,
     free_ram: float,
-    min_head_cpu: float,
-    min_head_ram: float,
+    min_mu_step: float = 0.0,
 ) -> tuple[float, float, float, float] | None:
     """Size a spawn as floor + leftover headroom so μ>0, or None if it cannot serve."""
     ram_modeled = spec.ram_per_request_mb > EPS
@@ -101,8 +100,8 @@ def packed_spawn_size(
     if ram_modeled and rho_ram > EPS and remain_ram > EPS:
         mu_r = remain_ram / rho_ram
         step_mu = min(step_mu, mu_r) if step_mu > EPS else mu_r
-    if step_mu <= EPS and rho_cpu > EPS and min_head_cpu > EPS:
-        step_mu = min_head_cpu / rho_cpu
+    if step_mu <= EPS and min_mu_step > EPS:
+        step_mu = min_mu_step
     if step_mu <= EPS:
         return None
     if rho_cpu > EPS:
@@ -121,7 +120,6 @@ def packed_spawn_size(
         return None
     if ram_modeled and head_ram <= EPS:
         return None
-    _ = min_head_ram
     if cpu > free_cpu + EPS or ram > free_ram + EPS:
         return None
     return cpu, ram, head_cpu, head_ram
@@ -137,8 +135,7 @@ def horizontal_up(
     remain_ram: float,
     tau: int,
     pending_resize: list,
-    min_head_cpu: float = 0.25,
-    min_head_ram: float = 128.0,
+    min_mu_step: float = 25.0,
 ) -> tuple[list[SpawnAction], float, float]:
     """Pack leftover onto home-cluster spawns above minima so each new replica can serve."""
     if remain_cpu <= EPS and remain_ram <= EPS:
@@ -163,8 +160,7 @@ def horizontal_up(
                 spec=spec,
                 free_cpu=free_cpu[sid],
                 free_ram=free_ram[sid],
-                min_head_cpu=min_head_cpu,
-                min_head_ram=min_head_ram,
+                min_mu_step=min_mu_step,
             )
             if packed is None:
                 continue
@@ -225,14 +221,20 @@ def horizontal_down(
     actions: list[TerminateAction] = []
     remaining = n_live if n_live is not None else len(local)
     for r in ranked:
-        if remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
-            break
         if remaining - len(actions) <= 1:
             break
-        if mu_tgt is not None and spec is not None:
-            extra_mu = replica_mu(r, spec, ram_modeled)
-            if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
-                continue
+        extra_mu = replica_mu(r, spec, ram_modeled) if spec is not None else None
+        floor_extra = extra_mu is not None and extra_mu <= EPS
+        if not floor_extra:
+            if remain_cpu <= EPS and (not ram_modeled or remain_ram <= EPS):
+                break
+            if mu_tgt is not None and spec is not None and extra_mu is not None:
+                if extra_mu > EPS and fleet_mu - extra_mu + EPS < mu_tgt:
+                    continue
+                fleet_mu = max(0.0, fleet_mu - extra_mu)
+            remain_cpu = max(0.0, remain_cpu - r.cpu_alloc)
+            remain_ram = max(0.0, remain_ram - r.ram_alloc)
+        elif mu_tgt is not None and spec is not None and extra_mu is not None:
             fleet_mu = max(0.0, fleet_mu - extra_mu)
         actions.append(
             TerminateAction(
@@ -243,8 +245,6 @@ def horizontal_down(
                 tau=tau,
             )
         )
-        remain_cpu = max(0.0, remain_cpu - r.cpu_alloc)
-        remain_ram = max(0.0, remain_ram - r.ram_alloc)
     return actions
 
 

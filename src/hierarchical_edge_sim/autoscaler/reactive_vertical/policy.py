@@ -222,8 +222,7 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
     delta_cpu = max(0.0, h_cpu - (mu_tgt * rho_cpu if rho_cpu > EPS else 0.0))
     delta_ram = max(0.0, h_ram - (mu_tgt * rho_ram if ram_modeled else 0.0)) if ram_modeled else 0.0
     if delta_cpu <= EPS and delta_ram <= EPS:
-        delta_cpu = params.delta_cpu_min_cores
-        delta_ram = params.delta_ram_min_mb if ram_modeled else 0.0
+        return []
     return distribute_down(
         env=env,
         ms_id=ms_id,

@@ -253,8 +253,7 @@ def _accept_down_resize(
         return False
     if cpu_moved and ram_moved:
         return True
-    min_ram_step = float(getattr(params, "delta_ram_min_mb", 128.0) or 128.0)
-    min_cpu_step = float(getattr(params, "delta_cpu_min_cores", 0.25) or 0.25)
+    min_mu = float(getattr(params, "min_mu_step", 0.0) or 0.0)
     matched_ram = spec.ram_min_mb
     matched_cpu = spec.cpu_min_cores
     if spec.cpu_per_request_cores > EPS:
@@ -263,11 +262,13 @@ def _accept_down_resize(
         matched_ram = spec.ram_min_mb + old_mu * spec.ram_per_request_mb
     if ram_moved and not cpu_moved:
         take = old_ram - new_ram
-        if take + EPS >= min_ram_step:
+        take_mu = take / spec.ram_per_request_mb if spec.ram_per_request_mb > EPS else 0.0
+        if min_mu <= EPS or take_mu + EPS >= min_mu:
             return True
         return new_ram <= matched_ram + EPS
     take = old_cpu - new_cpu
-    if take + EPS >= min_cpu_step:
+    take_mu = take / spec.cpu_per_request_cores if spec.cpu_per_request_cores > EPS else 0.0
+    if min_mu <= EPS or take_mu + EPS >= min_mu:
         return True
     return new_cpu <= matched_cpu + EPS
 

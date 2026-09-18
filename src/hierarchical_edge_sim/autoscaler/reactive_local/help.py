@@ -21,8 +21,7 @@ class HelpRequest:
     remain_ram: float
     cpu_min: float
     ram_min: float
-    min_head_cpu: float = 0.25
-    min_head_ram: float = 128.0
+    min_mu_step: float = 25.0
     t_det: int | None = None
     kind: str = "rho"
 

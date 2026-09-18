@@ -105,7 +105,7 @@ def test_distribute_down_skips_ram_only_shrink_that_does_not_cut_mu():
     assert actions == []
 
 
-def test_distribute_down_trims_idle_ram_in_delta_min_chunks():
+def test_distribute_down_trims_idle_ram_when_take_meets_min_mu_step():
     params = ReactiveLocalParams(prefer_consolidate_down=True, theta_free=0.35)
     actions = distribute_down(
         env=None,  # type: ignore[arg-type]
@@ -161,6 +161,46 @@ def test_horizontal_down_terminates_floor_extra_before_serving():
     )
     assert [a.container_id for a in terms] == ["c-api-2"]
     assert terms[0].reason == "horizontal_terminate"
+
+
+def test_horizontal_down_terminates_floor_extra_without_leftover():
+    spec = _spec()
+    serving = _view("c-api-1", cpu=3.19, ram=400.0, slack=1.0, drop=0.0)
+    idle = _view("c-api-2", cpu=0.5, ram=256.0, slack=1.0, drop=0.0)
+    terms = horizontal_down(
+        env=_Env(),  # type: ignore[arg-type]
+        replicas=[serving, idle],
+        ms_id="api",
+        owner_cluster_id="c1",
+        remain_cpu=0.0,
+        remain_ram=0.0,
+        ram_modeled=True,
+        skip_ids=set(),
+        tau=300,
+        spec=spec,
+        mu_tgt=1.0,
+    )
+    assert [a.container_id for a in terms] == ["c-api-2"]
+
+
+def test_horizontal_down_keeps_serving_extra_when_no_leftover():
+    spec = _spec()
+    serving_a = _view("c-api-1", cpu=3.19, ram=400.0, slack=1.0, drop=0.0)
+    serving_b = _view("c-api-2", cpu=1.0, ram=280.0, slack=1.0, drop=0.0)
+    terms = horizontal_down(
+        env=_Env(),  # type: ignore[arg-type]
+        replicas=[serving_a, serving_b],
+        ms_id="api",
+        owner_cluster_id="c1",
+        remain_cpu=0.0,
+        remain_ram=0.0,
+        ram_modeled=True,
+        skip_ids=set(),
+        tau=300,
+        spec=spec,
+        mu_tgt=1.0,
+    )
+    assert terms == []
 
 
 class _LoanSrv:

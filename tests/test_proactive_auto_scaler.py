@@ -210,7 +210,7 @@ def test_horizon_up_applies_full_residual(tmp_path: Path):
             "x_up_streak": 99,
             "y_down_streak": 99,
             "cooldown_ticks": 0,
-            "delta_cpu_min_cores": 0.25,
+            "min_mu_step": 25.0,
         },
         predictor=_FixedPredictor(10_000.0),
     )

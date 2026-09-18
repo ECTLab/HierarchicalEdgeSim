@@ -29,8 +29,7 @@ def test_packed_spawn_uses_leftover_headroom():
         spec=_spec(),
         free_cpu=8.0,
         free_ram=4096.0,
-        min_head_cpu=0.25,
-        min_head_ram=128.0,
+        min_mu_step=25.0,
     )
     assert out == (0.7, 266.0, 0.2, 10.0)
 
@@ -42,8 +41,7 @@ def test_packed_spawn_adds_sliver_on_the_other_resource():
         spec=_spec(),
         free_cpu=8.0,
         free_ram=4096.0,
-        min_head_cpu=0.25,
-        min_head_ram=128.0,
+        min_mu_step=25.0,
     )
     assert out is not None
     cpu, ram, head_cpu, head_ram = out
@@ -61,8 +59,7 @@ def test_packed_spawn_refuses_floor_only_server():
             spec=_spec(),
             free_cpu=0.5,
             free_ram=256.0,
-            min_head_cpu=0.25,
-            min_head_ram=128.0,
+            min_mu_step=25.0,
         )
         is None
     )

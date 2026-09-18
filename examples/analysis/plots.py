@@ -21,6 +21,8 @@ _FAMILY_STYLE = {
     "horizontal spawn": {"color": "#ff7f0e", "linestyle": "--"},
     "horizontal terminate": {"color": "#ffbb78", "linestyle": ":"},
     "vicinity": {"color": "#2ca02c", "linestyle": "-."},
+    "vicinity up": {"color": "#2ca02c", "linestyle": "--"},
+    "vicinity down": {"color": "#8c564b", "linestyle": ":"},
     "vicinity terminate": {"color": "#98df8a", "linestyle": ":"},
     "cascade": {"color": "#9467bd", "linestyle": ":"},
     "escalate": {"color": "#7f7f7f", "linestyle": ":"},
@@ -108,21 +110,51 @@ def _annotate_drop_rates(
     )
 
 
+def _consecutive_runs(ticks: list[int]) -> list[tuple[int, int]]:
+    """Inclusive [start, end] runs of consecutive integer ticks."""
+    if not ticks:
+        return []
+    ordered = sorted(ticks)
+    runs: list[tuple[int, int]] = []
+    start = prev = ordered[0]
+    for t in ordered[1:]:
+        if t == prev + 1:
+            prev = t
+            continue
+        runs.append((start, prev))
+        start = prev = t
+    runs.append((start, prev))
+    return runs
+
+
 def _draw_action_markers(ax, markers: dict[str, list[int]], *, legend: bool = True) -> None:
+    """Sparse families stay as vlines; long consecutive runs (unmet windows) become a span."""
     seen: set[str] = set()
     for family, ticks in markers.items():
         style = _FAMILY_STYLE.get(family, {"color": "black", "linestyle": ":"})
-        for t in ticks:
+        for start, end in _consecutive_runs(ticks):
             label = family if legend and family not in seen else None
-            ax.axvline(
-                t,
-                color=style["color"],
-                linestyle=style["linestyle"],
-                alpha=0.35,
-                linewidth=0.9,
-                label=label,
-            )
-            if label:
+            if end - start >= 2:
+                ax.axvspan(
+                    start - 0.5,
+                    end + 0.5,
+                    color=style["color"],
+                    alpha=0.12,
+                    zorder=0,
+                    label=label,
+                )
+            else:
+                for t in range(start, end + 1):
+                    ax.axvline(
+                        t,
+                        color=style["color"],
+                        linestyle=style["linestyle"],
+                        alpha=0.35,
+                        linewidth=0.9,
+                        label=label,
+                    )
+                    label = None
+            if legend:
                 seen.add(family)
 
 

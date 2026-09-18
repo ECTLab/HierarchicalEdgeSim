@@ -39,7 +39,7 @@ Down is now the counterpart of deficit-up. Target utilization is the slack thres
 Then:
 
 - **One replica:** apply that surplus, but never take `δ_min` *past* it. A tiny leftover surplus shrinks by that leftover, not by 0.25 cores. At the target, `Δ = 0` (hold).
-- **Several replicas:** reclaim **count first**. Skip BEV on the seed in the same tick as a terminate. BEH may kill an extra only if remaining `μ` still covers `μ_tgt`. Rank extras by loan tier, then by how little `μ` they add (floor replicas first).
+- **Several replicas:** peel the extra we would reclaim (toward `cpu_min`) before terminating it. Do not shrink keepers in the same tick as a terminate. BEH may kill an extra only if it is at the floor or remaining `μ` still covers `μ_tgt`. Rank extras by how little `μ` they add (floor replicas first), then `q`, slack, id.
 - **Floor extras that add no μ:** still get a rate-cap token so BEH can terminate them.
 - CPU and RAM stay coupled so idle RAM cannot justify killing CPU the load still needs.
 

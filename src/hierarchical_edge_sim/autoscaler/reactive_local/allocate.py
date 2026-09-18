@@ -20,6 +20,7 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
     distribute_down,
     distribute_up,
     leftover_from_need_horizontal,
+    replica_mu,
     strip_need_horizontal,
 )
 from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
@@ -28,7 +29,13 @@ from hierarchical_edge_sim.env.config import EPS
 
 from .cascade import check_cascading_migration
 from .help import HelpRequest, ReleaseIntent
-from .horizontal import home_cluster_id, home_replicas, horizontal_down, horizontal_up
+from .horizontal import (
+    home_cluster_id,
+    home_replicas,
+    horizontal_down,
+    horizontal_up,
+    rank_reclaim_order,
+)
 from .params import ReactiveLocalParams
 from .release import borrowed_footprint, split_borrowed_share
 from .vicinity import leftover_to_help_action, leftover_to_unmet_demand, schedule_vicinity_help
@@ -272,9 +279,11 @@ def ladder_down(
 ) -> tuple[list[Any], ReleaseIntent | list[ReleaseIntent] | None]:
     """Algorithm allocate Down: split ξ first, then Vertical/Horizontal on N_c.
 
-    Extra local replicas: skip vertical shrink of the seed in the same tick as a
-    terminate (tex would shrink and kill together). Cascade is Algorithm
-    cascade: a different m* comes home via Evict ξ, never m itself.
+    Extra local replicas: vertical-down only the extra we would reclaim (toward
+    cpu_min), then terminate it on a later tick once it is at the floor or a
+    kill still covers μ_tgt. Never shrink keepers in the same tick as a
+    terminate. Cascade is Algorithm cascade: a different m* comes home via
+    Evict ξ, never m itself.
     """
     spec = obs["spec"]
     replicas: list[ReplicaView] = obs["replicas"]
@@ -300,41 +309,19 @@ def ladder_down(
 
     remain_cpu = local_cpu
     remain_ram = local_ram if ram_modeled else 0.0
-    # Extras: reclaim replica count first. Do not vertical-shrink the seed in the
-    # same tick as a terminate — that is what left μ too small and bounced UP.
-    if len(local) > 1:
-        bev: list[Any] = []
-    else:
-        bev = distribute_down(
-            env=env,
-            ms_id=ms_id,
-            spec=spec,
-            params=params,
-            replicas=local,
-            delta_cpu=remain_cpu,
-            delta_ram=remain_ram,
-            tau=tau,
-            reason="vertical_down",
-            mu_tgt=target_mu(obs, params),
-        )
-        granted_cpu, granted_ram = _granted_down(local, bev)
-        remain_cpu = max(0.0, remain_cpu - granted_cpu)
-        remain_ram = max(0.0, remain_ram - granted_ram) if ram_modeled else 0.0
-    skip_ids = {a.container_id for a in bev}
-    terms = horizontal_down(
+    bev, terms = _home_down_actions(
         env=env,
-        replicas=local,
         ms_id=ms_id,
-        owner_cluster_id=owner,
+        spec=spec,
+        params=params,
+        local=local,
+        fleet=replicas,
         remain_cpu=remain_cpu,
         remain_ram=remain_ram,
         ram_modeled=ram_modeled,
-        skip_ids=skip_ids,
         tau=tau,
-        spec=spec,
         mu_tgt=target_mu(obs, params),
-        n_live=len(replicas),
-        fleet_replicas=replicas,
+        owner=owner,
     )
     actions: list[Any] = [*bev, *terms]
     leftovers: list[ReleaseIntent] = []
@@ -377,6 +364,82 @@ def resolve_help(
     )
     actions.extend(leftover_to_unmet_demand(u) for u in unresolved)
     return actions
+
+
+def _home_down_actions(
+    *,
+    env: Env,
+    ms_id: str,
+    spec,
+    params: ReactiveLocalParams,
+    local: list[ReplicaView],
+    fleet: list[ReplicaView],
+    remain_cpu: float,
+    remain_ram: float,
+    ram_modeled: bool,
+    tau: int,
+    mu_tgt: float,
+    owner: str,
+) -> tuple[list[Any], list[Any]]:
+    """Vertical then horizontal on N_c. Peel the extra first; keepers later."""
+
+    def _terminate(skip_ids: set[str], cpu: float, ram: float):
+        return horizontal_down(
+            env=env,
+            replicas=local,
+            ms_id=ms_id,
+            owner_cluster_id=owner,
+            remain_cpu=cpu,
+            remain_ram=ram,
+            ram_modeled=ram_modeled,
+            skip_ids=skip_ids,
+            tau=tau,
+            spec=spec,
+            mu_tgt=mu_tgt,
+            n_live=len(fleet),
+            fleet_replicas=fleet,
+        )
+
+    if len(local) <= 1:
+        bev = distribute_down(
+            env=env,
+            ms_id=ms_id,
+            spec=spec,
+            params=params,
+            replicas=local,
+            delta_cpu=remain_cpu,
+            delta_ram=remain_ram,
+            tau=tau,
+            reason="vertical_down",
+            mu_tgt=mu_tgt,
+        )
+        granted_cpu, granted_ram = _granted_down(local, bev)
+        remain_cpu = max(0.0, remain_cpu - granted_cpu)
+        remain_ram = max(0.0, remain_ram - granted_ram) if ram_modeled else 0.0
+        return bev, _terminate({a.container_id for a in bev}, remain_cpu, remain_ram)
+
+    victim = rank_reclaim_order(local, spec, ram_modeled)[0]
+    can_peel = replica_mu(victim, spec, ram_modeled) > EPS and (
+        victim.room_down_cpu > EPS or victim.room_down_ram > EPS
+    )
+    if can_peel:
+        # Floor is cpu_min, not fleet μ_tgt — that floor would block peeling extras.
+        bev = distribute_down(
+            env=env,
+            ms_id=ms_id,
+            spec=spec,
+            params=params,
+            replicas=[victim],
+            delta_cpu=remain_cpu,
+            delta_ram=remain_ram,
+            tau=tau,
+            reason="vertical_down",
+            mu_tgt=None,
+        )
+        if bev:
+            # Apply order is terminate→resize; do not emit both for this extra.
+            return bev, []
+    return [], _terminate(set(), remain_cpu, remain_ram)
 
 
 def _granted_down(replicas: list[ReplicaView], actions: list) -> tuple[float, float]:

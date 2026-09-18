@@ -12,7 +12,7 @@ The listing is the **local escalator**: BEV, then BEH if leftover remains, lefto
 
 This is **not** `run_env_only.py`, and it is **not** `reactive_vertical` (BEV only). Algorithm 4 runs when `run_with_autoscaler.py` loads `reactive_local` or `proactive_auto_scaler`. Vicinity and BEG are **not** this listing: the tex returns \(\rho\) and stops; Algorithm 2’s `resolve_help` consumes that leftover.
 
-**Locked mapping:** keep the simulator. Do not put `StartCooldown(H)` at the end of every allocate. Do not apply the full residual in one tick. Do not BEV-shrink the seed in the same tick as a terminate. Packed spawn, \(\mu\)-matched BEV, and cascade are **later listings** (BEV / BEH / CheckCascadingMigration); do not fold them into this file to “match Algorithm 4.”
+**Locked mapping:** keep the simulator. Do not put `StartCooldown(H)` at the end of every allocate. Do not apply the full residual in one tick. Do not vertical-shrink **keepers** in the same tick as a terminate. Packed spawn, \(\mu\)-matched BEV, and cascade are **later listings** (BEV / BEH / CheckCascadingMigration); do not fold them into this file to “match Algorithm 4.”
 
 ---
 
@@ -38,7 +38,7 @@ The Python module `allocate.py` also contains `resolve_help`. That is packaging:
 |---|---|
 | Input \(m,c,\Delta,(\delta^{cpu},\delta^{ram}),\mathit{sustained}\) | `CycleIntent` (`ms_id`, owner `cluster_id`, `kind`, `need_*`, `sustained`) |
 | \(r\gets\delta\); \(\rho\gets\emptyset\) | leftover starts empty |
-| \(r\gets\textsc{BEV}(\ldots,\mathit{sustained})\) | `distribute_up` unless `sustained`; Down: BEV only on the last replica (see below) |
+| \(r\gets\textsc{BEV}(\ldots,\mathit{sustained})\) | `distribute_up` unless `sustained`; Down: peel the extra we would reclaim, else last replica toward \(\mu_{\mathrm{tgt}}\) |
 | If leftover: \(\textsc{BEH}\) | `beh_up` / `beh_down` |
 | Down: \(r\gets(0,0)\) (never escalate) | `ladder_down` returns actions only (`leftover=None`) |
 | Up leftover \(\to\rho=(c,m,r,\min,\hat u,t_{det})\) | `HelpRequest`: home, leftover CPU/RAM, floors, packed-spawn mins, \(t_{det}\). **No hats** |
@@ -69,7 +69,7 @@ A full-reject window that still starts cooldown would freeze a saturated MS unti
 
 **Apply the full residual in one window.** The tex hands \(\delta\) straight to VerticalScaling. The sim no longer clips with \(\alpha_{up}/\alpha_{down}\). Streaks, cooldown, last-replica, and `safe_j` still decide *when* and *where* that residual lands. \(\delta_{\min}\) is a dust/token floor, not a speed limit.
 
-**Do not BEV-shrink the seed in the same tick as a terminate.** The tex always runs BEV, then BEH if leftover remains. The sim: if there is more than one replica, skip BEV that tick and terminate extras first. Shrink+kill together left \(\mu\) too small and bounced Up.
+**Do not vertical-shrink keepers in the same tick as a terminate.** The tex always runs BEV on everyone, then BEH if leftover remains. The sim: while extras exist, VerticalScaling peels **only** the extra we would reclaim (floor is `cpu_min`, not fleet \(\mu_{\mathrm{tgt}}\)); terminate it on a later tick once it is at the floor or remaining \(\mu\) still covers \(\mu_{\mathrm{tgt}}\). Shrink+kill on the copies you mean to keep left \(\mu\) too small and bounced Up.
 
 **Keep \(\rho\) without forecast hats.** Tex \(\rho\) carries \(\hat u(t{+}1{:}t{+}H)\) for lender `Reserve`. Mapping the escalator does not require stuffing hats into `HelpRequest`; `Reserve`/`safe_j` is computed from leftover \(\rho\) after local allocate.
 
@@ -92,7 +92,7 @@ A later draft of Algorithm 4 should state the **cooldown**, not treat it as an i
 
 1. **Cooldown after a successful apply only.** Do not `StartCooldown` on a full-reject window. Length is a policy knob (`cooldown_ticks` / `cooldown_C`), not necessarily the forecast horizon \(H\). Proactive may delay **Down after Up** and never delay Up (Kubernetes HPA: scaleUp window 0, scaleDown 300s).
 2. **The window residual is the action.** Do not re-introduce \(\alpha_{up}/\alpha_{down}\) as a fraction of current alloc. \(\delta_{\min}\) stays as a dust/token floor so a tiny fleet still moves.
-3. **Down with extra replicas:** do not BEV-shrink the remaining seed in the same tick as a terminate. Reclaim replica count first; vertical peel the last replica later. (Last-replica / surplus-\(\mu\) stopping conditions still belong in BEV/BEH.)
+3. **Down with extra replicas:** vertical-down the extra you would reclaim, then terminate it; do not shrink keepers in the same tick as a terminate. Last replica: surplus peel toward \(\mu_{\mathrm{tgt}}\). (Last-replica / surplus-\(\mu\) stopping conditions still belong in BEV/BEH.)
 4. **\(\rho\) without hats.** Keep \((c,m,r^{cpu},r^{ram},\min,t_{det})\). Forecast vectors are for `safe_j`, which is leftover own \(\rho\) after local allocate.
 5. **Down clamp stays.** Unchanged and correct: leftover after local shrink is discarded; Down never builds \(\rho\).
 
@@ -106,7 +106,7 @@ Do **not** claim packed spawn or \(\mu\)-matched BEV as part of this mapping. Th
 
 ### Is there any difference between the algorithm and the code?
 
-**The control shape matches.** Differences on *this* listing are cooldown, same-tick skip of BEV when extras exist, and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here. The window residual is no longer \(\alpha\)-clipped.
+**The control shape matches.** Differences on *this* listing are cooldown, peel-the-extra-before-terminate (never shrink keepers in the same tick as a kill), and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here. The window residual is no longer \(\alpha\)-clipped.
 
 `allocate.py` also running `resolve_help` is not Algorithm 4 growing a fourth local tier. Algorithm 2 still owns vicinity/BEG.
 

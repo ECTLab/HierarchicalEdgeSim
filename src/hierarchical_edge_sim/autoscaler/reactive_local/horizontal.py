@@ -26,6 +26,20 @@ def home_replicas(
     return [r for r in replicas if replica_cluster_id(env, r) == owner_cluster_id]
 
 
+def rank_reclaim_order(
+    replicas: list[ReplicaView],
+    spec: MicroserviceSpec | None,
+    ram_modeled: bool,
+) -> list[ReplicaView]:
+    """Extras we would reclaim first: lowest μ, then q, then slack, then id."""
+
+    def _key(r: ReplicaView) -> tuple[float, float, float, str]:
+        mu = replica_mu(r, spec, ram_modeled) if spec is not None else 0.0
+        return (mu, r.q, -r.slack, r.container_id)
+
+    return sorted(replicas, key=_key)
+
+
 def rank_servers_for_spawn(env: Env, ms_id: str, cluster_id: str) -> list[str]:
     """Already-hosting servers first, then by free CPU descending, then id."""
     ms = env.get_microservice(ms_id)
@@ -207,12 +221,7 @@ def horizontal_down(
         if mu_tgt is not None and spec is not None
         else 0.0
     )
-
-    def _key(r: ReplicaView) -> tuple[float, float, float, str]:
-        mu = replica_mu(r, spec, ram_modeled) if spec is not None else 0.0
-        return (mu, r.q, -r.slack, r.container_id)
-
-    ranked = sorted(live, key=_key)
+    ranked = rank_reclaim_order(live, spec, ram_modeled)
     actions: list[TerminateAction] = []
     remaining = n_live if n_live is not None else len(local)
     for r in ranked:

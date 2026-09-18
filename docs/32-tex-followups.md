@@ -41,7 +41,7 @@ These are the cases where the simulator is the operational method.
 
 4. **Headroom-weighted routing (absorbed into v2 tex as prefer-local).** Even LB plus minima spawn sends \(1/n\) of load to a \(\mu=0\) replica, which then drops it. Keep headroom weights inside each pool.
 
-5. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, do not vertical-shrink the seed in the same tick as a terminate.
+5. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, peel the extra we would reclaim before terminating it, and do not vertical-shrink keepers in the same tick as a terminate.
 
 6. **Floor extras are fully releasable.** Paper ScheduleReleases terminates only when \(L\) covers a whole instance. A minima replica has \(\mu=0\), so the sim still terminates it when \(L>0\) even if \(L\) is smaller than the instance. Otherwise a leftover loan at the floor would sit forever while local headroom was the only surplus.
 
@@ -63,6 +63,7 @@ None of the remaining canvas “update the sim” rows. Leader heartbeat failove
 
 | Date | Note |
 |---|---|
+| 2026-09-18 | Local extras: peel the extra we would reclaim before terminate; do not shrink keepers in the same tick as a terminate. |
 | 2026-09-18 | Prefer-local routing and analytic offered delay (\(T_{\mathrm{net}}\) + M/M/1, drop as \(T_{\mathrm{slo}}\)). Absorbed into `proposed_method_complete.tex`. |
 | 2026-09-17 | Removed \(\alpha_{up}/\alpha_{down}\). AllocateResources applies the window residual; streaks/cooldown/last-replica/safe_j remain. |
 | 2026-09-16 | Remaining six paper-ahead rows: owner(j) writer, cross-MS cascade, Decrease-before-Increase, Reserve/\(safe_j\), \(\kappa\), static admission (no \(T_{\mathit{repart}}\)). |

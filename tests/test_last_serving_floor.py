@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from hierarchical_edge_sim.autoscaler.common.distribute import ReplicaView, distribute_down
-from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import horizontal_down
+from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import (
+    horizontal_down,
+    rank_reclaim_order,
+)
 from hierarchical_edge_sim.autoscaler.reactive_local.params import ReactiveLocalParams
 from hierarchical_edge_sim.env.config import MicroserviceSpec
 from hierarchical_edge_sim.env.models import LoanRecord, LoanTier
@@ -129,6 +132,14 @@ class _Env:
     def get_server(self, sid: str) -> _Srv:
         _ = sid
         return _Srv()
+
+
+def test_rank_reclaim_order_puts_floor_extra_first():
+    spec = _spec()
+    serving = _view("c-api-1", cpu=3.19, ram=400.0)
+    idle = _view("c-api-2", cpu=0.5, ram=256.0)
+    ranked = rank_reclaim_order([serving, idle], spec, ram_modeled=True)
+    assert [r.container_id for r in ranked] == ["c-api-2", "c-api-1"]
 
 
 def test_horizontal_down_terminates_floor_extra_before_serving():

@@ -226,6 +226,43 @@ def test_down_terminates_extra_replica_at_minima(tmp_path):
     assert terms[0].container_id in {"c-api-1", "c-api-2"}
 
 
+def test_down_peels_serving_extra_before_terminate(tmp_path):
+    env = _write_world(tmp_path, two_replicas=True, cpu_alloc=1.0, cpu_max=4.0)
+    scaler = build(
+        {
+            "x_up_streak": 99,
+            "y_down_streak": 1,
+            "cooldown_ticks": 0,
+            "theta_free": 0.35,
+            "sustained_up_streak": 99,
+            "cascade_home": False,
+        }
+    )
+    _push_slack(env, 1)
+    first = scaler.on_tick_end(env, 1)
+    downs = [a for a in first if getattr(a, "reason", "") == "vertical_down"]
+    terms = [a for a in first if getattr(a, "type", "") == "terminate"]
+    assert terms == []
+    assert len(downs) == 1
+    victim = downs[0].container_id
+    assert victim in {"c-api-1", "c-api-2"}
+    assert downs[0].cpu_alloc_cores is not None and downs[0].cpu_alloc_cores < 1.0
+    keeper = "c-api-2" if victim == "c-api-1" else "c-api-1"
+    assert not any(getattr(a, "container_id", "") == keeper for a in first)
+
+    results = env.apply_actions(first, tau=1, autoscaler_name="reactive_local")
+    scaler.on_actions_applied(results)
+    assert env.get_container(victim).cpu_alloc_cores == pytest.approx(0.5)
+    assert env.get_container(keeper).cpu_alloc_cores == pytest.approx(1.0)
+
+    _push_slack(env, 2)
+    second = scaler.on_tick_end(env, 2)
+    terms = [a for a in second if getattr(a, "type", "") == "terminate"]
+    downs = [a for a in second if getattr(a, "reason", "") == "vertical_down"]
+    assert downs == []
+    assert [a.container_id for a in terms] == [victim]
+
+
 def test_yaml_loads_reactive_local(tmp_path):
     env = _write_world(tmp_path)
     cfg = yaml.safe_load((tmp_path / "cfg.yaml").read_text(encoding="utf-8"))

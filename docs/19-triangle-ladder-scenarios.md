@@ -1,6 +1,6 @@
 # Triangle ladder slices — four topologies, one trace
 
-**Status:** rerun 2026-09-18 after user-delay eval (prefer-local, triangle RTTs, mix p99)  
+**Status:** rerun 2026-09-18 after peel-then-terminate on local extras  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
 **Related:** [32-tex-followups.md](./32-tex-followups.md), [18-mu-matched-cpu-ram-scale.md](./18-mu-matched-cpu-ram-scale.md), [17-surplus-down-resource-quantum-and-seed-log.md](./17-surplus-down-resource-quantum-and-seed-log.md), [16-s6-scale-down-reclaim.md](./16-s6-scale-down-reclaim.md)
@@ -32,11 +32,16 @@ Action reasons are `vertical_*`, `horizontal_*`, `vicinity_*`, `unmet_demand`.
 
 Every slice: reclaim to **one** live replica in cluster `c1`, last alloc `> cpu_min`, leftover RAM near `ram_min + μ · ρ_ram` (not `ram_max`), no UP after the last extra terminate. Packed extras spawn above the floor (`cpu_new>0.50`) with RAM matched to that μ, not `α_up · seed RAM`.
 
-Horizontal-only is the exception on *which* replica survives. Vicinity extras are a cheaper loan tier, so they die first and `c-api-0` on `c1-w1` remains. In-cluster extras are the same tier as the seed; among equal μ the ranker is `(q, -slack, container_id)`, so `c-api-0` can be reclaimed and the leftover sits on the fat sibling (`c1-w2`). That still satisfies LAST_REPLICA and surplus hold. Do not treat it as a keep-seed failure.
+Horizontal-only is the exception on *which* replica survives. Vicinity extras are a cheaper loan tier, so they die first and `c-api-0` on `c1-w1` remains. In-cluster extras are the same tier as the seed; rank is
+`(μ, q, -slack, container_id)`, so `c-api-0` can be peeled and then
+reclaimed and the leftover sits on the fat sibling (`c1-w2`). That still satisfies LAST_REPLICA and surplus hold. Do not treat it as a keep-seed failure.
 
 Borrowed reclaim shrinks first (`vicinity_down` onto the floor), then `vicinity_terminate`. That is ScheduleReleases, not a packed kill of a full replica.
 
-`cascade_home` is **off** on all four. Surplus down skips VerticalScaling while extras exist and reclaims remotes first, so cascade-home has nothing to pull. That is a separate policy question, not a fifth topology.
+`cascade_home` is **off** on all four. Surplus down peels the extra we would
+reclaim, then terminates it; remotes still go first via ScheduleReleases, so
+cascade-home has nothing to pull. That is a separate policy question, not a
+fifth topology.
 
 ---
 
@@ -77,23 +82,29 @@ Alibaba regression (same one-cluster world, not a VicinityRound test):
 
 ---
 
-## Recorded runs (seed 42, 2026-09-18)
+## Recorded runs (seed 42, 2026-09-18T173404Z)
 
 Trace conservation holds on every slice: **33,412 incoming = served + dropped**.
-Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**
-(`ram_min + 50 × 0.5`). Surplus hold leaves **0.58 cores / 259.85 MB**
-(`ram_min + μ · ρ_ram` with μ ≈ 8). Drop rates match the 2026-09-17 paper-match
-rerun; what is new is user delay (`user_latency.png`).
+Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**. Surplus hold
+leaves **0.58 cores / 259.85 MB**. Drop rates and SLA miss match the earlier
+18 Sep user-delay rerun (`42_20260918T1507*`). What changed is **horizontal
+descent**: local extras now peel toward `cpu_min`, then terminate.
 
 Configs 16 / 18 / 19 set `latency_ms`: c1–c2 **5 ms**, c1–c3 **40 ms**,
 c2–c3 **38 ms**. Horizontal (config 17) is one cluster, so \(T_{\mathrm{net}}=0\).
 
 | Slice | Run dir | Drop | SLA miss | Extra spawn | Extra terminate | Leftover |
 |---|---|---|---|---|---|---|
-| Horizontal | `results/09-triangle-post-match/horizontal/42_20260918T150707Z` | 28 / 0.08% | 12.13% | 3× `horizontal_spawn` on `c1-w2` | 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
-| Vicinity | `results/09-triangle-post-match/vicinity/42_20260918T150708Z` | 28 / 0.08% | 31.02% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
-| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260918T150708Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
-| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260918T150709Z` | 6,752 / 20.21% | 61.28% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Horizontal | `results/09-triangle-post-match/horizontal/42_20260918T173404Z` | 28 / 0.08% | 12.13% | 3× `horizontal_spawn` on `c1-w2` | peel then 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
+| Vicinity | `results/09-triangle-post-match/vicinity/42_20260918T173404Z` | 28 / 0.08% | 31.02% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260918T173404Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
+| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260918T173404Z` | 6,752 / 20.21% | 61.28% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+
+Kill-first horizontal (same day, before the peel change) is
+`horizontal/42_20260918T150707Z`: three full `horizontal_terminate` at τ=257,
+279, 302, then leftover shrink. Vicinity / skip / unmet action logs are
+**identical** to that earlier stamp (loans already used ScheduleReleases;
+skip has no extras).
 
 UTC stamps in folder names will not match another machine. Prefer the latest `{seed}_{UTC}` dir under `results/09-triangle-post-match/`. August 2026 global-rung runs live under `results/06-triangle-beg-era/`; do not quote those numbers as current.
 
@@ -101,7 +112,23 @@ Drop is overflow (did not fit). SLA miss is overflow **plus** served-but-slower-
 
 Peak leftover at τ=200: **3** req/tick when four replicas fit, **80** when two fit (180−100), **130** when only the seed fits (180−50). Horizontal and fat-vicinity drops are the `x_up_streak` / apply-next-tick lag, not a capacity miss.
 
-Vicinity extras after ScheduleReleases (shrink, then kill):
+Horizontal extras after peel-then-terminate (compare to kill-first at τ=257 / 279 / 302):
+
+```
+241  resize     c-api-0         vertical_down     1.00 → 0.85
+249  resize     c-api-0         vertical_down     0.85 → 0.68
+257  resize     c-api-0         vertical_down     0.68 → 0.50
+265  terminate  c-api-0         horizontal_terminate
+273  resize     c-api-c1-w2-1   vertical_down     1.00 → 0.64
+281  resize     c-api-c1-w2-1   vertical_down     0.64 → 0.50
+289  terminate  c-api-c1-w2-1   horizontal_terminate
+297  resize     c-api-c1-w2-2   vertical_down     1.00 → 0.60
+305  resize     c-api-c1-w2-2   vertical_down     0.60 → 0.50
+313  terminate  c-api-c1-w2-2   horizontal_terminate
+321  resize     c-api-c1-w2-3   vertical_down     1.00 → 0.58   leftover hold
+```
+
+Vicinity extras after ScheduleReleases (shrink, then kill) — **unchanged**:
 
 ```
 257  resize     c-api-c2-w1-1  vicinity_down
@@ -120,6 +147,7 @@ Skip-neighbor logs `unmet_demand` from τ=18 through τ=288 and never places on 
 
 | Version | Date | Note |
 |---|---|---|
+| v7 | 2026-09-18 | Peel-then-terminate on local extras; same drops/SLA; horizontal descent stairs |
 | v6 | 2026-09-18 | Rerun after user-delay eval; same drops; SLA miss / \(T_{\mathrm{net}}\) / `user_latency.png` |
 | v5 | 2026-09-17 | Rerun after paper match; no global rung; `vicinity_up` / `vicinity_down`; recorded drop rates |
 | v4 | 2026-08-20 | μ-matched CPU/RAM scale; leftover RAM ≈ 260 not 512 |

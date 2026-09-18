@@ -23,6 +23,7 @@ class ContainerTickRecord:
     t_p95_offered_sec: float = 0.0
     t_p99_offered_sec: float = 0.0
     sla_miss_requests: float = 0.0
+    t_wait_sec: float = 0.0
 
 
 @dataclass(slots=True)

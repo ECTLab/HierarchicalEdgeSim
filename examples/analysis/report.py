@@ -12,6 +12,7 @@ from .aggregate import (
     demand_weighted_aligned,
     group_containers_by_app,
     group_containers_by_microservice,
+    mix_quantile_aligned,
     replica_counts_by_site,
     sum_aligned,
     sum_tau_window,
@@ -197,7 +198,7 @@ def analyze_run(
                 title=f"{app_id}/{ms_id}: load and drops",
                 cold_start_until=until,
             )
-            sla_timeout = None
+            sla_timeout = 1.0
             sim_cfg = (meta.get("config") or {}).get("sim") or {}
             if sim_cfg.get("sla_timeout_sec") is not None:
                 sla_timeout = float(sim_cfg["sla_timeout_sec"])
@@ -206,8 +207,8 @@ def analyze_run(
                 tau=tau_trace,
                 incoming=incoming,
                 mean_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_mean_offered_sec"),
-                p95_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_p95_offered_sec"),
-                p99_sec=demand_weighted_aligned(tau_trace, ms_containers, "t_p99_offered_sec"),
+                p95_sec=mix_quantile_aligned(tau_trace, ms_containers, 0.95, sla_timeout),
+                p99_sec=mix_quantile_aligned(tau_trace, ms_containers, 0.99, sla_timeout),
                 sla_miss=sum_aligned(tau_trace, ms_containers, "sla_miss"),
                 out_path=app_out / lat_name,
                 title=f"{app_id}/{ms_id}: offered delay (timeouts included)",

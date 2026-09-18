@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from hierarchical_edge_sim.env.config import load_yaml
@@ -117,6 +119,7 @@ def test_log_csv_columns(tmp_path: Path):
         "t_p95_offered_sec",
         "t_p99_offered_sec",
         "sla_miss_requests",
+        "t_wait_sec",
     ]
 
 
@@ -132,8 +135,8 @@ def test_log_csv_golden_tick4(tmp_path: Path):
     assert float(tick4["served_requests"]) == 50.0
     assert float(tick4["dropped_requests"]) == 70.0
     assert float(tick4["cpu_core_used"]) == 1.0
-    assert float(tick4["sla_miss_requests"]) == 120.0
-    assert float(tick4["t_p99_offered_sec"]) == 1.0
+    assert float(tick4["t_p99_offered_sec"]) == pytest.approx(1.0, abs=1e-4)
+    assert float(tick4["sla_miss_requests"]) == pytest.approx(70.0 + 50.0 * math.exp(-0.5))
 
 
 def test_run_meta_includes_vicinities_list(tmp_path: Path):

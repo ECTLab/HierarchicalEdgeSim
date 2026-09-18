@@ -338,7 +338,7 @@ Marker families: `BEV up` / `BEV down` / `BEH spawn` / `BEH terminate` / vicinit
 
 ### `user_latency.png` — what delay does offered load see?
 
-Analytic delay, not a request-level trace. Mean / p95 / p99 are over **offered** load: dropped or \(\lambda\ge\mu\) traffic is a timeout \(T_{\mathrm{slo}}\) (default 1s) plus \(T_{\mathrm{net}}\) from the cluster distance matrix. The lower panel is SLA-miss percent. Do not read survivor-only p99 from `dropped_requests`.
+Analytic delay, not a request-level trace. Mean is demand-weighted; p95/p99 are the mix across replicas of offered load (if more than 1% timed out that tick, p99 is the timeout). Dropped requests are timeouts; a full replica that still served is not treated as 100% timeout.
 
 ### `trace_vs_log_requests.png` — is the env honest?
 

@@ -28,6 +28,9 @@ topology:
       members: [c1, c2]
       leader: c1
 
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+
 apps:
   - id: demo_app
     microservices:

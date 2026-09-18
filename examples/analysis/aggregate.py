@@ -77,6 +77,40 @@ def demand_weighted_aligned(
     return out
 
 
+def mix_quantile_aligned(
+    tau_full: list[int],
+    containers: list[ContainerSeries],
+    q: float,
+    sla_timeout_sec: float,
+) -> list[float]:
+    """Per-tick offered-load mix quantile across replicas (timeouts included)."""
+    from hierarchical_edge_sim.env.latency import DelayPart, mix_offered_quantile
+
+    out: list[float] = []
+    for t in tau_full:
+        parts: list[DelayPart] = []
+        for c in containers:
+            by_in = dict(zip(c.tau, c.incoming))
+            by_served = dict(zip(c.tau, c.served))
+            by_net = dict(zip(c.tau, c.t_net_sec))
+            by_wait = dict(zip(c.tau, c.t_wait_sec))
+            weight = float(by_in.get(t, 0.0))
+            if weight <= 0.0:
+                continue
+            served = float(by_served.get(t, 0.0))
+            parts.append(
+                DelayPart(
+                    weight=weight,
+                    t_net_sec=float(by_net.get(t, 0.0)),
+                    wait_sec=float(by_wait.get(t, 0.0)),
+                    served_frac=served / weight,
+                    sla_timeout_sec=float(sla_timeout_sec),
+                )
+            )
+        out.append(mix_offered_quantile(q, parts))
+    return out
+
+
 @dataclass(frozen=True, slots=True)
 class MsPhysics:
     cpu_min: float

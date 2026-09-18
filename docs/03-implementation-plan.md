@@ -260,7 +260,7 @@ User delay is an **output metric** on the same tick (`env/latency.py`):
 T = T_{\mathrm{net}} + T_{\mathrm{q+svc}},\qquad T_{\mathrm{net}}=d(\mathrm{home},c_i)/1000
 \]
 
-Stable replicas (\(\lambda<\mu\)) use intra-tick M/M/1 at rates \(\lambda/\texttt{tick\_sec}\), \(\mu/\texttt{tick\_sec}\). Saturated replicas and dropped load are counted as \(T_{\mathrm{net}}+T_{\mathrm{slo}}\) over **offered** load (never survivor-only p99). Default \(T_{\mathrm{slo}}=1\,\mathrm{s}\) (`sim.sla_timeout_sec`). Cross-tick request queues remain out of scope.
+Stable replicas (\(\lambda<\mu\)) use intra-tick M/M/1 at rates \(\lambda/\texttt{tick\_sec}\), \(\mu/\texttt{tick\_sec}\). Dropped load is \(T_{\mathrm{net}}+T_{\mathrm{slo}}\). A replica that is full but still serving is modeled at utilization \(0.99\), not as an infinite wait. Default \(T_{\mathrm{slo}}=1\,\mathrm{s}\) (`sim.sla_timeout_sec`). Percentiles are over **offered** load. Cross-tick request queues remain out of scope.
 
 ---
 

@@ -32,7 +32,7 @@ from .loans import add_loan, drop_loan, get_loan, has_loan
 from .world import World, build_world, place_container, remove_container, server_free_cpu_cores, server_free_ram_mb
 from .traces import TraceStore, load_traces
 from .usage import apply_tick, serving_capacity
-from .latency import DelayStats, offered_delay, origin_to_replica_delay_sec
+from .latency import DelayPart, DelayStats, mix_offered_quantile, offered_delay, origin_to_replica_delay_sec
 from .routing import distribute
 from .engine import EngineState, run_ticks, tick
 from .metrics_log import make_run_id, write_run_outputs
@@ -96,8 +96,10 @@ __all__ = [
     "serving_capacity",
     "apply_tick",
     "DelayStats",
+    "DelayPart",
     "offered_delay",
     "origin_to_replica_delay_sec",
+    "mix_offered_quantile",
     "distribute",
     "EngineState",
     "tick",

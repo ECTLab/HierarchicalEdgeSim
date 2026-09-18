@@ -23,7 +23,7 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 | Admission + partition | Least-loaded stamp; Algorithm 1 at init | `env/admission.py` + `build_world` once. YAML \(V\) remains an experiment override. Clusters/workers/\(V\) are static. |
 | Per-window residual | AllocateResources applies \(\delta\) in one window | No \(\alpha_{up}/\alpha_{down}\). \(\delta_{\min}\) is still a dust/token floor, not a speed limit. |
 | Prefer-local routing | Fill home \(\mu\) first; leftover to loans; headroom-weighted inside each pool | `routing.distribute(..., home_ids, mu)` from the engine. Same-cluster fleets unchanged. |
-| User delay | \(T=T_{\mathrm{net}}+\) M/M/1 sojourn; overflow as \(T_{\mathrm{slo}}\); p99 over offered load | `env/latency.py`. Logs `t_*_offered_sec`, `sla_miss_requests`. Plot `user_latency.png`. |
+| User delay | \(T=T_{\mathrm{net}}+\) M/M/1 sojourn; drops as \(T_{\mathrm{slo}}\); full-but-serving uses \(\rho=0.99\); mix p99 over offered load | `env/latency.py`. Logs `t_*_offered_sec`, `sla_miss_requests`, `t_wait_sec`. Plot `user_latency.png`. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
 

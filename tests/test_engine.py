@@ -63,8 +63,9 @@ def test_engine_golden_table(tiny_config_path):
             assert rec.t_p99_offered_sec == pytest.approx(0.0)
             assert rec.sla_miss_requests == pytest.approx(0.0)
         elif exp_dropped > 0.0:
-            assert rec.t_p99_offered_sec == pytest.approx(1.0)
-            assert rec.sla_miss_requests == pytest.approx(exp_in)
+            assert rec.t_p99_offered_sec == pytest.approx(1.0, abs=1e-4)
+            assert rec.sla_miss_requests < exp_in
+            assert rec.sla_miss_requests > exp_dropped
 
 
 def test_engine_prefer_local_and_remote_t_net():
@@ -127,7 +128,8 @@ def test_engine_prefer_local_and_remote_t_net():
     assert home.lambda_in == pytest.approx(50.0)
     assert home.lambda_dropped == pytest.approx(0.0)
     assert home.t_net_sec == pytest.approx(0.0)
-    assert home.t_p99_offered_sec == pytest.approx(1.0)
+    assert home.t_p99_offered_sec == pytest.approx(1.0, abs=1e-4)
+    assert home.sla_miss_requests < 50.0
     assert loan.lambda_in == pytest.approx(350.0)
     assert loan.lambda_served == pytest.approx(250.0)
     assert loan.lambda_dropped == pytest.approx(100.0)

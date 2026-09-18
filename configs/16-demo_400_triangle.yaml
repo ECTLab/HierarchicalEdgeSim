@@ -14,6 +14,7 @@
 # c1 (home, v1): one worker, seed replica fills it (no local horizontal slot).
 # c2 (neighbor, v1): 1.0 / 512 like c1 — room for one vicinity replica at max.
 # c3 (v2): present so the run can show that outside-vicinity capacity is unused.
+# Neighbor RTT 5 ms, outside-vicinity 40 ms (used as T_net).
 
 sim:
   tick_sec: 1.0
@@ -47,6 +48,11 @@ topology:
     - id: v2
       members: [c3]
       leader: c3
+
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+    - {from: c1, to: c3, ms: 40.0}
+    - {from: c2, to: c3, ms: 38.0}
 
 apps:
   - id: demo_app

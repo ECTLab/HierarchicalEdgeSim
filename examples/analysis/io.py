@@ -31,6 +31,7 @@ class ContainerSeries:
     t_p95_offered_sec: list[float] = field(default_factory=list)
     t_p99_offered_sec: list[float] = field(default_factory=list)
     sla_miss: list[float] = field(default_factory=list)
+    t_wait_sec: list[float] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -97,6 +98,7 @@ def read_container_log(path: Path) -> ContainerSeries:
         t_p95_offered_sec=_floats(rows, "t_p95_offered_sec"),
         t_p99_offered_sec=_floats(rows, "t_p99_offered_sec"),
         sla_miss=_floats(rows, "sla_miss_requests"),
+        t_wait_sec=_floats(rows, "t_wait_sec"),
     )
 
 

@@ -1,9 +1,8 @@
 """Analytic per-replica user delay (M/M/1 sojourn + topology T_net).
 
-Overflow is still drop-only (no cross-tick backlog). Dropped load and any
-replica with λ ≥ μ count as an SLA timeout ``T_slo``. Stable replicas use an
-intra-tick M/M/1 sojourn at the observed window rate. ``d(c,c')`` is read as
-milliseconds (the same matrix as Algorithm 1).
+Overflow is still drop-only (no cross-tick backlog). Dropped load is an SLA
+timeout ``T_slo``. A replica that is full but still serving is modeled at
+``RHO_CAP`` (not infinite wait). ``d(c,c')`` is milliseconds (Algorithm 1).
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from .partition import lookup_distance
 from .world import World
 
 MS_PER_SEC = 1000.0
+RHO_CAP = 0.99
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +25,18 @@ class DelayStats:
     t_p95_offered_sec: float
     t_p99_offered_sec: float
     sla_miss_requests: float
+    t_wait_sec: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class DelayPart:
+    """One replica's offered-load mix: served Exp(wait) plus drops at T_slo."""
+
+    weight: float
+    t_net_sec: float
+    wait_sec: float
+    served_frac: float
+    sla_timeout_sec: float
 
 
 def network_delay_sec(distance_ms: float | None) -> float:
@@ -61,7 +73,7 @@ def offered_delay(
     sla = max(0.0, float(sla_timeout_sec))
     offer = float(lambda_in)
     if offer <= EPS:
-        return DelayStats(t_net, 0.0, 0.0, 0.0, 0.0)
+        return DelayStats(t_net, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     cap = t_net + sla
     tick = float(tick_sec)
@@ -69,27 +81,54 @@ def offered_delay(
         raise ValueError("tick_sec must be > 0")
 
     mu_f = float(mu)
-    saturated = mu_f <= EPS or offer + EPS >= mu_f
-    if saturated:
-        return DelayStats(t_net, cap, cap, cap, offer)
+    if mu_f <= EPS:
+        return DelayStats(t_net, cap, cap, cap, offer, 0.0)
 
+    served = min(offer, mu_f)
+    dropped = offer - served
+    served_frac = served / offer
+    rho = min(served / mu_f, RHO_CAP)
     mu_rate = mu_f / tick
-    lam_rate = offer / tick
-    wait = 1.0 / (mu_rate - lam_rate)
-    miss_frac = math.exp(-sla / wait) if wait > 0.0 else 0.0
-    mean_sojourn = wait * (1.0 - math.exp(-sla / wait))
+    wait = 1.0 / (mu_rate * (1.0 - rho))
+    part = DelayPart(offer, t_net, wait, served_frac, sla)
+    mean_served = wait * (1.0 - math.exp(-sla / wait))
+    mean = t_net + served_frac * mean_served + (1.0 - served_frac) * sla
+    tail = math.exp(-sla / wait)
     return DelayStats(
         t_net_sec=t_net,
-        t_mean_offered_sec=t_net + mean_sojourn,
-        t_p95_offered_sec=_clipped_exp_quantile(0.95, wait, sla, t_net),
-        t_p99_offered_sec=_clipped_exp_quantile(0.99, wait, sla, t_net),
-        sla_miss_requests=offer * miss_frac,
+        t_mean_offered_sec=mean,
+        t_p95_offered_sec=mix_offered_quantile(0.95, [part]),
+        t_p99_offered_sec=mix_offered_quantile(0.99, [part]),
+        sla_miss_requests=dropped + served * tail,
+        t_wait_sec=wait,
     )
 
 
-def _clipped_exp_quantile(q: float, wait: float, sla: float, t_net: float) -> float:
-    """q-quantile of T_net + min(Exp(mean=wait), T_slo)."""
-    x = -wait * math.log(1.0 - q)
-    if x >= sla:
-        return t_net + sla
-    return t_net + x
+def mix_offered_quantile(q: float, parts: list[DelayPart]) -> float:
+    """q-quantile of the offered-load mix across replicas (timeouts included)."""
+    live = [p for p in parts if p.weight > EPS]
+    total = sum(p.weight for p in live)
+    if total <= EPS or not live:
+        return 0.0
+    hi = max(p.t_net_sec + p.sla_timeout_sec for p in live)
+    lo = 0.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        cdf = sum(p.weight * _part_cdf(mid, p) for p in live) / total
+        if cdf < q:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
+def _part_cdf(t: float, part: DelayPart) -> float:
+    cap = part.t_net_sec + part.sla_timeout_sec
+    if t >= cap:
+        return 1.0
+    if t < part.t_net_sec:
+        return 0.0
+    if part.served_frac <= EPS or part.wait_sec <= EPS:
+        return 0.0
+    x = t - part.t_net_sec
+    return part.served_frac * (1.0 - math.exp(-x / part.wait_sec))

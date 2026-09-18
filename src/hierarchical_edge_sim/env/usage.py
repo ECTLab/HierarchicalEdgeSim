@@ -74,6 +74,7 @@ def apply_tick(
         t_p95_offered_sec=delay.t_p95_offered_sec,
         t_p99_offered_sec=delay.t_p99_offered_sec,
         sla_miss_requests=delay.sla_miss_requests,
+        t_wait_sec=delay.t_wait_sec,
     )
     container.append_history(record)
     return record

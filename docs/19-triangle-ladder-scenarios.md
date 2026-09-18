@@ -1,6 +1,6 @@
 # Triangle ladder slices — four topologies, one trace
 
-**Status:** rerun 2026-09-18 after peel-then-terminate on local extras  
+**Status:** rerun 2026-09-18 after `min_mu_step` (action logs match peel-then-terminate)  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
 **Related:** [32-tex-followups.md](./32-tex-followups.md), [18-mu-matched-cpu-ram-scale.md](./18-mu-matched-cpu-ram-scale.md), [17-surplus-down-resource-quantum-and-seed-log.md](./17-surplus-down-resource-quantum-and-seed-log.md), [16-s6-scale-down-reclaim.md](./16-s6-scale-down-reclaim.md)
@@ -82,23 +82,25 @@ Alibaba regression (same one-cluster world, not a VicinityRound test):
 
 ---
 
-## Recorded runs (seed 42, 2026-09-18T173404Z)
+## Recorded runs (seed 42, 2026-09-18T184024Z / T184025Z)
 
 Trace conservation holds on every slice: **33,412 incoming = served + dropped**.
 Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**. Surplus hold
-leaves **0.58 cores / 259.85 MB**. Drop rates and SLA miss match the earlier
-18 Sep user-delay rerun (`42_20260918T1507*`). What changed is **horizontal
-descent**: local extras now peel toward `cpu_min`, then terminate.
+leaves **0.58 cores / 259.85 MB**. `min_mu_step: 25` is the old `0.25` core
+floor on this spec (`ρ_cpu=0.01`); action logs, drops, and SLA miss are
+**identical** to peel-then-terminate (`42_20260918T173404Z`). What changed
+versus kill-first (`42_20260918T1507*`) is still **horizontal descent**: local
+extras peel toward `cpu_min`, then terminate.
 
 Configs 16 / 18 / 19 set `latency_ms`: c1–c2 **5 ms**, c1–c3 **40 ms**,
 c2–c3 **38 ms**. Horizontal (config 17) is one cluster, so \(T_{\mathrm{net}}=0\).
 
 | Slice | Run dir | Drop | SLA miss | Extra spawn | Extra terminate | Leftover |
 |---|---|---|---|---|---|---|
-| Horizontal | `results/09-triangle-post-match/horizontal/42_20260918T173404Z` | 28 / 0.08% | 12.13% | 3× `horizontal_spawn` on `c1-w2` | peel then 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
-| Vicinity | `results/09-triangle-post-match/vicinity/42_20260918T173404Z` | 28 / 0.08% | 31.02% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
-| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260918T173404Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
-| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260918T173404Z` | 6,752 / 20.21% | 61.28% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Horizontal | `results/09-triangle-post-match/horizontal/42_20260918T184024Z` | 28 / 0.08% | 12.13% | 3× `horizontal_spawn` on `c1-w2` | peel then 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
+| Vicinity | `results/09-triangle-post-match/vicinity/42_20260918T184024Z` | 28 / 0.08% | 31.02% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260918T184025Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
+| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260918T184025Z` | 6,752 / 20.21% | 61.28% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
 
 Kill-first horizontal (same day, before the peel change) is
 `horizontal/42_20260918T150707Z`: three full `horizontal_terminate` at τ=257,
@@ -147,6 +149,7 @@ Skip-neighbor logs `unmet_demand` from τ=18 through τ=288 and never places on 
 
 | Version | Date | Note |
 |---|---|---|
+| v8 | 2026-09-18 | Rerun after `min_mu_step`; identical to v7 (`42_20260918T184024Z` / `T184025Z`) |
 | v7 | 2026-09-18 | Peel-then-terminate on local extras; same drops/SLA; horizontal descent stairs |
 | v6 | 2026-09-18 | Rerun after user-delay eval; same drops; SLA miss / \(T_{\mathrm{net}}\) / `user_latency.png` |
 | v5 | 2026-09-17 | Rerun after paper match; no global rung; `vicinity_up` / `vicinity_down`; recorded drop rates |

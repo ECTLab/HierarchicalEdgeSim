@@ -1,6 +1,6 @@
 # Triangle ladder slices — four topologies, one trace
 
-**Status:** rerun 2026-09-17 after the paper match (no global rung)  
+**Status:** rerun 2026-09-18 after user-delay eval (prefer-local, triangle RTTs, mix p99)  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
 **Related:** [32-tex-followups.md](./32-tex-followups.md), [18-mu-matched-cpu-ram-scale.md](./18-mu-matched-cpu-ram-scale.md), [17-surplus-down-resource-quantum-and-seed-log.md](./17-surplus-down-resource-quantum-and-seed-log.md), [16-s6-scale-down-reclaim.md](./16-s6-scale-down-reclaim.md)
@@ -68,29 +68,36 @@ Plots (needs matplotlib on `PYTHONPATH`):
 python3 examples/compare_trace_vs_log.py <run_dir>
 ```
 
-Look at `analysis/demo_app/ladder_qos.png` and `replicas_by_site.png`. Long
-`unmet_demand` windows are drawn as a span, not one vertical line per tick.
+Look at `analysis/demo_app/ladder_qos.png`, `replicas_by_site.png`, and
+`user_latency.png`. Long `unmet_demand` windows are drawn as a span, not one
+vertical line per tick.
 
 Alibaba regression (same one-cluster world, not a VicinityRound test):
 `configs/12-demo_alibaba_reactive_local.yaml`.
 
 ---
 
-## Recorded runs (seed 42, 2026-09-17)
+## Recorded runs (seed 42, 2026-09-18)
 
 Trace conservation holds on every slice: **33,412 incoming = served + dropped**.
 Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**
 (`ram_min + 50 × 0.5`). Surplus hold leaves **0.58 cores / 259.85 MB**
-(`ram_min + μ · ρ_ram` with μ ≈ 8).
+(`ram_min + μ · ρ_ram` with μ ≈ 8). Drop rates match the 2026-09-17 paper-match
+rerun; what is new is user delay (`user_latency.png`).
 
-| Slice | Run dir | Drop | Extra spawn | Extra terminate | Leftover |
-|---|---|---|---|---|---|
-| Horizontal | `results/09-triangle-post-match/horizontal/42_20260917T142937Z` | 28 / 0.08% | 3× `horizontal_spawn` on `c1-w2` | 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
-| Vicinity | `results/09-triangle-post-match/vicinity/42_20260917T142940Z` | 28 / 0.08% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
-| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260917T142944Z` | 17,806 / 53.29% | none | none | `c-api-0` on `c1-w1` |
-| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260917T142947Z` | 6,752 / 20.21% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+Configs 16 / 18 / 19 set `latency_ms`: c1–c2 **5 ms**, c1–c3 **40 ms**,
+c2–c3 **38 ms**. Horizontal (config 17) is one cluster, so \(T_{\mathrm{net}}=0\).
+
+| Slice | Run dir | Drop | SLA miss | Extra spawn | Extra terminate | Leftover |
+|---|---|---|---|---|---|---|
+| Horizontal | `results/09-triangle-post-match/horizontal/42_20260918T150707Z` | 28 / 0.08% | 12.13% | 3× `horizontal_spawn` on `c1-w2` | 3× `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
+| Vicinity | `results/09-triangle-post-match/vicinity/42_20260918T150708Z` | 28 / 0.08% | 31.02% | 3× `vicinity_spawn` on `c2-w1` | 3× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260918T150708Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
+| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260918T150709Z` | 6,752 / 20.21% | 61.28% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
 
 UTC stamps in folder names will not match another machine. Prefer the latest `{seed}_{UTC}` dir under `results/09-triangle-post-match/`. August 2026 global-rung runs live under `results/06-triangle-beg-era/`; do not quote those numbers as current.
+
+Drop is overflow (did not fit). SLA miss is overflow **plus** served-but-slower-than \(T_{\mathrm{slo}}=1\,\mathrm{s}\). Same drop on horizontal vs fat-vicinity, higher SLA miss on vicinity: prefer-local fills the one home replica first (that slice of traffic waits), leftover goes next door (\(T_{\mathrm{net}}=5\,\mathrm{ms}\) on c2). At peak \(\tau=200\), horizontal mean / p95 / p99 is **0.20 / 0.60 / 0.92 s** with no RTT; vicinity is **0.33 / 1.00 / 1.00 s** and demand-weighted \(T_{\mathrm{net}}\) is **3.6 ms**. The 5 ms hop is small next to the 1 s timeout; the extra miss is the stuffed-home wait, not the RTT. Skip / unmet SLA miss is mostly the drops.
 
 Peak leftover at τ=200: **3** req/tick when four replicas fit, **80** when two fit (180−100), **130** when only the seed fits (180−50). Horizontal and fat-vicinity drops are the `x_up_streak` / apply-next-tick lag, not a capacity miss.
 
@@ -113,6 +120,7 @@ Skip-neighbor logs `unmet_demand` from τ=18 through τ=288 and never places on 
 
 | Version | Date | Note |
 |---|---|---|
+| v6 | 2026-09-18 | Rerun after user-delay eval; same drops; SLA miss / \(T_{\mathrm{net}}\) / `user_latency.png` |
 | v5 | 2026-09-17 | Rerun after paper match; no global rung; `vicinity_up` / `vicinity_down`; recorded drop rates |
 | v4 | 2026-08-20 | μ-matched CPU/RAM scale; leftover RAM ≈ 260 not 512 |
 | v3 | 2026-08-20 | Recorded run dirs after terminate-reason fix; vicinity / skip-BEG / BEG CSVs stamp `vicinity_terminate` / `beg_terminate` |

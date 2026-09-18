@@ -8,8 +8,8 @@ This file is the map. Run data itself is gitignored.
 
 | If you want… | Open |
 |---|---|
-| **Latest** triangle (post paper-match, 17 Sep 2026) | `09-triangle-post-match/` |
-| QoS plots for that campaign | `09-triangle-post-match/<slice>/42_20260917T14*/analysis/demo_app/ladder_qos.png` |
+| **Latest** triangle (post user-delay eval, 18 Sep 2026) | `09-triangle-post-match/` |
+| QoS plots for that campaign | `09-triangle-post-match/<slice>/42_20260918T15*/analysis/demo_app/ladder_qos.png` |
 | Alibaba MS_588 | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
@@ -30,18 +30,18 @@ This file is the map. Run data itself is gitignored.
 | 06 | `06-triangle-beg-era/` | Aug 18–20 | Triangle with the **old global rung** |
 | 07 | `07-partition/` | Aug 26 | Algorithm 1 coords vs latency |
 | 08 | `08-ladder-60tick/` | Aug 15–27 | 60-tick ladder smokes (local / vicinity / proactive) |
-| 09 | `09-triangle-post-match/` | **Sep 17** | **Current** four triangle slices |
+| 09 | `09-triangle-post-match/` | **Sep 17–18** | **Current** four triangle slices |
 
 ### 09 — current triangle (look here first)
 
 | Slice | Config | Latest run |
 |---|---|---|
-| HorizontalScaling | `17-demo_400_triangle_horizontal.yaml` | `horizontal/42_20260917T142937Z` |
-| Fat vicinity | `18-demo_400_triangle_vicinity.yaml` | `vicinity/42_20260917T142940Z` |
-| Floor neighbor | `19-demo_400_triangle_skip_neighbor.yaml` | `skip_neighbor/42_20260917T142944Z` |
-| Vicinity then unmet | `16-demo_400_triangle.yaml` | `vicinity_then_unmet/42_20260917T142947Z` |
+| HorizontalScaling | `17-demo_400_triangle_horizontal.yaml` | `horizontal/42_20260918T150707Z` |
+| Fat vicinity | `18-demo_400_triangle_vicinity.yaml` | `vicinity/42_20260918T150708Z` |
+| Floor neighbor | `19-demo_400_triangle_skip_neighbor.yaml` | `skip_neighbor/42_20260918T150708Z` |
+| Vicinity then unmet | `16-demo_400_triangle.yaml` | `vicinity_then_unmet/42_20260918T150709Z` |
 
-Plots: `<run>/analysis/demo_app/ladder_qos.png`.
+Plots: `<run>/analysis/demo_app/ladder_qos.png` and `user_latency.png`.
 
 ---
 

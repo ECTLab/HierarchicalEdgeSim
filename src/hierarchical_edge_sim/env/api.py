@@ -1172,14 +1172,47 @@ def _autoscaler_meta(autoscaler: Any) -> dict[str, Any]:
     return meta
 
 
+_GROW_WEIGHT_KEYS = ("drop", "util", "room")
+_SHRINK_WEIGHT_KEYS = ("slack", "no_drop", "room")
+
+
 def _params_to_plain(params: Any) -> dict[str, Any] | None:
     if isinstance(params, dict):
-        return dict(params)
-    if is_dataclass(params):
-        return asdict(params)
-    if hasattr(params, "__dict__"):
-        return {k: v for k, v in vars(params).items() if not k.startswith("_")}
-    return None
+        dumped: dict[str, Any] | None = dict(params)
+    elif is_dataclass(params):
+        dumped = asdict(params)
+    elif hasattr(params, "__dict__"):
+        dumped = {k: v for k, v in vars(params).items() if not k.startswith("_")}
+    else:
+        dumped = None
+    if dumped is None:
+        return None
+    return _label_weight_triples(dumped)
+
+
+def _label_weight_triples(obj: Any) -> Any:
+    """Write grow/shrink weights as labeled maps in run_meta, not bare triples."""
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for key, val in obj.items():
+            if key == "grow_weights":
+                out[key] = _triple_as_map(val, _GROW_WEIGHT_KEYS)
+            elif key == "shrink_weights":
+                out[key] = _triple_as_map(val, _SHRINK_WEIGHT_KEYS)
+            else:
+                out[key] = _label_weight_triples(val)
+        return out
+    if isinstance(obj, list):
+        return [_label_weight_triples(item) for item in obj]
+    return obj
+
+
+def _triple_as_map(val: Any, keys: tuple[str, str, str]) -> Any:
+    if isinstance(val, dict):
+        return {name: val[name] for name in keys if name in val} or val
+    if isinstance(val, (list, tuple)) and len(val) == 3:
+        return {keys[0]: val[0], keys[1]: val[1], keys[2]: val[2]}
+    return val
 
 
 def _microservice_spec_index(world_spec: WorldSpec) -> dict[str, MicroserviceSpec]:

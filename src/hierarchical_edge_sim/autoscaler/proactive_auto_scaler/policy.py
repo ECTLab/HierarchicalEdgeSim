@@ -11,11 +11,14 @@ from hierarchical_edge_sim.env.config import EPS
 from hierarchical_edge_sim.autoscaler.common.cm_cycle import CycleIntent, cluster_manager_cycle
 from hierarchical_edge_sim.autoscaler.reactive_local.allocate import (
     aggregate_ms,
+    arm_floor_kills,
     down_delta,
+    floor_kill_intent,
     ladder_down,
     ladder_up,
     reactive_pressure,
     resolve_help,
+    terminate_floor_extra,
     up_delta,
 )
 from hierarchical_edge_sim.autoscaler.reactive_local.horizontal import home_cluster_id
@@ -33,6 +36,7 @@ class _MsState:
     u_streak: int = 0
     d_streak: int = 0
     cooldown: int = 0
+    pending_floor_kill: str = ""
 
 
 @dataclass(slots=True)
@@ -73,12 +77,19 @@ class ProactiveAutoScaler:
             st.d_streak = st.d_streak + 1 if d_pressure else 0
 
         def scan_ms(ms_id: str) -> CycleIntent | None:
-            rec = closed.get(ms_id)
-            if rec is None:
-                return None
             st = self._state[ms_id]
             obs = obs_by[ms_id]
             cluster_id = home_cluster_id(env, ms_id)
+            pending = st.pending_floor_kill
+            if pending:
+                intent = floor_kill_intent(env, ms_id, pending, tau, obs["spec"])
+                if intent is None:
+                    st.pending_floor_kill = ""
+                else:
+                    return intent
+            rec = closed.get(ms_id)
+            if rec is None:
+                return None
             # Algorithm 3 (PredictAndDecide) once history length W is full.
             # Cold start below is reactive streaks, not this listing.
             if rec.history_full and rec.forecast_rps is not None:
@@ -164,6 +175,11 @@ class ProactiveAutoScaler:
         ) -> tuple[list[Any], HelpRequest | ReleaseIntent | list | None]:
             # Algorithm 4 (AllocateResources): same ladder as reactive_local.
             obs = obs_by[intent.ms_id]
+            if intent.kind == "floor_kill":
+                st = self._state[intent.ms_id]
+                cid = st.pending_floor_kill
+                st.pending_floor_kill = ""
+                return terminate_floor_extra(env, intent.ms_id, cid, tau, obs["spec"]), None
             if intent.kind == "up":
                 ms_actions, leftover = ladder_up(
                     env,
@@ -192,6 +208,7 @@ class ProactiveAutoScaler:
         actions = cluster_manager_cycle(
             env, tau, scan_ms=scan_ms, allocate=allocate, resolve_help=resolve_help
         )
+        arm_floor_kills(env, actions, self._state)
         self._pending_ms = {
             getattr(a, "ms_id", "")
             for a in actions

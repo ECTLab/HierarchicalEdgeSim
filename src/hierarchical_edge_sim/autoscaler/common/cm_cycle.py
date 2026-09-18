@@ -67,7 +67,7 @@ def cluster_manager_cycle(
                     f"CycleIntent cluster_id {intent.cluster_id!r} != owner {cid!r} for {ms_id}"
                 )
             intents.append(intent)
-        intents.sort(key=lambda item: (item.t_det, 0 if item.kind == "down" else 1, item.ms_id))
+        intents.sort(key=lambda item: (item.t_det, 0 if item.kind in {"down", "floor_kill"} else 1, item.ms_id))
         cluster_releases: list[Any] = []
         for intent in intents:
             ms_actions, leftover = allocate(intent, cluster_releases)

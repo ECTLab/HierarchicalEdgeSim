@@ -106,7 +106,7 @@ Do **not** claim packed spawn or \(\mu\)-matched BEV as part of this mapping. Th
 
 ### Is there any difference between the algorithm and the code?
 
-**The control shape matches.** Differences on *this* listing are cooldown, peel-the-extra-before-terminate (never shrink keepers in the same tick as a kill), and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here. The window residual is no longer \(\alpha\)-clipped.
+**The control shape matches.** Differences on *this* listing are cooldown, peel-the-extra-before-terminate (never shrink keepers in the same tick as a kill; a peel that lands at the floor is terminated next tick even during cooldown), and a thinner \(\rho\). Packed spawn and related physics live in BEV/BEH, not here. The window residual is no longer \(\alpha\)-clipped.
 
 `allocate.py` also running `resolve_help` is not Algorithm 4 growing a fourth local tier. Algorithm 2 still owns vicinity/BEG.
 

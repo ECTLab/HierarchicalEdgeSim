@@ -431,6 +431,16 @@ def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
     assert meta["decide"] == "predict_and_decide"
     assert meta["cycle"] == "cluster_manager"
     assert meta["allocate"] == "allocate_resources"
+    assert meta["params"]["ladder"]["grow_weights"] == {
+        "drop": 0.5,
+        "util": 0.3,
+        "room": 0.2,
+    }
+    assert meta["params"]["ladder"]["shrink_weights"] == {
+        "slack": 0.5,
+        "no_drop": 0.3,
+        "room": 0.2,
+    }
     _ = tmp_path
 
 

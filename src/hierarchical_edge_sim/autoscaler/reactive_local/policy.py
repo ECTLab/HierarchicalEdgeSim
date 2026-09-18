@@ -11,11 +11,14 @@ from hierarchical_edge_sim.autoscaler.common.cm_cycle import CycleIntent, cluste
 
 from .allocate import (
     aggregate_ms,
+    arm_floor_kills,
     down_delta,
+    floor_kill_intent,
     ladder_down,
     ladder_up,
     reactive_pressure,
     resolve_help,
+    terminate_floor_extra,
     up_delta,
 )
 from .horizontal import home_cluster_id
@@ -28,6 +31,7 @@ class _MsState:
     u_streak: int = 0
     d_streak: int = 0
     cooldown: int = 0
+    pending_floor_kill: str = ""
 
 
 @dataclass(slots=True)
@@ -57,10 +61,17 @@ class ReactiveLocalAutoscaler:
             if tau % self.decision_every_k_ticks != 0:
                 return None
             st = self._state[ms_id]
+            obs = obs_by[ms_id]
+            cluster_id = home_cluster_id(env, ms_id)
+            pending = st.pending_floor_kill
+            if pending:
+                intent = floor_kill_intent(env, ms_id, pending, tau, obs["spec"])
+                if intent is None:
+                    st.pending_floor_kill = ""
+                else:
+                    return intent
             if st.cooldown > 0:
                 return None
-            cluster_id = home_cluster_id(env, ms_id)
-            obs = obs_by[ms_id]
             if st.u_streak >= self.params.x_up_streak:
                 need_cpu, need_ram = up_delta(obs, self.params)
                 return CycleIntent(
@@ -90,7 +101,13 @@ class ReactiveLocalAutoscaler:
         ) -> tuple[list[Any], HelpRequest | ReleaseIntent | list | None]:
             # AllocateResources: local Vertical then Horizontal; Up leftover is ρ.
             # Cooldown starts in on_actions_applied, not here.
+            # floor_kill finishes a peel-to-floor from the previous tick.
             obs = obs_by[intent.ms_id]
+            if intent.kind == "floor_kill":
+                st = self._state[intent.ms_id]
+                cid = st.pending_floor_kill
+                st.pending_floor_kill = ""
+                return terminate_floor_extra(env, intent.ms_id, cid, tau, obs["spec"]), None
             if intent.kind == "up":
                 return ladder_up(
                     env,
@@ -116,6 +133,7 @@ class ReactiveLocalAutoscaler:
         actions = cluster_manager_cycle(
             env, tau, scan_ms=scan_ms, allocate=allocate, resolve_help=resolve_help
         )
+        arm_floor_kills(env, actions, self._state)
         self._pending_ms = {
             getattr(a, "ms_id", "")
             for a in actions

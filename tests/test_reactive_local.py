@@ -266,6 +266,39 @@ def test_down_peels_serving_extra_before_terminate(tmp_path):
     assert [a.container_id for a in terms] == [victim]
 
 
+def test_floor_kill_follows_peel_during_cooldown(tmp_path):
+    env = _write_world(tmp_path, two_replicas=True, cpu_alloc=1.0, cpu_max=4.0)
+    scaler = build(
+        {
+            "x_up_streak": 99,
+            "y_down_streak": 1,
+            "cooldown_ticks": 5,
+            "theta_free": 0.35,
+            "sustained_up_streak": 99,
+            "cascade_home": False,
+        }
+    )
+    _push_slack(env, 1)
+    first = scaler.on_tick_end(env, 1)
+    downs = [a for a in first if getattr(a, "reason", "") == "vertical_down"]
+    assert len(downs) == 1
+    victim = downs[0].container_id
+    keeper = "c-api-2" if victim == "c-api-1" else "c-api-1"
+    results = env.apply_actions(first, tau=1, autoscaler_name="reactive_local")
+    scaler.on_actions_applied(results)
+    assert env.get_container(victim).cpu_alloc_cores == pytest.approx(0.5)
+    assert scaler._state["api"].cooldown == 5
+    assert scaler._state["api"].pending_floor_kill == victim
+
+    _push_slack(env, 2)
+    second = scaler.on_tick_end(env, 2)
+    terms = [a for a in second if getattr(a, "type", "") == "terminate"]
+    downs = [a for a in second if getattr(a, "reason", "") == "vertical_down"]
+    assert downs == []
+    assert [a.container_id for a in terms] == [victim]
+    assert not any(getattr(a, "container_id", "") == keeper for a in second)
+
+
 def test_yaml_loads_reactive_local(tmp_path):
     env = _write_world(tmp_path)
     cfg = yaml.safe_load((tmp_path / "cfg.yaml").read_text(encoding="utf-8"))
@@ -288,6 +321,8 @@ def test_yaml_loads_reactive_local(tmp_path):
     assert meta["allocate"] == "allocate_resources"
     assert meta["cycle"] == "cluster_manager"
     assert "decide" not in meta
+    assert meta["params"]["grow_weights"] == {"drop": 0.5, "util": 0.3, "room": 0.2}
+    assert meta["params"]["shrink_weights"] == {"slack": 0.5, "no_drop": 0.3, "room": 0.2}
     _ = env
 
 

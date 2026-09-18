@@ -15,8 +15,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from hierarchical_edge_sim.autoscaler.common.cm_cycle import CycleIntent
 from hierarchical_edge_sim.autoscaler.common.distribute import (
     ReplicaView,
+    alloc_mu,
     distribute_down,
     distribute_up,
     leftover_from_need_horizontal,
@@ -24,8 +26,8 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
     strip_need_horizontal,
 )
 from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
-from hierarchical_edge_sim.env.api import Env
-from hierarchical_edge_sim.env.config import EPS
+from hierarchical_edge_sim.env.api import Env, TerminateAction
+from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 
 from .cascade import check_cascading_migration
 from .help import HelpRequest, ReleaseIntent
@@ -263,9 +265,9 @@ def ladder_down(
     """Algorithm allocate Down: split ξ first, then Vertical/Horizontal on N_c.
 
     Extra local replicas: vertical-down only the extra we would reclaim (toward
-    cpu_min), then terminate it on a later tick once it is at the floor or a
-    kill still covers μ_tgt. Never shrink keepers in the same tick as a
-    terminate. Cascade is Algorithm cascade: a different m* comes home via
+    cpu_min). A peel that lands at the floor is finished next tick by a
+    floor-kill (even during cooldown). Same tick never shrinks keepers and
+    terminates. Cascade is Algorithm cascade: a different m* comes home via
     Evict ξ, never m itself.
     """
     spec = obs["spec"]
@@ -426,8 +428,95 @@ def _home_down_actions(
         )
         if bev:
             # Apply order is terminate→resize; do not emit both for this extra.
+            # Policy arms a next-tick floor-kill if this peel landed at minima.
             return bev, []
     return [], _terminate(set(), remain_cpu, remain_ram)
+
+
+def resize_lands_at_floor(action: Any, spec: MicroserviceSpec) -> bool:
+    """True when a vertical-down resize left the replica at cpu_min (μ=0)."""
+    if getattr(action, "type", "") != "resize":
+        return False
+    if getattr(action, "reason", "") != "vertical_down":
+        return False
+    cpu = getattr(action, "cpu_alloc_cores", None)
+    if cpu is None or float(cpu) > spec.cpu_min_cores + EPS:
+        return False
+    if spec.ram_per_request_mb > EPS:
+        ram = getattr(action, "ram_alloc_mb", None)
+        if ram is not None and float(ram) > spec.ram_min_mb + EPS:
+            return False
+    return True
+
+
+def floor_extra_reclaimable(env: Env, ms_id: str, container_id: str, spec: MicroserviceSpec) -> bool:
+    """Pending floor-kill is still valid: exists, μ=0, not the last replica."""
+    if not container_id or container_id not in env.world.containers:
+        return False
+    container = env.get_container(container_id)
+    if container.microservice_id != ms_id:
+        return False
+    if len(env.get_microservice(ms_id).container_ids) <= 1:
+        return False
+    ram_modeled = spec.ram_per_request_mb > EPS
+    return alloc_mu(container.cpu_alloc_cores, container.ram_alloc_mb, spec, ram_modeled) <= EPS
+
+
+def floor_kill_intent(
+    env: Env,
+    ms_id: str,
+    container_id: str,
+    tau: int,
+    spec: MicroserviceSpec,
+) -> CycleIntent | None:
+    if not floor_extra_reclaimable(env, ms_id, container_id, spec):
+        return None
+    return CycleIntent(
+        ms_id=ms_id,
+        cluster_id=home_cluster_id(env, ms_id),
+        t_det=tau,
+        kind="floor_kill",
+        need_cpu=0.0,
+        need_ram=0.0,
+    )
+
+
+def terminate_floor_extra(
+    env: Env,
+    ms_id: str,
+    container_id: str,
+    tau: int,
+    spec: MicroserviceSpec,
+) -> list[TerminateAction]:
+    if not floor_extra_reclaimable(env, ms_id, container_id, spec):
+        return []
+    return [
+        TerminateAction(
+            type="terminate",
+            ms_id=ms_id,
+            container_id=container_id,
+            reason="horizontal_terminate",
+            tau=tau,
+        )
+    ]
+
+
+def arm_floor_kills(env: Env, actions: list[Any], state_by_ms: dict[str, Any]) -> None:
+    """Record peel-to-floor victims; clear if this tick already terminated them."""
+    for action in actions:
+        ms_id = getattr(action, "ms_id", "") or ""
+        if not ms_id:
+            continue
+        st = state_by_ms.get(ms_id)
+        if st is None:
+            continue
+        cid = getattr(action, "container_id", "") or ""
+        if getattr(action, "type", "") == "terminate":
+            if getattr(st, "pending_floor_kill", "") == cid:
+                st.pending_floor_kill = ""
+            continue
+        if resize_lands_at_floor(action, env.get_ms_spec(ms_id)):
+            st.pending_floor_kill = cid
 
 
 def _granted_down(replicas: list[ReplicaView], actions: list) -> tuple[float, float]:

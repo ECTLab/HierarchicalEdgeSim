@@ -6,7 +6,8 @@ __pycache__/
 .eggs/
 dist/
 build/
-results/
+results/**
+!results/README.md
 .venv/
 .mplconfig/
 proposed_method_complete*.tex

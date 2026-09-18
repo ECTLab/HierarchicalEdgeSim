@@ -12,7 +12,7 @@ def project_root() -> Path:
 
 @pytest.fixture
 def tiny_config_path(project_root: Path) -> Path:
-    return project_root / "configs" / "tiny.yaml"
+    return project_root / "configs" / "00-tiny.yaml"
 
 
 @pytest.fixture

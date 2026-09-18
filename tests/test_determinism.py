@@ -63,7 +63,7 @@ def _write_project(root: Path) -> Path:
 
     config_dir = root / "configs"
     config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "tiny.yaml"
+    config_path = config_dir / "00-tiny.yaml"
     cfg = deepcopy(_tiny_dict())
     config_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     return config_path

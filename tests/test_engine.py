@@ -126,7 +126,7 @@ def _two_microservice_world_spec() -> WorldSpec:
 def test_engine_multi_microservice_tick_independence():
     """Regression guard for Step 8's untested multi-MS code path.
 
-    Prior tests only ever ran the tick loop against `tiny.yaml`'s single
+    Prior tests only ever ran the tick loop against `00-tiny.yaml`'s single
     microservice / single container, so `sorted(world.microservices...)`
     plus the `ms_specs[ms.id]` lookup across *multiple* microservices was
     never actually exercised end-to-end through `run_ticks`.

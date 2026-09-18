@@ -169,7 +169,7 @@ def test_vicinity_reject_rules(name, mutate, expected_substring, tmp_path):
 
 
 def test_demo_60_two_clusters_has_vicinity(project_root: Path):
-    path = project_root / "configs" / "demo_60_two_clusters.yaml"
+    path = project_root / "configs" / "04-demo_60_two_clusters.yaml"
     env = Env.from_config(path)
     assert env.root is not None
     assert env.root.vicinity_source == "algorithm"
@@ -258,7 +258,7 @@ def test_partial_coords_rejected(tmp_path):
 
 
 def test_demo_partition_forms_two_pairs_and_an_isolate(project_root: Path):
-    path = project_root / "configs" / "demo_partition.yaml"
+    path = project_root / "configs" / "20-demo_partition.yaml"
     env = Env.from_config(path)
     assert env.root.vicinity_source == "algorithm"
     groups = {tuple(sorted(env.list_vicinity_members(vid))) for vid in env.list_vicinities()}
@@ -275,7 +275,7 @@ def test_demo_partition_forms_two_pairs_and_an_isolate(project_root: Path):
 
 
 def test_demo_partition_latency_uses_rtt_not_coords(project_root: Path):
-    path = project_root / "configs" / "demo_partition_latency.yaml"
+    path = project_root / "configs" / "21-demo_partition_latency.yaml"
     env = Env.from_config(path)
     assert env.root.vicinity_source == "algorithm"
     assert all(c.coords is None for c in env.world_spec.clusters)

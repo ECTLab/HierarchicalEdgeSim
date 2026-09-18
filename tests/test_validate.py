@@ -62,7 +62,7 @@ def _write_config_tree(tmp_path: Path, config_data: dict[str, Any], traces: dict
     for fname, content in traces.items():
         (trace_dir / fname).write_text(content, encoding="utf-8")
 
-    config_path = config_dir / "tiny.yaml"
+    config_path = config_dir / "00-tiny.yaml"
     config_path.write_text(yaml.safe_dump(config_data, sort_keys=False), encoding="utf-8")
     return config_path
 

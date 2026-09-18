@@ -77,7 +77,7 @@ def test_config_tolerates_autoscaler_block_for_env_load(tmp_path, project_root):
 
     from hierarchical_edge_sim.env.config import load_yaml
 
-    tiny = yaml.safe_load((project_root / "configs" / "tiny.yaml").read_text(encoding="utf-8"))
+    tiny = yaml.safe_load((project_root / "configs" / "00-tiny.yaml").read_text(encoding="utf-8"))
     tiny = deepcopy(tiny)
     tiny["autoscaler"] = {"enabled": True, "name": "reactive_vertical", "params": {"x_up_streak": 3}}
     # Rewrite with traces relative to project - use real tiny path by patching via write under project style
@@ -90,7 +90,7 @@ def test_config_tolerates_autoscaler_block_for_env_load(tmp_path, project_root):
         encoding="utf-8",
     )
     tiny["traces_dir"] = "traces/demo/"
-    path = cfg_dir / "tiny.yaml"
+    path = cfg_dir / "00-tiny.yaml"
     path.write_text(yaml.safe_dump(tiny), encoding="utf-8")
     raw = load_yaml(path)
     assert raw.sim.seed == 42

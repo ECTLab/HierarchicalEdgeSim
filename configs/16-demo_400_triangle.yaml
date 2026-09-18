@@ -1,0 +1,88 @@
+# Triangle load: climb until VicinityRound, leftover is unmet, then reclaim
+# to one local replica.
+#
+# 400 ticks: Λ 40 → 180 over τ=1–200, 180 → 5 over τ=201–320, then hold at 5
+# until τ=400. Start 40 keeps slack below θ_free on the seed (μ=50) so it does
+# not shrink before the climb. The hold at 5 is below one replica's μ, which is
+# what lets Y=8 + cooldown=5 finish remote terminate. Surplus down then
+# sizes the last replica from current load (headroom for q ≈ 1-θ_free) instead
+# of walking it through μ=0.
+# cpu_max=1.0 ⇒ μ_max = 50 req/tick. One full replica on c1 and one on c2 give
+# μ=50+50=100. Peak Λ=180 leaves 80 req/tick unmet (c3 is outside v1 and is
+# not a placement candidate).
+#
+# c1 (home, v1): one worker, seed replica fills it (no local horizontal slot).
+# c2 (neighbor, v1): 1.0 / 512 like c1 — room for one vicinity replica at max.
+# c3 (v2): present so the run can show that outside-vicinity capacity is unused.
+
+sim:
+  tick_sec: 1.0
+  results_dir: results/09-triangle-post-match/vicinity_then_unmet/
+  seed: 42
+
+traces_dir: traces/demo/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 1.0
+          ram_cap_mb: 512
+    - id: c2
+      servers:
+        - id: c2-w1
+          cpu_cap_cores: 1.0
+          ram_cap_mb: 512
+    - id: c3
+      servers:
+        - id: c3-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+  vicinities:
+    - id: v1
+      members: [c1, c2]
+      leader: c1
+    - id: v2
+      members: [c3]
+      leader: c3
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 1.0
+        ram_min_mb: 256
+        ram_max_mb: 512
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: api_400_triangle.csv
+        containers:
+          - id: c-api-0
+            server_id: c1-w1
+            cpu_alloc_cores: 1.0
+            ram_alloc_mb: 512
+
+autoscaler:
+  enabled: true
+  name: reactive_local
+  decision_every_k_ticks: 1
+  params:
+    x_up_streak: 3
+    y_down_streak: 8
+    cooldown_ticks: 5
+    eps_drop: 1.0e-9
+    theta_free: 0.35
+    theta_high: 0.90
+    use_near_saturation_up: false
+    delta_cpu_min_cores: 0.25
+    delta_ram_min_mb: 128
+    prefer_consolidate_down: true
+    sustained_up_streak: 6
+    # Cascade-home would shrink the seed replica to minima and pull a
+    # vicinity replica onto c1-w1, which restarts UP/DOWN thrash on the descent.
+    cascade_home: false
+    grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
+    shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

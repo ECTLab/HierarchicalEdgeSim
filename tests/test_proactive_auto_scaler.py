@@ -418,7 +418,7 @@ def test_scale_down_can_repeat_without_rearming_cooldown(tmp_path: Path):
 
 
 def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
-    scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_60_proactive.yaml")
+    scaler = load_autoscaler_from_yaml(project_root / "configs" / "11-demo_60_proactive.yaml")
     assert scaler is not None
     assert scaler.name == "proactive_auto_scaler"
     assert scaler.cycle == "cluster_manager"
@@ -436,7 +436,7 @@ def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
 
 def test_yaml_loads_alibaba_tcn(project_root: Path):
     pytest.importorskip("torch")
-    scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_alibaba_proactive.yaml")
+    scaler = load_autoscaler_from_yaml(project_root / "configs" / "13-demo_alibaba_proactive.yaml")
     assert scaler is not None
     assert scaler.params.predictor == "tcn_delta"
     assert scaler.params.feature_window == 60
@@ -450,7 +450,7 @@ def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
         TcnDeltaPredictor,
     )
 
-    scaler = load_autoscaler_from_yaml(project_root / "configs" / "demo_alibaba_ms150_proactive.yaml")
+    scaler = load_autoscaler_from_yaml(project_root / "configs" / "15-demo_alibaba_ms150_proactive.yaml")
     assert scaler is not None
     assert scaler.params.predictor == "tcn_delta"
     assert scaler.params.model_dir == "models/tcn_delta_v1_ms150"

@@ -8,7 +8,7 @@ only ℓ(V) schedules, ApplyVicinityPlan emits the actions.
 
 Cooldown sits outside this module (policy apply hook). The residual is
 not α-clipped; AllocateResources applies it in one window.
-See ``docs/allocate-resources.md``.
+See ``docs/25-allocate-resources.md``.
 """
 
 from __future__ import annotations

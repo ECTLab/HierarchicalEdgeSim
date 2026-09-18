@@ -185,8 +185,8 @@ def resolve_traces_dir(traces_dir: str, source_path: Path) -> Path:
         return raw_path.resolve()
 
     # Prefer config-relative path, but allow project-root-relative path too.
-    # This supports the locked tiny.yaml layout:
-    #   configs/tiny.yaml + traces_dir: traces/demo/
+    # This supports the locked 00-tiny.yaml layout:
+    #   configs/00-tiny.yaml + traces_dir: traces/demo/
     by_config_dir = (source_path.parent / raw_path).resolve()
     if by_config_dir.exists():
         return by_config_dir

@@ -1,0 +1,70 @@
+# Algorithm 1 demo: vicinities are computed from cluster coords, not listed by hand.
+#
+# Two tight pairs (west, east) plus one isolated site.
+# k=0.5 is required so the z-score cut keeps a pair without swallowing the
+# other continent (k=1 leaves V_cand empty because isolated sites inflate σ).
+# Expected groups (vicinity ids follow formation order, not geography):
+#   {west-a, west-b}  leader west-a (more cap)
+#   {east-a, east-b}  leader east-a
+#   {isolated}
+
+sim:
+  tick_sec: 1.0
+  results_dir: results/07-partition/coords/
+  seed: 42
+
+traces_dir: traces/demo/
+
+topology:
+  clusters:
+    - id: west-a
+      coords: [0.0, 0.0]
+      servers:
+        - id: west-a-w1
+          cpu_cap_cores: 16.0
+          ram_cap_mb: 32768
+    - id: west-b
+      coords: [0.2, 0.0]
+      servers:
+        - id: west-b-w1
+          cpu_cap_cores: 4.0
+          ram_cap_mb: 8192
+    - id: east-a
+      coords: [10.0, 0.0]
+      servers:
+        - id: east-a-w1
+          cpu_cap_cores: 16.0
+          ram_cap_mb: 32768
+    - id: east-b
+      coords: [10.2, 0.0]
+      servers:
+        - id: east-b-w1
+          cpu_cap_cores: 4.0
+          ram_cap_mb: 8192
+    - id: isolated
+      coords: [50.0, 50.0]
+      servers:
+        - id: isolated-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+  partition:
+    k: 0.5
+    m_max: 5
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: api.csv
+        containers:
+          - id: c-api-1
+            server_id: west-a-w1
+            cpu_alloc_cores: 1.0
+            ram_alloc_mb: 512

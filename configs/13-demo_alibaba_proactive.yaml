@@ -1,0 +1,80 @@
+# Alibaba MS_588 (721 one-minute ticks) + Option A TCN front-end.
+# tick_sec=60 matches the trace (1 tick = 1 minute). TCN lookback 60,
+# horizon 5. Cold start is reactive until 60 observed samples.
+
+sim:
+  tick_sec: 60.0
+  results_dir: results/04-alibaba-ms588/proactive/
+  seed: 42
+
+traces_dir: traces/alibaba/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w2
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w3
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w4
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.0004
+        ram_per_request_mb: 0.02
+        trace_file: MS_588.csv
+        containers:
+          - id: c-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 2.0
+            ram_alloc_mb: 1024
+
+autoscaler:
+  enabled: true
+  name: proactive_auto_scaler
+  decision_every_k_ticks: 1
+  params:
+    ticks_per_window: 1
+    feature_window: 60
+    forecast_horizon: 5
+    theta_up: 0.80
+    theta_down: 0.30
+    theta_target: 0.60
+    # TCN's upward bias keeps most hats ≥ θ_up, so a small sustained_steps
+    # skips BEV and dumps residual into cpu_min BEH replicas (μ=0). Keep
+    # BEV-first; BEH still fires when vertical room is gone.
+    sustained_steps: 99
+    # Scale-down only (K8s HPA: scaleUp stabilization 0s, scaleDown 300s).
+    # 1 window = 1 min here, so 5 ≈ five minutes. Scale-up is not delayed.
+    cooldown_C: 5
+    predictor: tcn_delta
+    model_dir: models/tcn_delta_v1
+    time_tick_offset: 0
+    x_up_streak: 3
+    y_down_streak: 8
+    cooldown_ticks: 5
+    eps_drop: 1.0e-9
+    theta_free: 0.35
+    theta_high: 0.90
+    use_near_saturation_up: false
+    delta_cpu_min_cores: 0.25
+    delta_ram_min_mb: 128
+    prefer_consolidate_down: true
+    sustained_up_streak: 6
+    cascade_home: true
+    grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
+    shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

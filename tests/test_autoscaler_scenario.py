@@ -45,15 +45,15 @@ def test_phased_trace_length(project_root: Path):
 
 def test_demo_config_loads_scaler(project_root: Path):
     for name in (
-        "demo_300_two_containers_reactive.yaml",
-        "demo_300_two_containers_reactive_local.yaml",
-        "demo_60_two_containers_reactive.yaml",
-        "demo_60_reactive_local.yaml",
-        "demo_60_proactive.yaml",
-        "demo_400_triangle.yaml",
-        "demo_400_triangle_horizontal.yaml",
-        "demo_400_triangle_vicinity.yaml",
-        "demo_400_triangle_skip_neighbor.yaml",
+        "06-demo_300_two_containers_reactive.yaml",
+        "07-demo_300_two_containers_reactive_local.yaml",
+        "03-demo_60_two_containers_reactive.yaml",
+        "08-demo_60_reactive_local.yaml",
+        "11-demo_60_proactive.yaml",
+        "16-demo_400_triangle.yaml",
+        "17-demo_400_triangle_horizontal.yaml",
+        "18-demo_400_triangle_vicinity.yaml",
+        "19-demo_400_triangle_skip_neighbor.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
@@ -62,7 +62,7 @@ def test_demo_config_loads_scaler(project_root: Path):
 
 def test_integration_up_then_alloc_rises(tmp_path, project_root: Path):
     # Short engineered overload using tiny world + fake high load via real run on 60 reactive
-    cfg = project_root / "configs" / "demo_60_two_containers_reactive.yaml"
+    cfg = project_root / "configs" / "03-demo_60_two_containers_reactive.yaml"
     env = Env.from_config(cfg)
     # redirect results
     from dataclasses import replace
@@ -80,8 +80,8 @@ def test_integration_up_then_alloc_rises(tmp_path, project_root: Path):
 def test_final_scenario_long_drops_and_actions(tmp_path, project_root: Path):
     from dataclasses import replace
 
-    static_cfg = project_root / "configs" / "demo_300_two_containers.yaml"
-    reactive_cfg = project_root / "configs" / "demo_300_two_containers_reactive.yaml"
+    static_cfg = project_root / "configs" / "05-demo_300_two_containers.yaml"
+    reactive_cfg = project_root / "configs" / "06-demo_300_two_containers_reactive.yaml"
 
     env_s = Env.from_config(static_cfg)
     env_s.world_spec = replace(
@@ -115,7 +115,7 @@ def test_final_scenario_long_drops_and_actions(tmp_path, project_root: Path):
 def test_final_scenario_long_determinism(tmp_path, project_root: Path):
     from dataclasses import replace
 
-    cfg = project_root / "configs" / "demo_300_two_containers_reactive.yaml"
+    cfg = project_root / "configs" / "06-demo_300_two_containers_reactive.yaml"
     scaler1 = load_autoscaler_from_yaml(cfg)
     scaler2 = load_autoscaler_from_yaml(cfg)
 
@@ -160,7 +160,7 @@ def test_triangle_trace_matches_yaml_hold(project_root: Path):
 
 
 def test_triangle_reclaims_to_one_local_without_chatter(tmp_path, project_root: Path):
-    env = _run_triangle(project_root, tmp_path, "demo_400_triangle.yaml", "triangle")
+    env = _run_triangle(project_root, tmp_path, "16-demo_400_triangle.yaml", "triangle")
     _assert_triangle_hold(env)
     reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
     assert "vicinity_spawn" in reasons
@@ -249,7 +249,7 @@ def _assert_triangle_hold(env: Env, *, expect_seed: bool = True) -> None:
 
 
 def test_triangle_horizontal_stays_in_cluster(tmp_path, project_root: Path):
-    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_horizontal.yaml", "horizontal")
+    env = _run_triangle(project_root, tmp_path, "17-demo_400_triangle_horizontal.yaml", "horizontal")
     _assert_triangle_hold(env, expect_seed=False)
     leftover = env.get_container(env.list_containers()[0])
     assert leftover.server_id == "c1-w2"
@@ -265,7 +265,7 @@ def test_triangle_horizontal_stays_in_cluster(tmp_path, project_root: Path):
 
 
 def test_triangle_vicinity_never_leaves_group(tmp_path, project_root: Path):
-    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_vicinity.yaml", "vic")
+    env = _run_triangle(project_root, tmp_path, "18-demo_400_triangle_vicinity.yaml", "vic")
     _assert_triangle_hold(env)
     reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
     assert "vicinity_spawn" in reasons
@@ -278,7 +278,7 @@ def test_triangle_vicinity_never_leaves_group(tmp_path, project_root: Path):
 
 
 def test_triangle_floor_neighbor_logs_unmet_not_outside_spawn(tmp_path, project_root: Path):
-    env = _run_triangle(project_root, tmp_path, "demo_400_triangle_skip_neighbor.yaml", "skip")
+    env = _run_triangle(project_root, tmp_path, "19-demo_400_triangle_skip_neighbor.yaml", "skip")
     live = env.list_containers()
     assert len(live) == 1
     leftover = env.get_container(live[0])

@@ -1,0 +1,69 @@
+# Two clusters, one app per cluster, small container count.
+#
+# Cluster c1: 2 servers  → app web_app / MS api   → 1 container on c1-w1
+# Cluster c2: 1 server   → app media_app / MS ingest → 1 container on c2-w1
+#
+# Vicinities come from VicinityPartitionAndLeaderElection (cluster coords).
+# Expected: one group {c1,c2}, leader c1 (more installed CPU/RAM).
+#
+# Independent traces (same length N=60):
+#   traces/demo/api_60.csv
+#   traces/demo/ingest_60.csv
+
+sim:
+  tick_sec: 1.0
+  results_dir: results/02-env-60tick/two_clusters/
+  seed: 42
+
+traces_dir: traces/demo/
+
+topology:
+  clusters:
+    - id: c1
+      coords: [0.0, 0.0]
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w2
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+    - id: c2
+      coords: [1.0, 0.0]
+      servers:
+        - id: c2-w1
+          cpu_cap_cores: 4.0
+          ram_cap_mb: 8192
+
+apps:
+  - id: web_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: api_60.csv
+        containers:
+          - id: c-web-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 1.0
+            ram_alloc_mb: 512
+
+  - id: media_app
+    microservices:
+      - id: ingest
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.01
+        ram_per_request_mb: 0.5
+        trace_file: ingest_60.csv
+        containers:
+          - id: c-media-ingest-1
+            server_id: c2-w1
+            cpu_alloc_cores: 1.0
+            ram_alloc_mb: 512

@@ -55,7 +55,7 @@ def test_load_tiny_yaml_parses(tiny_config_path):
     config = load_yaml(tiny_config_path)
 
     assert config.sim.tick_sec == 1.0
-    assert config.sim.results_dir == "results/"
+    assert config.sim.results_dir == "results/01-tiny-smoke/"
     assert config.sim.seed == 42
     assert config.traces_dir == "traces/demo/"
 

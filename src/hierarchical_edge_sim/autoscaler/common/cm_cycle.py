@@ -46,7 +46,7 @@ def cluster_manager_cycle(
     FCFS with leftover ξ (release intents) and passed to ``resolve_help``
     (VicinityRound: every member reports, only ℓ(V) computes Π).
     Same-window packing: Q_c is Decrease before Increase, then microservice id.
-    Mapping: ``docs/allocate-resources.md``.
+    Mapping: ``docs/25-allocate-resources.md``.
     """
     by_cluster: dict[str, list[str]] = {}
     for ms_id in env.list_microservices():

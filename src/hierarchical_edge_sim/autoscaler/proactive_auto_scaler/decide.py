@@ -62,7 +62,7 @@ def predict_and_decide(
     """Paper Algorithm 3 gate: Up / Down / None + sustained + residuals.
 
     Utilization and residual use serving headroom, not total alloc. See
-    ``docs/predict-and-decide.md``.
+    ``docs/24-predict-and-decide.md``.
     """
     if tick_sec <= 0:
         raise ValueError("tick_sec must be > 0")

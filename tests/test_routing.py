@@ -91,6 +91,80 @@ def test_prefer_local_fills_home_mu_then_overflow():
     assert sum(shares.values()) == pytest.approx(400.0)
 
 
+def test_prefer_local_caps_home_at_theta_then_spills():
+    a = _make_container("c-home", "c1-w1", cpu=1.0, ram=512.0)  # μ=50
+    b = _make_container("c-loan", "c2-w1", cpu=3.0, ram=1024.0)  # μ=250
+    shares = distribute(
+        offer_lambda=51.0,
+        containers=[a, b],
+        cpu_min_cores=0.5,
+        home_ids={"c-home"},
+        mu={"c-home": 50.0, "c-loan": 250.0},
+        theta_route=0.80,
+    )
+    assert shares["c-home"] == pytest.approx(40.0)
+    assert shares["c-loan"] == pytest.approx(11.0)
+    assert sum(shares.values()) == pytest.approx(51.0)
+
+
+def test_prefer_local_spills_back_to_home_when_loans_are_full():
+    a = _make_container("c-home", "c1-w1", cpu=1.0, ram=512.0)  # μ=50
+    b = _make_container("c-loan", "c2-w1", cpu=1.0, ram=512.0)  # μ=50
+    shares = distribute(
+        offer_lambda=100.0,
+        containers=[a, b],
+        cpu_min_cores=0.5,
+        home_ids={"c-home"},
+        mu={"c-home": 50.0, "c-loan": 50.0},
+        theta_route=0.80,
+    )
+    assert shares["c-home"] == pytest.approx(50.0)
+    assert shares["c-loan"] == pytest.approx(50.0)
+
+
+def test_prefer_local_keeps_home_at_theta_when_loans_have_room():
+    a = _make_container("c-home", "c1-w1", cpu=1.0, ram=512.0)  # μ=50
+    b = _make_container("c-loan", "c2-w1", cpu=3.0, ram=1024.0)  # μ=150 if we say so
+    shares = distribute(
+        offer_lambda=180.0,
+        containers=[a, b],
+        cpu_min_cores=0.5,
+        home_ids={"c-home"},
+        mu={"c-home": 50.0, "c-loan": 150.0},
+        theta_route=0.80,
+    )
+    assert shares["c-home"] == pytest.approx(40.0)
+    assert shares["c-loan"] == pytest.approx(140.0)
+
+
+def test_prefer_local_rejects_bad_theta_route():
+    a = _make_container("c-home", "c1-w1", cpu=1.0, ram=512.0)
+    b = _make_container("c-loan", "c2-w1", cpu=1.0, ram=512.0)
+    with pytest.raises(ValueError, match="theta_route"):
+        distribute(
+            offer_lambda=10.0,
+            containers=[a, b],
+            cpu_min_cores=0.5,
+            home_ids={"c-home"},
+            mu={"c-home": 50.0, "c-loan": 50.0},
+            theta_route=0.0,
+        )
+
+
+def test_effective_theta_route_uses_scaler_theta_high():
+    from hierarchical_edge_sim.env.routing import effective_theta_route
+
+    class _Params:
+        theta_high = 0.80
+
+    class _Scaler:
+        params = _Params()
+
+    assert effective_theta_route(1.0, _Scaler()) == pytest.approx(0.80)
+    assert effective_theta_route(0.70, None) == pytest.approx(0.70)
+    assert effective_theta_route(1.0, object()) == pytest.approx(1.0)
+
+
 def test_prefer_local_all_home_keeps_headroom_split():
     a = _make_container("c-api-a", "c1-w1", cpu=1.0, ram=512.0)
     b = _make_container("c-api-b", "c1-w2", cpu=3.0, ram=1024.0)

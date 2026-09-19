@@ -42,6 +42,7 @@ def run_ticks(
     horizon = traces.horizon
     tick_sec = float(world_spec.sim.tick_sec)
     sla_timeout_sec = float(world_spec.sim.sla_timeout_sec)
+    theta_route = float(world_spec.sim.theta_route)
 
     for tau in range(1, horizon + 1):
         tick(
@@ -51,6 +52,7 @@ def run_ticks(
             tau=tau,
             tick_sec=tick_sec,
             sla_timeout_sec=sla_timeout_sec,
+            theta_route=theta_route,
         )
         state.current_tau = tau
         if on_after_tick is not None:
@@ -67,6 +69,7 @@ def tick(
     *,
     tick_sec: float = 1.0,
     sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC,
+    theta_route: float = 1.0,
 ) -> None:
     """Execute one tick for all microservices in deterministic id order."""
     for ms in sorted(world.microservices.values(), key=lambda item: item.id):
@@ -86,6 +89,7 @@ def tick(
             cpu_min_cores=spec.cpu_min_cores,
             home_ids=home_ids or None,
             mu=mu,
+            theta_route=theta_route,
         )
         for container in containers:
             replica_cluster = world.servers[container.server_id].cluster_id

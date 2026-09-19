@@ -32,6 +32,10 @@ class SimConfig:
     results_dir: str
     seed: int
     sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC
+    # Prefer-local first-fill as a fraction of home μ. 1.0 = fill to μ (paper).
+    # Env.run with reactive_vertical / reactive_local overwrites this from
+    # autoscaler ``theta_high`` so the LB and scaler share one safety bar.
+    theta_route: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,11 +136,15 @@ def load_yaml(path: str | Path) -> RawConfig:
     sla_timeout_sec = DEFAULT_SLA_TIMEOUT_SEC
     if "sla_timeout_sec" in sim_data:
         sla_timeout_sec = _to_float(sim_data["sla_timeout_sec"], "sim.sla_timeout_sec")
+    theta_route = 1.0
+    if "theta_route" in sim_data:
+        theta_route = _to_float(sim_data["theta_route"], "sim.theta_route")
     sim = SimConfig(
         tick_sec=_to_float(_require(sim_data, "tick_sec", "sim"), "sim.tick_sec"),
         results_dir=_to_str(_require(sim_data, "results_dir", "sim"), "sim.results_dir"),
         seed=_to_int(_require(sim_data, "seed", "sim"), "sim.seed"),
         sla_timeout_sec=sla_timeout_sec,
+        theta_route=theta_route,
     )
 
     clusters_raw = _as_list(_require(topology_data, "clusters", "topology"), "topology.clusters")

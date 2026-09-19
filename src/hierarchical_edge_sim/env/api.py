@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -10,6 +10,7 @@ from typing import Any
 
 from .config import EPS, ContainerSpec, MicroserviceSpec, WorldSpec, load_yaml, quantize_resource
 from .engine import EngineState, run_ticks, tick
+from .routing import effective_theta_route
 from .loans import add_loan, count_ms_on_server, drop_loan
 from .metrics_log import make_run_id, write_run_outputs
 from .models import App, Cluster, Container, LoanTier, Microservice, Server, Vicinity
@@ -240,6 +241,12 @@ class Env:
         """Run engine then write outputs. max_ticks supports test/dev partial runs."""
         if autoscaler is not None:
             self.autoscaler_meta = _autoscaler_meta(autoscaler)
+        theta_route = effective_theta_route(self.world_spec.sim.theta_route, autoscaler)
+        if abs(theta_route - self.world_spec.sim.theta_route) > EPS:
+            self.world_spec = replace(
+                self.world_spec,
+                sim=replace(self.world_spec.sim, theta_route=theta_route),
+            )
         if max_ticks is None:
             run_ticks(
                 world=self.world,
@@ -278,6 +285,7 @@ class Env:
                 tau=tau,
                 tick_sec=float(self.world_spec.sim.tick_sec),
                 sla_timeout_sec=float(self.world_spec.sim.sla_timeout_sec),
+                theta_route=float(self.world_spec.sim.theta_route),
             )
             self.state.current_tau = tau
             _invoke_autoscaler(self, autoscaler, tau)

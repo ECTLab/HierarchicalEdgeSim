@@ -137,6 +137,77 @@ def test_engine_prefer_local_and_remote_t_net():
     assert loan.t_p99_offered_sec == pytest.approx(1.04)
 
 
+def test_engine_prefer_local_caps_home_when_theta_route():
+    spec = WorldSpec(
+        sim=SimConfig(
+            tick_sec=1.0,
+            results_dir="results/",
+            seed=1,
+            sla_timeout_sec=1.0,
+            theta_route=0.80,
+        ),
+        traces_dir="unused/",
+        clusters=[
+            ClusterSpec(
+                id="c1",
+                servers=[ServerSpec(id="c1-w1", cpu_cap_cores=8.0, ram_cap_mb=16384.0)],
+                coords=(0.0, 0.0),
+            ),
+            ClusterSpec(
+                id="c2",
+                servers=[ServerSpec(id="c2-w1", cpu_cap_cores=8.0, ram_cap_mb=16384.0)],
+                coords=(0.0, 0.0),
+            ),
+        ],
+        apps=[
+            AppSpec(
+                id="demo_app",
+                microservices=[
+                    MicroserviceSpec(
+                        id="api",
+                        cpu_min_cores=0.5,
+                        cpu_max_cores=4.0,
+                        ram_min_mb=256.0,
+                        ram_max_mb=4096.0,
+                        cpu_per_request_cores=0.01,
+                        ram_per_request_mb=0.5,
+                        trace_file="unused.csv",
+                        containers=[
+                            ContainerSpec(
+                                id="c-home",
+                                server_id="c1-w1",
+                                cpu_alloc_cores=1.0,
+                                ram_alloc_mb=512.0,
+                            ),
+                            ContainerSpec(
+                                id="c-loan",
+                                server_id="c2-w1",
+                                cpu_alloc_cores=3.0,
+                                ram_alloc_mb=1024.0,
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+        source_path=Path("unused/config.yaml"),
+        vicinities=[VicinitySpec(id="v1", members=["c1", "c2"], leader="c1")],
+        latency_ms=[LatencyEdge(a="c1", b="c2", ms=40.0)],
+    )
+    world = build_world(spec)
+    traces = TraceStore(_data={"api": [51.0]})
+    run_ticks(world=world, traces=traces, world_spec=spec)
+
+    home = world.containers["c-home"].history_at(1)
+    loan = world.containers["c-loan"].history_at(1)
+    assert home.lambda_in == pytest.approx(40.0)
+    assert home.lambda_dropped == pytest.approx(0.0)
+    assert home.sla_miss_requests < 0.01
+    assert home.t_p99_offered_sec < 1.0
+    assert loan.lambda_in == pytest.approx(11.0)
+    assert loan.lambda_dropped == pytest.approx(0.0)
+    assert loan.t_net_sec == pytest.approx(0.04)
+
 
 def test_ms_processing_order_deterministic(tiny_config_path):
     world1, traces1, spec1 = _build_runtime(tiny_config_path)

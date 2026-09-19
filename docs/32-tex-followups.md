@@ -22,7 +22,6 @@ This is not a full paper-vs-sim comparison. Use it as the punch list for the nex
 | Predictor confidence \(\kappa\) | \(\kappa=0\) until \(W_\kappa\), else \(1/(1+\mathrm{MAPE})\); below \(\kappa_{\min}\) ignore hats | `CountConfidence` + `trust_forecast`. Predictor still runs every window. |
 | Admission + partition | Least-loaded stamp; Algorithm 1 at init | `env/admission.py` + `build_world` once. YAML \(V\) remains an experiment override. Clusters/workers/\(V\) are static. |
 | Per-window residual | AllocateResources applies \(\delta\) in one window | No \(\alpha_{up}/\alpha_{down}\). \(\delta_{\min}\) is still a dust/token floor, not a speed limit. |
-| Prefer-local routing | Fill home \(\mu\) first; leftover to loans; headroom-weighted inside each pool | `routing.distribute(..., home_ids, mu)` from the engine. Same-cluster fleets unchanged. |
 | User delay | \(T=T_{\mathrm{net}}+\) M/M/1 sojourn; drops as \(T_{\mathrm{slo}}\); full-but-serving uses \(\rho=0.99\); mix p99 over offered load | `env/latency.py`. Logs `t_*_offered_sec`, `sla_miss_requests`, `t_wait_sec`. Plot `user_latency.png`. |
 
 The paper’s §prototype still describes the older `edge_computing_thesis` repo (global tier, BEV/BEH names). Point that section at HierarchicalEdgeSim when you next edit the tex.
@@ -41,15 +40,17 @@ These are the cases where the simulator is the operational method.
 
 4. **Headroom-weighted routing (absorbed into v2 tex as prefer-local).** Even LB plus minima spawn sends \(1/n\) of load to a \(\mu=0\) replica, which then drops it. Keep headroom weights inside each pool.
 
-5. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, peel the extra we would reclaim before terminating it, and do not vertical-shrink keepers in the same tick as a terminate.
+5. **Prefer-local util cap (not fill-to-μ).** Paper prefer-local fills home to \(\mu\), then leftover to loans. With M/M/1 that forces \(\rho=1\) on the home replica as soon as \(\Lambda\ge\mu_{\mathrm{home}}\), so sojourn hits \(T_{\mathrm{slo}}\) while borrowed replicas sit idle. Code: fill home to \(\theta_{\mathrm{route}}\cdot\mu\); spill to loans up to full remote \(\mu\); use the remaining home band only if loans are already full (no extra drops). \(\theta_{\mathrm{route}}\) is scaler `theta_high` when `reactive_local` / `reactive_vertical` is attached, else `sim.theta_route` (default \(1\) = old fill-to-\(\mu\)). Same-cluster fleets still split by \(\mu\)/headroom with no cap. Absorb into the tex prefer-local listing.
 
-6. **Floor extras are fully releasable.** Paper ScheduleReleases terminates only when \(L\) covers a whole instance. A minima replica has \(\mu=0\), so the sim still terminates it when \(L>0\) even if \(L\) is smaller than the instance. Otherwise a leftover loan at the floor would sit forever while local headroom was the only surplus.
+6. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, peel the extra we would reclaim before terminating it, and do not vertical-shrink keepers in the same tick as a terminate.
 
-7. **Success-gated cooldown, but keep observing.** Paper now arms cooldown only if something applied (good) and still `continue`s PredictAndDecide during cooldown. Code updates streaks every tick and only suppresses emission. Proactive also uses HPA-style `cooldown_C` (never delay Up; delay Down after a successful Up).
+7. **Floor extras are fully releasable.** Paper ScheduleReleases terminates only when \(L\) covers a whole instance. A minima replica has \(\mu=0\), so the sim still terminates it when \(L>0\) even if \(L\) is smaller than the instance. Otherwise a leftover loan at the floor would sit forever while local headroom was the only surplus.
 
-8. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
+8. **Success-gated cooldown, but keep observing.** Paper now arms cooldown only if something applied (good) and still `continue`s PredictAndDecide during cooldown. Code updates streaks every tick and only suppresses emission. Proactive also uses HPA-style `cooldown_C` (never delay Up; delay Down after a successful Up).
 
-9. **No \(T_{\mathit{repart}}\).** Clusters, workers, and vicinities are static parameters of a run. Algorithm 1 (or the YAML override) runs once at world build. Drop the slow re-partition, join/leave drain, and straddling-loan two-step from the tex for this deployment.
+9. **Resource quantum 0.01.** Not in the paper. Stops RAM-dust vertical-downs.
+
+10. **No \(T_{\mathit{repart}}\).** Clusters, workers, and vicinities are static parameters of a run. Algorithm 1 (or the YAML override) runs once at world build. Drop the slow re-partition, join/leave drain, and straddling-loan two-step from the tex for this deployment.
 
 ---
 
@@ -63,6 +64,7 @@ None of the remaining canvas “update the sim” rows. Leader heartbeat failove
 
 | Date | Note |
 |---|---|
+| 2026-09-19 | Prefer-local util cap: home to \(\theta_{\mathrm{high}}\cdot\mu\), then loans, then leftover home band. Paper still fill-to-\(\mu\). |
 | 2026-09-18 | Local extras: peel the extra we would reclaim before terminate; do not shrink keepers in the same tick as a terminate. |
 | 2026-09-18 | Prefer-local routing and analytic offered delay (\(T_{\mathrm{net}}\) + M/M/1, drop as \(T_{\mathrm{slo}}\)). Absorbed into `proposed_method_complete.tex`. |
 | 2026-09-17 | Removed \(\alpha_{up}/\alpha_{down}\). AllocateResources applies the window residual; streaks/cooldown/last-replica/safe_j remain. |

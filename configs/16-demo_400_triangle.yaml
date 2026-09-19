@@ -81,8 +81,8 @@ autoscaler:
     cooldown_ticks: 5
     eps_drop: 1.0e-9
     theta_free: 0.35
-    theta_high: 0.90
-    use_near_saturation_up: false
+    theta_high: 0.80
+    use_near_saturation_up: true
     min_mu_step: 25
     prefer_consolidate_down: true
     sustained_up_streak: 6

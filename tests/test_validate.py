@@ -229,6 +229,11 @@ def test_validate_or_raise_raises_config_error(tmp_path):
             lambda cfg, _t: cfg["sim"].update({"sla_timeout_sec": 0}),
             "must be > 0",
         ),
+        (
+            "theta_route",
+            lambda cfg, _t: cfg["sim"].update({"theta_route": 0}),
+            "must be in (0, 1]",
+        ),
     ],
 )
 def test_reject_rules(name, mutate, expected_substring, tmp_path):

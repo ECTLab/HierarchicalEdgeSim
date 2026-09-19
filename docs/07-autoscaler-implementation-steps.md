@@ -75,7 +75,7 @@ autoscaler:
 | `cooldown_ticks` | `5` | Quiet period after a successful resize (~5s) |
 | `eps_drop` | `1.0e-9` | Treat tiny float noise as no drop |
 | `theta_free` | `0.35` | ≥35% unused MS serving headroom counts as “free” |
-| `theta_high` | `0.90` | Reserved; unused when `use_near_saturation_up: false` |
+| `theta_high` | `0.90` | Near-saturation up bar, and prefer-local routing cap when this scaler is attached |
 | `use_near_saturation_up` | `false` | v1: scale up on **aggregate drops** only |
 | `alpha_up` | `0.20` | Grow ~20% of current fleet alloc per UP (steady, not jump-to-max) |
 | `alpha_down` | `0.10` | Shrink more gently than grow |

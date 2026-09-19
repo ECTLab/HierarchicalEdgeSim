@@ -209,6 +209,8 @@ def _validate_sim(config: RawConfig, errors: list[ValidationError]) -> None:
         errors.append(ValidationError(path="sim.tick_sec", message="must be > 0"))
     if config.sim.sla_timeout_sec <= 0:
         errors.append(ValidationError(path="sim.sla_timeout_sec", message="must be > 0"))
+    if not (0.0 < config.sim.theta_route <= 1.0):
+        errors.append(ValidationError(path="sim.theta_route", message="must be in (0, 1]"))
     if not config.sim.results_dir.strip():
         errors.append(ValidationError(path="sim.results_dir", message="must be a non-empty string"))
     if not isinstance(config.sim.seed, int):

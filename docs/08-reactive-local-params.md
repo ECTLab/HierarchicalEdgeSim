@@ -2,7 +2,7 @@
 
 These keys live under `autoscaler.params` for `reactive_vertical` and `reactive_local`. They answer three questions: **when** to move, **how big** a step, and **which replica** gets it. The window residual is not \(\alpha\)-clipped; see [25-allocate-resources.md](./25-allocate-resources.md).
 
-Triangle demos use the values below. Toy tests may use smaller streaks/cooldowns.
+Default demo values are below. Triangle configs 16–19 use `theta_high: 0.80` and `use_near_saturation_up: true` so the scaler and prefer-local routing share that bar. Toy tests may use smaller streaks/cooldowns.
 
 ```yaml
 x_up_streak: 3
@@ -31,8 +31,8 @@ shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }
 | `y_down_streak` | How many consecutive ticks of **down-pressure** (enough unused serving headroom) before scale-down. Larger than `x_up_streak` so shrink is slower than grow. |
 | `cooldown_ticks` | After a successful resize/spawn/terminate, skip further moves for this many ticks. With `y_down_streak: 8` and `cooldown_ticks: 5`, a lasting down-pressure run typically fires every **8** ticks after cooldown, not every 5. |
 | `theta_free` | Unused-headroom bar for down-pressure: slack ≥ `θ_free` × current serving μ. Also sets the shrink target μ: keep about `Λ / (1 − θ_free)` so some spare stays. At `0.35` that is roughly 54% extra μ above live load. |
-| `theta_high` | Near-saturation bar for an **optional** scale-up that does not wait for drops. |
-| `use_near_saturation_up` | If `false` (all current demos), up is **drops only**. `theta_high` is unused until this is turned on. |
+| `theta_high` | Near-saturation bar. When `use_near_saturation_up` is true, scale-up can fire without drops. **Also** the prefer-local routing cap while this scaler is attached: home gets up to `theta_high · μ`, leftover goes to loans. |
+| `use_near_saturation_up` | If `false`, up is **drops only**. `theta_high` still caps prefer-local routing. |
 
 ---
 

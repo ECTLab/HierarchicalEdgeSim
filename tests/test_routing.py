@@ -69,11 +69,11 @@ def test_routing_plus_usage_end_to_end():
 
     assert rec_a.lambda_in == pytest.approx(66.6666666667, rel=1e-9)
     assert rec_a.lambda_served == pytest.approx(50.0)
-    assert rec_a.lambda_dropped == pytest.approx(16.6666666667, rel=1e-9)
+    assert rec_a.lambda_dropped + rec_a.queue_len == pytest.approx(16.6666666667, rel=1e-9)
 
     assert rec_b.lambda_in == pytest.approx(333.3333333333, rel=1e-9)
     assert rec_b.lambda_served == pytest.approx(250.0)
-    assert rec_b.lambda_dropped == pytest.approx(83.3333333333, rel=1e-9)
+    assert rec_b.lambda_dropped + rec_b.queue_len == pytest.approx(83.3333333333, rel=1e-9)
 
 
 def test_prefer_local_fills_home_mu_then_overflow():

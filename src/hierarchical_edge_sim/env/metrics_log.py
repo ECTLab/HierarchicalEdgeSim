@@ -219,6 +219,10 @@ def _write_container_log(*, container_dir: Path, file_stem: str, history) -> Non
                 "t_p99_offered_sec",
                 "sla_miss_requests",
                 "t_wait_sec",
+                "t_svc_sec",
+                "t_wait_lo_sec",
+                "t_wait_hi_sec",
+                "queue_len",
             ]
         )
         for rec in history:
@@ -238,6 +242,10 @@ def _write_container_log(*, container_dir: Path, file_stem: str, history) -> Non
                     _format_sec(rec.t_p99_offered_sec),
                     rec.sla_miss_requests,
                     _format_sec(rec.t_wait_sec),
+                    _format_sec(rec.t_svc_sec),
+                    _format_sec(rec.t_wait_lo_sec),
+                    _format_sec(rec.t_wait_hi_sec),
+                    rec.queue_len,
                 ]
             )
 

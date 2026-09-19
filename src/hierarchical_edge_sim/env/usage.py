@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .config import DEFAULT_SLA_TIMEOUT_SEC, EPS, MicroserviceSpec, quantize_resource
-from .latency import offered_delay
+from .latency import serve_fluid
 from .models import Container, ContainerTickRecord
 
 
@@ -32,15 +32,17 @@ def apply_tick(
     ram_serve_mb = max(0.0, container.ram_alloc_mb - spec.ram_min_mb)
     mu = serving_capacity(container, spec)
 
-    lambda_served = min(lambda_in, mu)
-    lambda_dropped = lambda_in - lambda_served
-    delay = offered_delay(
-        lambda_in=lambda_in,
+    delay = serve_fluid(
+        arrivals=lambda_in,
         mu=mu,
         tick_sec=tick_sec,
         sla_timeout_sec=sla_timeout_sec,
         t_net_sec=t_net_sec,
+        queue=container.backlog,
     )
+    lambda_served = delay.served
+    lambda_dropped = delay.timeout
+    container.backlog = delay.queue_len
 
     cpu_usage_cores = quantize_resource(
         min(
@@ -75,6 +77,10 @@ def apply_tick(
         t_p99_offered_sec=delay.t_p99_offered_sec,
         sla_miss_requests=delay.sla_miss_requests,
         t_wait_sec=delay.t_wait_sec,
+        t_svc_sec=delay.t_svc_sec,
+        t_wait_lo_sec=delay.wait_lo_sec,
+        t_wait_hi_sec=delay.wait_hi_sec,
+        queue_len=delay.queue_len,
     )
     container.append_history(record)
     return record

@@ -3,7 +3,8 @@
 # μ=0). Leftover is unmet demand (c3 is outside v1 and is not used).
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
+  sla_timeout_sec: 1.0
   results_dir: results/09-triangle-post-match/skip_neighbor/
   seed: 42
 
@@ -48,8 +49,8 @@ apps:
         cpu_max_cores: 1.0
         ram_min_mb: 256
         ram_max_mb: 512
-        cpu_per_request_cores: 0.01
-        ram_per_request_mb: 0.5
+        cpu_per_request_cores: 0.0001666667
+        ram_per_request_mb: 0.0083333333
         trace_file: api_400_triangle.csv
         containers:
           - id: c-api-0
@@ -69,7 +70,7 @@ autoscaler:
     theta_free: 0.35
     theta_high: 0.90
     use_near_saturation_up: false
-    min_mu_step: 25
+    min_mu_step: 1500
     prefer_consolidate_down: true
     sustained_up_streak: 6
     cascade_home: false

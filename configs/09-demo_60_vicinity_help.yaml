@@ -5,7 +5,7 @@
 # After local leftover, VicinityLeaderSchedule lite spawns on c2 with a vicinity loan.
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/08-ladder-60tick/vicinity_help/
   seed: 42
 

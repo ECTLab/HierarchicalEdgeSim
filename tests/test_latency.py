@@ -1,94 +1,63 @@
-import math
+"""FCFS fluid queue: wait is wall-clock seconds, not ticks."""
 
 import pytest
 
-from hierarchical_edge_sim.env.latency import DelayPart, mix_offered_quantile, offered_delay
+from hierarchical_edge_sim.env.latency import serve_fluid
 
 
-def test_idle_tick_has_zero_offered_delay():
-    stats = offered_delay(
-        lambda_in=0.0,
-        mu=50.0,
-        tick_sec=1.0,
-        sla_timeout_sec=1.0,
-        t_net_sec=0.04,
+def test_empty_tick_is_zero():
+    out = serve_fluid(
+        arrivals=0.0, mu=50.0, tick_sec=1.0, sla_timeout_sec=1.0, t_net_sec=0.0, queue=0.0
     )
-    assert stats.t_net_sec == pytest.approx(0.04)
-    assert stats.t_mean_offered_sec == 0.0
-    assert stats.t_p99_offered_sec == 0.0
-    assert stats.sla_miss_requests == 0.0
+    assert out.served == pytest.approx(0.0)
+    assert out.timeout == pytest.approx(0.0)
+    assert out.t_p99_offered_sec == pytest.approx(0.0)
+    assert out.t_wait_sec == pytest.approx(0.0)
 
 
-def test_stable_mm1_p99_tiny_tick2():
-    wait = 1.0 / 25.0
-    stats = offered_delay(
-        lambda_in=25.0,
-        mu=50.0,
-        tick_sec=1.0,
-        sla_timeout_sec=1.0,
-        t_net_sec=0.0,
+def test_under_capacity_is_service_plus_net_not_utilization():
+    out = serve_fluid(
+        arrivals=45.0, mu=50.0, tick_sec=1.0, sla_timeout_sec=1.0, t_net_sec=0.005, queue=0.0
     )
-    assert stats.t_p99_offered_sec == pytest.approx(-math.log(0.01) * wait, rel=1e-5)
-    assert stats.t_p95_offered_sec == pytest.approx(-math.log(0.05) * wait, rel=1e-5)
-    assert stats.t_mean_offered_sec == pytest.approx(wait * (1.0 - math.exp(-1.0 / wait)))
-    assert stats.sla_miss_requests == pytest.approx(25.0 * math.exp(-1.0 / wait))
+    assert out.timeout == pytest.approx(0.0)
+    assert out.served == pytest.approx(45.0)
+    assert out.queue_len == pytest.approx(0.0)
+    assert out.t_wait_sec == pytest.approx(0.0)
+    assert out.t_p99_offered_sec == pytest.approx(0.005 + 1.0 / 50.0)
+    assert out.sla_miss_requests == pytest.approx(0.0)
 
 
-def test_over_capacity_drops_timeout_served_uses_rho_cap():
-    wait = 1.0 / (50.0 * 0.01)
-    tail = math.exp(-1.0 / wait)
-    stats = offered_delay(
-        lambda_in=120.0,
-        mu=50.0,
-        tick_sec=1.0,
-        sla_timeout_sec=1.0,
-        t_net_sec=0.04,
+def test_one_second_overflow_queues_0_6s_without_timeout():
+    """80 arrivals, μ=50/s: leftover 30 drains in 0.6 s, under a 1 s SLO."""
+    out = serve_fluid(
+        arrivals=80.0, mu=50.0, tick_sec=1.0, sla_timeout_sec=1.0, t_net_sec=0.0, queue=0.0
     )
-    mean_served = wait * (1.0 - math.exp(-1.0 / wait))
-    mean = 0.04 + (50.0 / 120.0) * mean_served + (70.0 / 120.0) * 1.0
-    assert stats.t_p99_offered_sec == pytest.approx(1.04, abs=1e-4)
-    assert stats.t_mean_offered_sec == pytest.approx(mean)
-    assert stats.sla_miss_requests == pytest.approx(70.0 + 50.0 * tail)
-    assert stats.t_wait_sec == pytest.approx(wait)
+    assert out.served == pytest.approx(50.0)
+    assert out.timeout == pytest.approx(0.0)
+    assert out.queue_len == pytest.approx(30.0)
+    assert out.t_wait_sec == pytest.approx(0.6)
+    assert out.t_p99_offered_sec < 1.0
+    assert out.sla_miss_requests == pytest.approx(0.0)
 
 
-def test_full_replica_no_drop_is_not_all_timeout():
-    wait = 1.0 / (50.0 * 0.01)
-    stats = offered_delay(
-        lambda_in=50.0,
-        mu=50.0,
-        tick_sec=1.0,
-        sla_timeout_sec=1.0,
-        t_net_sec=0.0,
+def test_minute_tick_drains_0_6s_leftover_inside_slo():
+    """Trace row is a minute; leftover 30 at 50 req/s is 0.6 s of work, not a timeout."""
+    out = serve_fluid(
+        arrivals=0.0, mu=3000.0, tick_sec=60.0, sla_timeout_sec=1.0, t_net_sec=0.0, queue=30.0
     )
-    assert stats.sla_miss_requests == pytest.approx(50.0 * math.exp(-1.0 / wait))
-    assert stats.sla_miss_requests < 50.0
-    assert stats.t_mean_offered_sec < 1.0
+    assert out.served == pytest.approx(30.0)
+    assert out.timeout == pytest.approx(0.0)
+    assert out.queue_len == pytest.approx(0.0)
+    assert out.t_wait_sec == pytest.approx(0.0)
+    assert out.wait_hi_sec == pytest.approx(0.6)
+    assert out.t_p99_offered_sec < 1.0
+    assert out.sla_miss_requests == pytest.approx(0.0)
 
 
-def test_zero_mu_is_timeout():
-    stats = offered_delay(
-        lambda_in=10.0,
-        mu=0.0,
-        tick_sec=1.0,
-        sla_timeout_sec=0.2,
-        t_net_sec=0.0,
+def test_conservation_arrivals_plus_queue():
+    q0 = 10.0
+    arrivals = 80.0
+    out = serve_fluid(
+        arrivals=arrivals, mu=50.0, tick_sec=1.0, sla_timeout_sec=1.0, t_net_sec=0.0, queue=q0
     )
-    assert stats.t_p99_offered_sec == pytest.approx(0.2)
-    assert stats.sla_miss_requests == pytest.approx(10.0)
-
-
-def test_mix_p99_is_timeout_when_more_than_one_percent_miss():
-    fast = DelayPart(weight=98.0, t_net_sec=0.0, wait_sec=0.01, served_frac=1.0, sla_timeout_sec=1.0)
-    slow = DelayPart(weight=2.0, t_net_sec=0.04, wait_sec=0.0, served_frac=0.0, sla_timeout_sec=1.0)
-    p99 = mix_offered_quantile(0.99, [fast, slow])
-    assert p99 == pytest.approx(1.04, abs=1e-3)
-
-
-def test_mix_p99_stays_with_served_when_miss_is_tiny():
-    wait = 0.04
-    a = DelayPart(weight=50.0, t_net_sec=0.0, wait_sec=wait, served_frac=1.0, sla_timeout_sec=1.0)
-    b = DelayPart(weight=50.0, t_net_sec=0.005, wait_sec=wait, served_frac=1.0, sla_timeout_sec=1.0)
-    p99 = mix_offered_quantile(0.99, [a, b])
-    assert p99 < 0.3
-    assert p99 > -math.log(0.01) * wait
+    assert out.served + out.timeout + out.queue_len == pytest.approx(arrivals + q0)

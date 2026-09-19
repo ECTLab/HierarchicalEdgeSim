@@ -151,10 +151,10 @@ def test_triangle_trace_matches_yaml_hold(project_root: Path):
         tu, req = line.split(",")
         assert int(tu) == i
         vals.append(int(req))
-    assert vals[0] == 40
-    assert vals[199] == 180
-    assert vals[319] == 5
-    assert all(v == 5 for v in vals[320:])
+    assert vals[0] == 2400
+    assert vals[199] == 10800
+    assert vals[319] == 300
+    assert all(v == 300 for v in vals[320:])
     assert all(vals[i] <= vals[i + 1] for i in range(199))
     assert all(vals[i] >= vals[i + 1] for i in range(200, 319))
 

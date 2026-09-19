@@ -1,4 +1,6 @@
 # configs/00-tiny.yaml — Part A reference scenario (03-implementation-plan.md §11)
+# tick_sec is seconds of wall time per CSV row (keep this param). Experiment
+# traces use 60 (one minute). This 5-row golden keeps 1.0 on purpose.
 
 sim:
   tick_sec: 1.0

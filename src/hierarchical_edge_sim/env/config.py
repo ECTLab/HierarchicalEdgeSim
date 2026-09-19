@@ -28,10 +28,10 @@ def format_resource(value: float | None) -> str:
 
 @dataclass(frozen=True, slots=True)
 class SimConfig:
-    tick_sec: float
+    tick_sec: float  # wall-clock seconds per trace row (experiments: 60 = one minute)
     results_dir: str
     seed: int
-    sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC
+    sla_timeout_sec: float = DEFAULT_SLA_TIMEOUT_SEC  # per-request deadline, not a tick
 
 
 @dataclass(frozen=True, slots=True)

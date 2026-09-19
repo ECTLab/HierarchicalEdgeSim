@@ -2,7 +2,7 @@
 # Option A TCN + Alibaba trace: configs/13-demo_alibaba_proactive.yaml
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/08-ladder-60tick/proactive/
   seed: 42
 

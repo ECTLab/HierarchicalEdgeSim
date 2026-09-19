@@ -83,28 +83,34 @@ def mix_quantile_aligned(
     q: float,
     sla_timeout_sec: float,
 ) -> list[float]:
-    """Per-tick offered-load mix quantile across replicas (timeouts included)."""
+    """Per-tick completed-sojourn quantile across replicas (timeouts excluded)."""
     from hierarchical_edge_sim.env.latency import DelayPart, mix_offered_quantile
 
+    del sla_timeout_sec
     out: list[float] = []
     for t in tau_full:
         parts: list[DelayPart] = []
         for c in containers:
-            by_in = dict(zip(c.tau, c.incoming))
-            by_served = dict(zip(c.tau, c.served))
-            by_net = dict(zip(c.tau, c.t_net_sec))
-            by_wait = dict(zip(c.tau, c.t_wait_sec))
-            weight = float(by_in.get(t, 0.0))
-            if weight <= 0.0:
+            by_tau = dict(zip(c.tau, zip(
+                c.served,
+                c.t_net_sec,
+                c.t_svc_sec if c.t_svc_sec else [0.0] * len(c.tau),
+                c.t_wait_lo_sec if c.t_wait_lo_sec else [0.0] * len(c.tau),
+                c.t_wait_hi_sec if c.t_wait_hi_sec else [0.0] * len(c.tau),
+            )))
+            row = by_tau.get(t)
+            if row is None:
                 continue
-            served = float(by_served.get(t, 0.0))
+            served, t_net, t_svc, wait_lo, wait_hi = row
+            if float(served) <= 0.0:
+                continue
             parts.append(
                 DelayPart(
-                    weight=weight,
-                    t_net_sec=float(by_net.get(t, 0.0)),
-                    wait_sec=float(by_wait.get(t, 0.0)),
-                    served_frac=served / weight,
-                    sla_timeout_sec=float(sla_timeout_sec),
+                    weight=float(served),
+                    t_net_sec=float(t_net),
+                    t_svc_sec=float(t_svc),
+                    wait_lo_sec=float(wait_lo),
+                    wait_hi_sec=float(wait_hi),
                 )
             )
         out.append(mix_offered_quantile(q, parts))

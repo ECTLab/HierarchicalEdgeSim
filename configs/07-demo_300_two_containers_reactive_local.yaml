@@ -1,7 +1,7 @@
 # Same as 05-demo_300_two_containers.yaml + reactive_local (BEV then BEH).
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/03-phased-300/reactive_local/
   seed: 42
 

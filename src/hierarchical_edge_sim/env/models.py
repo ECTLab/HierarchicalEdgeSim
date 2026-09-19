@@ -24,6 +24,10 @@ class ContainerTickRecord:
     t_p99_offered_sec: float = 0.0
     sla_miss_requests: float = 0.0
     t_wait_sec: float = 0.0
+    t_svc_sec: float = 0.0
+    t_wait_lo_sec: float = 0.0
+    t_wait_hi_sec: float = 0.0
+    queue_len: float = 0.0
 
 
 @dataclass(slots=True)
@@ -37,6 +41,8 @@ class Container:
     # Snapshot of alloc at world build (survives later resize for meta/logs).
     initial_cpu_alloc_cores: float | None = None
     initial_ram_alloc_mb: float | None = None
+    # FCFS leftover (request count). Drain time is queue / (μ / tick_sec) seconds.
+    backlog: float = 0.0
     history: list[ContainerTickRecord] = field(default_factory=list)
 
     def __post_init__(self) -> None:

@@ -246,6 +246,8 @@ def test_analyze_run_emits_ladder_plots(tmp_path: Path):
     out = summaries[0].output_dir
     assert (out / "trace_vs_log_requests.png").is_file()
     assert (out / "ladder_qos.png").is_file()
+    assert (out / "user_latency.png").is_file()
+    assert (out / "queue_wait.png").is_file()
     assert (out / "replicas_by_site.png").is_file()
 
 

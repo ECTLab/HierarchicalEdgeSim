@@ -11,7 +11,7 @@
 #   traces/demo/ingest_60.csv
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/02-env-60tick/two_clusters/
   seed: 42
 

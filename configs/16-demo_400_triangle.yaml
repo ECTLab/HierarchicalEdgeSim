@@ -1,15 +1,15 @@
 # Triangle load: climb until VicinityRound, leftover is unmet, then reclaim
 # to one local replica.
 #
-# 400 ticks: Λ 40 → 180 over τ=1–200, 180 → 5 over τ=201–320, then hold at 5
-# until τ=400. Start 40 keeps slack below θ_free on the seed (μ=50) so it does
-# not shrink before the climb. The hold at 5 is below one replica's μ, which is
-# what lets Y=8 + cooldown=5 finish remote terminate. Surplus down then
-# sizes the last replica from current load (headroom for q ≈ 1-θ_free) instead
-# of walking it through μ=0.
-# cpu_max=1.0 ⇒ μ_max = 50 req/tick. One full replica on c1 and one on c2 give
-# μ=50+50=100. Peak Λ=180 leaves 80 req/tick unmet (c3 is outside v1 and is
-# not a placement candidate).
+# 400 ticks: Λ 2400 → 10800 over τ=1–200, 10800 → 300 over τ=201–320, then hold
+# at 300 until τ=400. One CSV row is one minute (tick_sec=60). Start 2400 keeps
+# slack below θ_free on the seed (μ=3000 req/min) so it does not shrink before
+# the climb. The hold at 300 is below one replica's μ, which is what lets Y=8 +
+# cooldown=5 finish remote terminate. Surplus down then sizes the last replica
+# from current load (headroom for q ≈ 1-θ_free) instead of walking it through μ=0.
+# cpu_max=1.0 ⇒ μ_max = 3000 req/min (50 req/s). One full replica on c1 and one
+# on c2 give μ=6000. Peak Λ=10800 leaves 4800 req/min unmet (c3 is outside v1
+# and is not a placement candidate).
 #
 # c1 (home, v1): one worker, seed replica fills it (no local horizontal slot).
 # c2 (neighbor, v1): 1.0 / 512 like c1 — room for one vicinity replica at max.
@@ -17,7 +17,8 @@
 # Neighbor RTT 5 ms, outside-vicinity 40 ms (used as T_net).
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
+  sla_timeout_sec: 1.0
   results_dir: results/09-triangle-post-match/vicinity_then_unmet/
   seed: 42
 
@@ -62,8 +63,8 @@ apps:
         cpu_max_cores: 1.0
         ram_min_mb: 256
         ram_max_mb: 512
-        cpu_per_request_cores: 0.01
-        ram_per_request_mb: 0.5
+        cpu_per_request_cores: 0.0001666667
+        ram_per_request_mb: 0.0083333333
         trace_file: api_400_triangle.csv
         containers:
           - id: c-api-0
@@ -83,7 +84,7 @@ autoscaler:
     theta_free: 0.35
     theta_high: 0.90
     use_near_saturation_up: false
-    min_mu_step: 25
+    min_mu_step: 1500
     prefer_consolidate_down: true
     sustained_up_streak: 6
     # Cascade-home would shrink the seed replica to minima and pull a

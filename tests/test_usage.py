@@ -48,23 +48,25 @@ def test_apply_tick_golden_rows():
     c = _container()
 
     incoming = [0.0, 25.0, 80.0, 120.0, 50.0]
-    expected = [
-        (0.0, 0.0, 0.5),
-        (25.0, 0.0, 0.75),
-        (50.0, 30.0, 1.0),
-        (50.0, 70.0, 1.0),
-        (50.0, 0.0, 1.0),
-    ]
+    expected_cpu = [0.5, 0.75, 1.0, 1.0, 1.0]
 
+    prev_q = 0.0
     for tau, lamb in enumerate(incoming, start=1):
         rec = apply_tick(c, lambda_in=lamb, spec=spec, tau=tau)
-        exp_served, exp_dropped, exp_cpu_used = expected[tau - 1]
-        assert rec.lambda_served == pytest.approx(exp_served)
-        assert rec.lambda_dropped == pytest.approx(exp_dropped)
-        assert rec.cpu_usage_cores == pytest.approx(exp_cpu_used)
+        assert rec.cpu_usage_cores == pytest.approx(expected_cpu[tau - 1])
+        assert rec.lambda_served + rec.lambda_dropped + rec.queue_len == pytest.approx(
+            lamb + prev_q
+        )
+        prev_q = rec.queue_len
 
     assert len(c.history) == 5
-    assert c.history_at(4).lambda_dropped == pytest.approx(70.0)
+    rec2 = c.history_at(3)
+    assert rec2.lambda_served == pytest.approx(50.0)
+    assert rec2.lambda_dropped == pytest.approx(0.0)
+    assert rec2.queue_len == pytest.approx(30.0)
+    assert rec2.t_wait_sec == pytest.approx(0.6)
+    assert rec2.t_p99_offered_sec < 1.0
+    assert rec2.sla_miss_requests == pytest.approx(0.0)
 
 
 def test_ram_per_request_zero_not_binding():
@@ -83,7 +85,7 @@ def test_ram_per_request_zero_not_binding():
     c = _container()
     rec = apply_tick(c, lambda_in=120.0, spec=spec, tau=1)
     assert rec.lambda_served == pytest.approx(50.0)
-    assert rec.lambda_dropped == pytest.approx(70.0)
+    assert rec.lambda_dropped + rec.queue_len == pytest.approx(70.0)
     assert rec.ram_usage_mb == pytest.approx(spec.ram_min_mb)
     assert rec.q_ram == pytest.approx(0.0)
 

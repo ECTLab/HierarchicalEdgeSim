@@ -172,10 +172,12 @@ def plot_combined_requests(
         total_incoming = sum_series([c.incoming for c in containers])
         total_served = sum_series([c.served for c in containers])
         total_dropped = sum_series([c.dropped for c in containers])
+        total_queued = sum_series([c.queue_len or [0.0] * len(c.tau) for c in containers])
     else:
         total_incoming = sum_aligned(tau, containers, "incoming")
         total_served = sum_aligned(tau, containers, "served")
         total_dropped = sum_aligned(tau, containers, "dropped")
+        total_queued = sum_aligned(tau, containers, "queue_len")
 
     fig, ax = plt.subplots(figsize=(11, 5))
     _draw_cold_start_span(ax, cold_start_until)
@@ -183,6 +185,8 @@ def plot_combined_requests(
     ax.plot(tau, total_incoming, label="sum incoming", linestyle="--", linewidth=1.8, color="#1f77b4")
     ax.plot(tau, total_served, label="sum served", linewidth=1.8, color="#2ca02c")
     ax.plot(tau, total_dropped, label="sum dropped", linewidth=1.8, color="#d62728")
+    if any(q > 1e-9 for q in total_queued):
+        ax.plot(tau, total_queued, label="queued", linewidth=1.8, color="#9467bd")
     ax.set_xlabel("time_unit")
     ax.set_ylabel("requests")
     ax.set_title(title)
@@ -340,8 +344,9 @@ def plot_user_latency(
     title: str,
     sla_timeout_sec: float | None = None,
     cold_start_until: int | None = None,
+    xlabel: str = "time_unit",
 ) -> None:
-    """Offered-load delay (timeouts included) and SLA-miss rate."""
+    """Completed sojourn (timeouts excluded) and SLA-miss rate."""
     miss_rate = [
         (100.0 * m / i) if i else 0.0 for m, i in zip(sla_miss, incoming)
     ]
@@ -353,9 +358,9 @@ def plot_user_latency(
         gridspec_kw={"height_ratios": [2.0, 1.0]},
     )
     _draw_cold_start_span(ax_t, cold_start_until)
-    ax_t.plot(tau, mean_sec, label="mean offered", linewidth=1.8, color="#1f77b4")
-    ax_t.plot(tau, p95_sec, label="p95 offered", linewidth=1.5, color="#ff7f0e")
-    ax_t.plot(tau, p99_sec, label="p99 offered", linewidth=1.8, color="#d62728")
+    ax_t.plot(tau, mean_sec, label="mean completed", linewidth=1.8, color="#1f77b4")
+    ax_t.plot(tau, p95_sec, label="p95 completed", linewidth=1.5, color="#ff7f0e")
+    ax_t.plot(tau, p99_sec, label="p99 completed", linewidth=1.8, color="#d62728")
     if sla_timeout_sec is not None and sla_timeout_sec > 0:
         ax_t.axhline(
             sla_timeout_sec,
@@ -372,11 +377,56 @@ def plot_user_latency(
 
     _draw_cold_start_span(ax_s, cold_start_until, legend=False)
     ax_s.plot(tau, miss_rate, label="SLA miss", color="#d62728", linewidth=1.8)
-    ax_s.set_xlabel("time_unit")
+    ax_s.set_xlabel(xlabel)
     ax_s.set_ylabel("SLA miss %")
     ax_s.grid(True, alpha=0.3)
     _legend(ax_s)
     _ylim_from_zero(ax_s)
+    _save(fig, out_path)
+
+
+def plot_queue_wait(
+    *,
+    tau: list[int],
+    queue_wait_sec: list[float],
+    queue_len: list[float],
+    out_path: Path,
+    title: str,
+    sla_timeout_sec: float | None = None,
+    cold_start_until: int | None = None,
+    xlabel: str = "time_unit",
+) -> None:
+    """FCFS backlog in seconds of drain time. Under T_slo is a real wait, not a timeout."""
+    fig, (ax_w, ax_q) = plt.subplots(
+        2,
+        1,
+        figsize=(11, 7.5),
+        sharex=True,
+        gridspec_kw={"height_ratios": [2.0, 1.0]},
+    )
+    _draw_cold_start_span(ax_w, cold_start_until)
+    ax_w.plot(tau, queue_wait_sec, label="queue drain time", linewidth=1.8, color="#9467bd")
+    if sla_timeout_sec is not None and sla_timeout_sec > 0:
+        ax_w.axhline(
+            sla_timeout_sec,
+            color="#7f7f7f",
+            linestyle=":",
+            linewidth=1.2,
+            label=f"T_slo={sla_timeout_sec:g}s",
+        )
+    ax_w.set_ylabel("seconds")
+    ax_w.set_title(title)
+    ax_w.grid(True, alpha=0.3)
+    _legend(ax_w, ncol=2)
+    _ylim_from_zero(ax_w)
+
+    _draw_cold_start_span(ax_q, cold_start_until, legend=False)
+    ax_q.plot(tau, queue_len, label="queued requests", color="#8c564b", linewidth=1.8)
+    ax_q.set_xlabel(xlabel)
+    ax_q.set_ylabel("requests")
+    ax_q.grid(True, alpha=0.3)
+    _legend(ax_q)
+    _ylim_from_zero(ax_q)
     _save(fig, out_path)
 
 

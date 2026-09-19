@@ -4,7 +4,7 @@
 # v2: c3 (empty) — outside the home vicinity, so not a placement candidate
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/08-ladder-60tick/unmet_demand/
   seed: 42
 

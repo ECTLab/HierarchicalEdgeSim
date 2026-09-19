@@ -36,6 +36,7 @@ from .plots import (
     plot_replica_sites,
     plot_routing_split,
     plot_user_latency,
+    plot_queue_wait,
 )
 
 _MAX_REPLICA_RESOURCE_PLOTS = 8
@@ -119,10 +120,16 @@ def analyze_run(
             for c in ms_containers:
                 if not c.tau:
                     continue
-                residual = max(abs(i - (s + d)) for i, s, d in zip(c.incoming, c.served, c.dropped))
-                if residual > 1e-9:
+                q = c.queue_len if len(c.queue_len) == len(c.incoming) else [0.0] * len(c.incoming)
+                prev_q = 0.0
+                residual = 0.0
+                for i, s, d, qn in zip(c.incoming, c.served, c.dropped, q):
+                    residual = max(residual, abs((i + prev_q) - (s + d + qn)))
+                    prev_q = qn
+                if residual > 1e-6:
                     raise ValueError(
-                        f"{c.container_id}: incoming != served+dropped, max residual={residual}"
+                        f"{c.container_id}: incoming+queue != served+dropped+queue, "
+                        f"max residual={residual}"
                     )
 
             ref = trace_refs.get((app_id, ms_id))
@@ -202,6 +209,8 @@ def analyze_run(
             sim_cfg = (meta.get("config") or {}).get("sim") or {}
             if sim_cfg.get("sla_timeout_sec") is not None:
                 sla_timeout = float(sim_cfg["sla_timeout_sec"])
+            tick_sec = float(sim_cfg.get("tick_sec") or 0.0)
+            xlabel = "minute" if abs(tick_sec - 60.0) < 1e-9 else "time_unit"
             lat_name = "user_latency.png" if len(by_ms) == 1 else f"user_latency_{ms_id}.png"
             plot_user_latency(
                 tau=tau_trace,
@@ -211,9 +220,21 @@ def analyze_run(
                 p99_sec=mix_quantile_aligned(tau_trace, ms_containers, 0.99, sla_timeout),
                 sla_miss=sum_aligned(tau_trace, ms_containers, "sla_miss"),
                 out_path=app_out / lat_name,
-                title=f"{app_id}/{ms_id}: offered delay (timeouts included)",
+                title=f"{app_id}/{ms_id}: completed delay (timeouts excluded)",
                 sla_timeout_sec=sla_timeout,
                 cold_start_until=until,
+                xlabel=xlabel,
+            )
+            q_name = "queue_wait.png" if len(by_ms) == 1 else f"queue_wait_{ms_id}.png"
+            plot_queue_wait(
+                tau=tau_trace,
+                queue_wait_sec=_max_aligned(tau_trace, ms_containers, "t_wait_sec"),
+                queue_len=sum_aligned(tau_trace, ms_containers, "queue_len"),
+                out_path=app_out / q_name,
+                title=f"{app_id}/{ms_id}: FCFS queue (drain time vs SLO)",
+                sla_timeout_sec=sla_timeout,
+                cold_start_until=until,
+                xlabel=xlabel,
             )
             counts = replica_counts_by_site(
                 tau_trace, ms_containers, owner_cluster_id=owner, vmap=vmap
@@ -248,6 +269,17 @@ def analyze_run(
         )
 
     return summaries
+
+
+def _max_aligned(tau_full: list[int], containers: list, attr: str) -> list[float]:
+    out: list[float] = []
+    for t in tau_full:
+        vals = []
+        for c in containers:
+            by = dict(zip(c.tau, getattr(c, attr)))
+            vals.append(float(by.get(t, 0.0)))
+        out.append(max(vals) if vals else 0.0)
+    return out
 
 
 def _resource_plot_targets(containers: list) -> list:

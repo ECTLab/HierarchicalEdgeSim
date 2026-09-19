@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -805,6 +805,7 @@ class Env:
 
         freed_cpu = container.cpu_alloc_cores
         freed_ram = container.ram_alloc_mb
+        _timeout_backlog(container)
         removed = remove_container(self.world, container_id)
         self.retired_containers.append(removed)
         return TerminateResult(
@@ -1125,6 +1126,24 @@ class Env:
                 result_code=result.code.value,
             )
         )
+
+
+def _timeout_backlog(container: Container) -> None:
+    """Requests still queued on a killed replica cannot finish; they time out."""
+    leftover = float(container.backlog or 0.0)
+    if leftover <= EPS:
+        return
+    container.backlog = 0.0
+    if not container.history:
+        return
+    last = container.history[-1]
+    container.history[-1] = replace(
+        last,
+        lambda_dropped=last.lambda_dropped + leftover,
+        sla_miss_requests=last.sla_miss_requests + leftover,
+        queue_len=0.0,
+        t_wait_sec=0.0,
+    )
 
 
 def _parse_loan_tier(raw: str) -> LoanTier | None:

@@ -5,7 +5,7 @@
 # Total μ=200. Trace api_60_two.csv peaks at 286 so overload/drops appear.
 
 sim:
-  tick_sec: 1.0
+  tick_sec: 60.0  # one CSV row = one minute of requests
   results_dir: results/02-env-60tick/two_containers/
   seed: 42
 

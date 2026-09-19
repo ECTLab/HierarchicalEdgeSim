@@ -44,28 +44,25 @@ def test_engine_golden_table(tiny_config_path):
     run_ticks(world=world, traces=traces, world_spec=spec)
 
     c = world.containers["c-api-1"]
-    expected = [
-        # tau, lambda_in, lambda_served, lambda_dropped, cpu_usage_cores
-        (1, 0.0, 0.0, 0.0, 0.5),
-        (2, 25.0, 25.0, 0.0, 0.75),
-        (3, 80.0, 50.0, 30.0, 1.0),
-        (4, 120.0, 50.0, 70.0, 1.0),
-        (5, 50.0, 50.0, 0.0, 1.0),
-    ]
+    assert [r.lambda_in for r in c.history] == pytest.approx([0.0, 25.0, 80.0, 120.0, 50.0])
+    assert c.history_at(1).lambda_served == pytest.approx(0.0)
+    assert c.history_at(2).lambda_served == pytest.approx(25.0)
+    assert c.history_at(2).cpu_usage_cores == pytest.approx(0.75)
 
-    for tau, exp_in, exp_served, exp_dropped, exp_cpu_used in expected:
-        rec = c.history_at(tau)
-        assert rec.lambda_in == pytest.approx(exp_in)
-        assert rec.lambda_served == pytest.approx(exp_served)
-        assert rec.lambda_dropped == pytest.approx(exp_dropped)
-        assert rec.cpu_usage_cores == pytest.approx(exp_cpu_used)
-        if exp_in == 0.0:
-            assert rec.t_p99_offered_sec == pytest.approx(0.0)
-            assert rec.sla_miss_requests == pytest.approx(0.0)
-        elif exp_dropped > 0.0:
-            assert rec.t_p99_offered_sec == pytest.approx(1.0, abs=1e-4)
-            assert rec.sla_miss_requests < exp_in
-            assert rec.sla_miss_requests > exp_dropped
+    rec3 = c.history_at(3)
+    assert rec3.lambda_served == pytest.approx(50.0)
+    assert rec3.lambda_dropped == pytest.approx(0.0)
+    assert rec3.queue_len == pytest.approx(30.0)
+    assert rec3.t_wait_sec == pytest.approx(0.6)
+    assert rec3.t_p99_offered_sec < 1.0
+    assert rec3.cpu_usage_cores == pytest.approx(1.0)
+
+    prev_q = 0.0
+    for rec in c.history:
+        assert rec.lambda_served + rec.lambda_dropped + rec.queue_len == pytest.approx(
+            rec.lambda_in + prev_q
+        )
+        prev_q = rec.queue_len
 
 
 def test_engine_prefer_local_and_remote_t_net():
@@ -128,13 +125,16 @@ def test_engine_prefer_local_and_remote_t_net():
     assert home.lambda_in == pytest.approx(50.0)
     assert home.lambda_dropped == pytest.approx(0.0)
     assert home.t_net_sec == pytest.approx(0.0)
-    assert home.t_p99_offered_sec == pytest.approx(1.0, abs=1e-4)
-    assert home.sla_miss_requests < 50.0
+    assert home.queue_len == pytest.approx(0.0)
+    assert home.t_p99_offered_sec == pytest.approx(home.t_svc_sec)
+    assert home.sla_miss_requests == pytest.approx(0.0)
     assert loan.lambda_in == pytest.approx(350.0)
     assert loan.lambda_served == pytest.approx(250.0)
-    assert loan.lambda_dropped == pytest.approx(100.0)
+    assert loan.lambda_dropped == pytest.approx(0.0)
+    assert loan.queue_len == pytest.approx(100.0)
     assert loan.t_net_sec == pytest.approx(0.04)
-    assert loan.t_p99_offered_sec == pytest.approx(1.04)
+    assert loan.t_wait_sec == pytest.approx(100.0 / 250.0)
+    assert loan.t_p99_offered_sec < 1.04
 
 
 
@@ -223,7 +223,7 @@ def test_engine_multi_microservice_tick_independence():
     assert rec_a1.lambda_served == pytest.approx(40.0)
     assert rec_a1.lambda_dropped == pytest.approx(0.0)
     assert rec_a2.lambda_served == pytest.approx(50.0)
-    assert rec_a2.lambda_dropped == pytest.approx(50.0)
+    assert rec_a2.lambda_dropped + rec_a2.queue_len == pytest.approx(50.0)
 
     # svc-b: headroom = 3.0 - 1.0 = 2.0 -> mu = 2.0 / 0.02 = 100
     rec_b1 = world.containers["c-b"].history_at(1)
@@ -231,4 +231,4 @@ def test_engine_multi_microservice_tick_independence():
     assert rec_b1.lambda_served == pytest.approx(30.0)
     assert rec_b1.lambda_dropped == pytest.approx(0.0)
     assert rec_b2.lambda_served == pytest.approx(100.0)
-    assert rec_b2.lambda_dropped == pytest.approx(50.0)
+    assert rec_b2.lambda_dropped + rec_b2.queue_len == pytest.approx(50.0)

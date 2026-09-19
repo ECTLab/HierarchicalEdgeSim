@@ -1,9 +1,10 @@
 # Triangle ladder slices — four topologies, one trace
 
-**Status:** rerun 2026-09-19 after leftover μ floor (`min_mu_step` + M/M/1 p99 ≤ \(T_{\mathrm{slo}}/2\))  
+**Status:** reactive rerun 2026-09-19 after leftover μ floor; proactive counterparts 2026-09-19 (`10-triangle-proactive/`)  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
-**Scaler:** `use_near_saturation_up: true`, `theta_high: 0.80` (also the prefer-local routing cap)  
+**Reactive scaler:** `use_near_saturation_up: true`, `theta_high: 0.80` (also the prefer-local routing cap)  
+**Proactive scaler:** `proactive_auto_scaler` persistence (`feature_window=10`, `theta_target=0.60`); same ladder knobs; `sim.theta_route: 0.80`  
 **Related:** [32-tex-followups.md](./32-tex-followups.md), [08-reactive-local-params.md](./08-reactive-local-params.md), [18-mu-matched-cpu-ram-scale.md](./18-mu-matched-cpu-ram-scale.md), [17-surplus-down-resource-quantum-and-seed-log.md](./17-surplus-down-resource-quantum-and-seed-log.md), [16-s6-scale-down-reclaim.md](./16-s6-scale-down-reclaim.md)
 
 The original triangle demo (`16-demo_400_triangle.yaml`) is one topology: one
@@ -30,6 +31,8 @@ Action reasons are `vertical_*`, `horizontal_*`, `vicinity_*`, `unmet_demand`.
 | `18-demo_400_triangle_vicinity.yaml` | Packed VicinityRound | c1 filled; fat c2 (8.0) in v1; no c3 | `vicinity_spawn` / `vicinity_up` / `vicinity_terminate` on c2, `cpu_new>0.50` | `horizontal_spawn` |
 | `19-demo_400_triangle_skip_neighbor.yaml` | Floor skip → unmet | c1 filled; c2=0.4 (below min); fat c3 outside v1 | `unmet_demand`; no spawn on c2 or c3 | `vicinity_spawn` |
 | `16-demo_400_triangle.yaml` | Vicinity then unmet | c1 1.0 + c2 1.0 + unused c3 | one vicinity spawn **and** terminate; `unmet_demand` | spawn on c3 |
+
+Proactive twins (same worlds): `23` / `24` / `25` / `22`. Fat vicinity may log a few one-tick `unmet_demand` leftovers from a large PredictAndDecide residual; drops stay zero.
 
 Every slice: reclaim to **one** live replica in cluster `c1`, last alloc `> cpu_min`, leftover RAM near `ram_min + μ · ρ_ram` (not `ram_max`), no UP after the last extra terminate. Packed extras spawn above the floor (`cpu_new>0.50`) with RAM matched to that μ, not `α_up · seed RAM`.
 
@@ -68,6 +71,8 @@ PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/19-demo_400_trian
 PYTHONPATH=src python3 examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml
 ```
 
+Proactive counterparts (same worlds, persistence, `sim.theta_route: 0.80`): `23` / `24` / `25` / `22`. Outputs: `results/10-triangle-proactive/<slice>/`.
+
 Plots (needs matplotlib on `PYTHONPATH`):
 
 ```bash
@@ -75,8 +80,9 @@ python3 examples/compare_trace_vs_log.py <run_dir>
 ```
 
 Look at `analysis/demo_app/ladder_qos.png`, `replicas_by_site.png`, and
-`user_latency.png`. Long `unmet_demand` windows are drawn as a span, not one
-vertical line per tick.
+`user_latency.png`. Proactive runs also write `forecast_vs_actual.png` (trace
+vs t+1 / t+H hats; grey band is cold start with no forecast). Long
+`unmet_demand` windows are drawn as a span, not one vertical line per tick.
 
 Alibaba regression (same one-cluster world, not a VicinityRound test):
 `configs/12-demo_alibaba_reactive_local.yaml`.
@@ -144,10 +150,32 @@ Skip-neighbor logs `unmet_demand` from τ=3 through τ=296 and never places on c
 
 ---
 
+## Proactive recorded runs (seed 42, 2026-09-19T184228Z–T184248Z)
+
+Same four topologies and trace; scaler is `proactive_auto_scaler` with **persistence** (`feature_window=10`, `forecast_horizon=3`, `theta_target=0.60`). Ladder knobs match the reactive slices (`cascade_home: false`, `use_near_saturation_up: true`, `theta_high: 0.80`, leftover μ floor). Routing cap is `sim.theta_route: 0.80` because proactive has no top-level `theta_high`. Cold start is reactive streaks until τ=10; first extra is still **τ=3**.
+
+Configs: `23` horizontal, `24` fat vicinity, `25` skip, `22` vicinity then unmet. Outputs under `results/10-triangle-proactive/`.
+
+| Slice | Run dir | Drop | SLA miss | Extra spawn | Extra terminate | Leftover |
+|---|---|---|---|---|---|---|
+| Horizontal | `results/10-triangle-proactive/horizontal/42_20260919T184228Z` | 0 / 0.00% | 0.11% | 6× `horizontal_spawn` on `c1-w2` | peel then next-tick `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-5` on `c1-w2` |
+| Vicinity | `results/10-triangle-proactive/vicinity/42_20260919T184237Z` | 0 / 0.00% | 0.00% | 4× `vicinity_spawn` on `c2-w1` | 4× `vicinity_down` / `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Skip → unmet | `results/10-triangle-proactive/skip_neighbor/42_20260919T184244Z` | 17,806 / 53.29% | 78.42% | none | none | `c-api-0` on `c1-w1` |
+| Vicinity then unmet | `results/10-triangle-proactive/vicinity_then_unmet/42_20260919T184248Z` | 6,743 / 20.18% | 53.25% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+
+Skip / vicinity-then-unmet drop and SLA match reactive: those slices are capacity-bound (seed μ=50, or seed+one loan μ=100). Horizontal and fat vicinity cover the climb with **zero drops**. Quiet hold is again **0.75 / 268.50** (μ=25, p99=0.23 s).
+
+`theta_target=0.60` asks for more serving μ than reactive `theta_high=0.80`, so horizontal packed **six** extras (two in one window at τ=147) instead of four. Fat vicinity still stops at four loans once measured \(q\) sits between \(\theta_{\mathrm{target}}\) and \(\theta_{\mathrm{up}}\). Three one-tick `unmet_demand` logs on fat vicinity (τ=58, 96, 147) are leftover residual after that window’s packed spawn; the next window continues and **no request drops**. Horizontal logs three `need_vicinity_help` on the same ticks (no \(V\) to send them to).
+
+Peak \(\tau=200\) demand-weighted mean / p95 / p99: **0.12 / 0.35 / 0.52 s** (horizontal) and **0.09 / 0.27 / 0.41 s** (vicinity).
+
+---
+
 ## Document history
 
 | Version | Date | Note |
 |---|---|---|
+| v12 | 2026-09-19 | Proactive persistence counterparts (`22`–`25`); `10-triangle-proactive/` (`42_20260919T184228Z`–`T184248Z`) |
 | v11 | 2026-09-19 | Leftover μ floor (`min_mu_step` + p99 ≤ \(T_{\mathrm{slo}}/2\)); hold p99 1.5 s → 0.23 s (`42_20260919T170902Z`–`T170919Z`) |
 | v10 | 2026-09-19 | Prefer-local util cap + `theta_high=0.80`; vicinity SLA 25% → 0.09% (`42_20260919T162711Z`–`T162728Z`) |
 | v9 | 2026-09-18 | Next-tick floor-kill on local extras (`42_20260918T191645Z`–`T191647Z`); vicinity/skip/unmet unchanged |

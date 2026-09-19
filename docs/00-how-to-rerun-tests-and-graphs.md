@@ -256,7 +256,7 @@ RUN_DIR=$(.venv/bin/python examples/run_env_only.py configs/04-demo_60_two_clust
 
 ## 6) Reactive ladder figures (before S7)
 
-`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; vertical/horizontal/vicinity/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest.
+`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; vertical/horizontal/vicinity/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest. Proactive runs also write **forecast_vs_actual.png** (trace vs t+1 / t+H hats; TCN still also writes `tcn_forecast.png`).
 
 ### Ladder smoke configs
 
@@ -280,6 +280,16 @@ do not prove surplus reclaim. For that, use the four 400-tick triangle slices
 .venv/bin/python examples/run_with_autoscaler.py configs/18-demo_400_triangle_vicinity.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/19-demo_400_triangle_skip_neighbor.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml
+# then: python examples/compare_trace_vs_log.py <RUN_DIR>
+```
+
+Same four topologies with `proactive_auto_scaler` (persistence; `sim.theta_route: 0.80`). Results land under `results/10-triangle-proactive/`:
+
+```bash
+.venv/bin/python examples/run_with_autoscaler.py configs/23-demo_400_triangle_horizontal_proactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/24-demo_400_triangle_vicinity_proactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/25-demo_400_triangle_skip_neighbor_proactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/22-demo_400_triangle_proactive.yaml
 # then: python examples/compare_trace_vs_log.py <RUN_DIR>
 ```
 

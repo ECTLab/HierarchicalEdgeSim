@@ -46,6 +46,8 @@ Same folder also has the individual panels:
 | `serve_capacity.png` | Incoming vs serve μ. Drops when incoming is above the μ line |
 | `cpu_needed_vs_provided.png` | Oracle CPU to serve all, 60% target (sweet spot), CPU each scaler gave |
 | `tcn_forecast.png` | Incoming vs TCN t+1 / t+5 (hats start after lookback) |
+
+Per-run `compare_trace_vs_log.py` also writes `analysis/demo_app/forecast_vs_actual.png` (same overlay; persistence demos use that name only).
 | `dropped.png` | Reactive vs TCN dropped requests |
 | `replicas.png` | Live replica count |
 

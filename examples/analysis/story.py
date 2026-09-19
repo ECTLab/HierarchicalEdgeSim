@@ -141,6 +141,8 @@ def write_story_plots(
                 out_path=directory / "tcn_forecast.png",
                 title="Incoming vs TCN t+1 and t+5 (hats start after lookback)",
                 cold_start_until=cold_start_until,
+                step1_label="TCN t+1",
+                horizon_label="TCN t+5",
             )
         plot_story_overview(
             tau=tau,

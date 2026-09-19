@@ -54,6 +54,10 @@ def test_demo_config_loads_scaler(project_root: Path):
         "17-demo_400_triangle_horizontal.yaml",
         "18-demo_400_triangle_vicinity.yaml",
         "19-demo_400_triangle_skip_neighbor.yaml",
+        "22-demo_400_triangle_proactive.yaml",
+        "23-demo_400_triangle_horizontal_proactive.yaml",
+        "24-demo_400_triangle_vicinity_proactive.yaml",
+        "25-demo_400_triangle_skip_neighbor_proactive.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
@@ -279,6 +283,77 @@ def test_triangle_vicinity_never_leaves_group(tmp_path, project_root: Path):
 
 def test_triangle_floor_neighbor_logs_unmet_not_outside_spawn(tmp_path, project_root: Path):
     env = _run_triangle(project_root, tmp_path, "19-demo_400_triangle_skip_neighbor.yaml", "skip")
+    live = env.list_containers()
+    assert len(live) == 1
+    leftover = env.get_container(live[0])
+    assert env.get_server(leftover.server_id).cluster_id == "c1"
+    assert leftover.cpu_alloc_cores > 0.5
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "vicinity_spawn" not in reasons
+    assert "horizontal_spawn" not in reasons
+    assert not any("c3-w1" in (r.container_id or "") for r in env.action_log if r.result_code == "OK")
+    assert any(
+        r.action_type == "unmet_demand" and r.result_code == "LOGGED" for r in env.action_log
+    )
+
+
+def test_triangle_proactive_reclaims_to_one_local_without_chatter(tmp_path, project_root: Path):
+    env = _run_triangle(project_root, tmp_path, "22-demo_400_triangle_proactive.yaml", "triangle_p")
+    _assert_triangle_hold(env)
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "vicinity_spawn" in reasons
+    assert "vicinity_terminate" in reasons
+    assert "horizontal_terminate" not in reasons
+    remote_spawns = [
+        r
+        for r in env.action_log
+        if r.result_code == "OK" and r.reason == "vicinity_spawn"
+    ]
+    assert remote_spawns
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in remote_spawns)
+    assert not any("c3-w1" in (r.container_id or "") for r in remote_spawns)
+    assert any(row.action_type == "unmet_demand" for row in env.action_log)
+
+
+def test_triangle_proactive_horizontal_stays_in_cluster(tmp_path, project_root: Path):
+    env = _run_triangle(
+        project_root, tmp_path, "23-demo_400_triangle_horizontal_proactive.yaml", "horizontal_p"
+    )
+    _assert_triangle_hold(env, expect_seed=False)
+    leftover = env.get_container(env.list_containers()[0])
+    assert leftover.server_id == "c1-w2"
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "horizontal_spawn" in reasons
+    assert "horizontal_terminate" in reasons
+    assert "vicinity_spawn" not in reasons
+    assert "vicinity_terminate" not in reasons
+    extras = [r for r in env.action_log if r.reason == "horizontal_spawn" and r.result_code == "OK"]
+    assert extras
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in extras)
+    assert all("c1-w2" in (r.container_id or "") for r in extras)
+
+
+def test_triangle_proactive_vicinity_never_leaves_group(tmp_path, project_root: Path):
+    env = _run_triangle(
+        project_root, tmp_path, "24-demo_400_triangle_vicinity_proactive.yaml", "vic_p"
+    )
+    _assert_triangle_hold(env)
+    reasons = {row.reason for row in env.action_log if row.result_code == "OK"}
+    assert "vicinity_spawn" in reasons
+    assert "vicinity_terminate" in reasons
+    assert "horizontal_spawn" not in reasons
+    assert "horizontal_terminate" not in reasons
+    spawns = [r for r in env.action_log if r.reason == "vicinity_spawn" and r.result_code == "OK"]
+    assert all(r.cpu_new is not None and r.cpu_new > 0.5 for r in spawns)
+    assert all("c2-w1" in (r.container_id or "") for r in spawns)
+
+
+def test_triangle_proactive_floor_neighbor_logs_unmet_not_outside_spawn(
+    tmp_path, project_root: Path
+):
+    env = _run_triangle(
+        project_root, tmp_path, "25-demo_400_triangle_skip_neighbor_proactive.yaml", "skip_p"
+    )
     live = env.list_containers()
     assert len(live) == 1
     leftover = env.get_container(live[0])

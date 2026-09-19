@@ -129,7 +129,7 @@ def test_cold_start_until_tau_from_meta():
                 }
             }
         )
-        is None
+        == 10
     )
     assert (
         cold_start_until_tau(
@@ -247,6 +247,69 @@ def test_analyze_run_emits_ladder_plots(tmp_path: Path):
     assert (out / "trace_vs_log_requests.png").is_file()
     assert (out / "ladder_qos.png").is_file()
     assert (out / "replicas_by_site.png").is_file()
+    assert not (out / "forecast_vs_actual.png").is_file()
+
+
+def test_persistence_hats_lag_the_trace():
+    import math
+
+    from analysis.forecast_hats import compute_forecast_hats, compute_tcn_hats
+
+    meta = {
+        "autoscaler": {
+            "name": "proactive_auto_scaler",
+            "params": {
+                "predictor": "persistence",
+                "feature_window": 3,
+                "forecast_horizon": 2,
+            },
+        },
+        "config": {"sim": {"tick_sec": 1.0}},
+    }
+    tau = [1, 2, 3, 4, 5]
+    incoming = [10.0, 20.0, 30.0, 40.0, 50.0]
+    hats = compute_forecast_hats(meta, tau, incoming)
+    assert hats is not None
+    assert hats.predictor == "persistence"
+    assert hats.horizon == 2
+    assert hats.lookback == 3
+    assert compute_tcn_hats(meta, tau, incoming) is None
+    assert math.isnan(hats.step1[0])
+    assert math.isnan(hats.step1[1])
+    assert math.isnan(hats.step1[2])
+    assert hats.step1[3] == 30.0
+    assert hats.step1[4] == 40.0
+    assert hats.step_h[4] == 40.0
+
+
+def test_maybe_plot_forecast_writes_persistence_png(tmp_path: Path):
+    pytest.importorskip("matplotlib")
+    from analysis.report import _maybe_plot_forecast
+
+    meta = {
+        "autoscaler": {
+            "name": "proactive_auto_scaler",
+            "params": {
+                "predictor": "persistence",
+                "feature_window": 3,
+                "forecast_horizon": 2,
+            },
+        },
+        "config": {"sim": {"tick_sec": 1.0}},
+    }
+    tau = list(range(1, 8))
+    incoming = [float(t * 10) for t in tau]
+    out = tmp_path / "forecast_vs_actual.png"
+    _maybe_plot_forecast(
+        meta=meta,
+        tau=tau,
+        incoming=incoming,
+        out_path=out,
+        title="demo/api: trace vs forecast",
+        cold_start_until=3,
+    )
+    assert out.is_file()
+    assert out.stat().st_size > 0
 
 
 class _KillSpawned:

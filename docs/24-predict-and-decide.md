@@ -247,7 +247,7 @@ autoscaler:
 
 `actions.csv`: 2× `bev_up`, 13× `beh_spawn`, 8× `beh_terminate`, 2× `need_vicinity_help` (plus seed). All local on **c1**. Packed spawn sizes sit above `cpu_min` (e.g. 0.79, not 0.50). Two help log lines after the home cluster filled (no `World.root`). No `vicinity_spawn` / `beg_spawn`. Incoming 8228, served 7899.8, dropped 328.2. Conservation held.
 
-Compared with `demo_60_reactive_local` on the same trace: more local spawns, fewer drops. That is decide + the shared ladder, not a second cycle.
+Compared with `demo_60_reactive_local` on the same trace: more local spawns, fewer drops. That is decide + the shared ladder, not a second cycle. `compare_trace_vs_log.py` writes `forecast_vs_actual.png` (trace vs persistence t+1 / t+H; grey band is τ≤W).
 
 Alibaba TCN was not re-run on this pass (no torch in the mapping environment). That demo is the other predictor behind the same `predict_and_decide`.
 

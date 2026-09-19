@@ -74,7 +74,7 @@ def _draw_cold_start_span(
         color=_COLD_START_FACE,
         alpha=0.22,
         zorder=0,
-        label=f"no TCN (τ≤{until})" if legend else None,
+        label=f"no forecast (τ≤{until})" if legend else None,
     )
 
 
@@ -96,7 +96,7 @@ def _annotate_drop_rates(
         after_i = float(sum(v for t, v in zip(tau, incoming) if t > until))
         after_d = float(sum(v for t, v in zip(tau, dropped) if t > until))
         after_pct = (100.0 * after_d / after_i) if after_i else 0.0
-        lines.append(f"after TCN on (τ≥{until + 1}): {after_pct:.2f}%")
+        lines.append(f"after forecast on (τ≥{until + 1}): {after_pct:.2f}%")
     ax.text(
         0.99,
         0.97,
@@ -414,12 +414,14 @@ def plot_forecast_vs_actual(
     out_path: Path,
     title: str,
     cold_start_until: int | None = None,
+    step1_label: str = "t+1 hat",
+    horizon_label: str = "t+H hat",
 ) -> None:
     fig, ax = plt.subplots(figsize=(11, 5))
     _draw_cold_start_span(ax, cold_start_until)
-    ax.plot(tau, actual_counts, label="observed incoming", color="#222222", linewidth=2.0)
-    ax.plot(tau, pred_step1, label="TCN t+1", color="#1f77b4", linewidth=1.6)
-    ax.plot(tau, pred_horizon, label="TCN t+5", color="#ff7f0e", linewidth=1.4, linestyle="--")
+    ax.plot(tau, actual_counts, label="trace", color="#222222", linewidth=2.0)
+    ax.plot(tau, pred_step1, label=step1_label, color="#1f77b4", linewidth=1.6)
+    ax.plot(tau, pred_horizon, label=horizon_label, color="#ff7f0e", linewidth=1.4, linestyle="--")
     ax.set_xlabel("time_unit")
     ax.set_ylabel("requests")
     ax.set_title(title)
@@ -482,7 +484,7 @@ def plot_baseline_comparison(
             [i + width / 2 for i in x],
             after,
             width=width,
-            label=f"dropped τ≥{w + 1}" if w else "dropped (after TCN on)",
+            label=f"dropped τ≥{w + 1}" if w else "dropped (after forecast on)",
             color="#d62728",
         )
     else:

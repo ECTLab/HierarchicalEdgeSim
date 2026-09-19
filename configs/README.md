@@ -5,7 +5,7 @@ Files are numbered by when the scenario **first appeared**. **Higher number = la
 
 | If you want… | Open |
 |---|---|
-| Current triangle (post paper-match) | `16`–`19` |
+| Current triangle (post paper-match) | `16`–`19` reactive, `22`–`25` proactive |
 | Alibaba MS_588 | `12` reactive, `13` TCN |
 | Alibaba MS_150 | `14` reactive, `15` TCN |
 | 60-tick ladder smokes | `08`–`11` |
@@ -42,6 +42,10 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 19 | `19-demo_400_triangle_skip_neighbor.yaml` | Triangle: floor skip → unmet |
 | 20 | `20-demo_partition.yaml` | Algorithm 1 from coords |
 | 21 | `21-demo_partition_latency.yaml` | Algorithm 1 from RTT matrix |
+| 22 | `22-demo_400_triangle_proactive.yaml` | Triangle 16, persistence |
+| 23 | `23-demo_400_triangle_horizontal_proactive.yaml` | Triangle 17, persistence |
+| 24 | `24-demo_400_triangle_vicinity_proactive.yaml` | Triangle 18, persistence |
+| 25 | `25-demo_400_triangle_skip_neighbor_proactive.yaml` | Triangle 19, persistence |
 
 ---
 
@@ -49,13 +53,14 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Proactive:** 11, 13, 15
+- **Proactive:** 11, 13, 15, **22–25**
 - **Alibaba:** 12–15
-- **Current triangle:** **16–19**
+- **Current triangle:** **16–19** reactive, **22–25** proactive
 
-A new scenario gets the next number (`22-…`). Do not renumber existing files when you edit them.
+A new scenario gets the next number (`26-…`). Do not renumber existing files when you edit them.
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/22-demo_400_triangle_proactive.yaml
 .venv/bin/python examples/compare_trace_vs_log.py "$RUN_DIR"
 ```

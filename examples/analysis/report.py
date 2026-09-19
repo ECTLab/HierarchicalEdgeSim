@@ -175,14 +175,14 @@ def analyze_run(
                 out_path=app_out / split_name,
                 title=f"{app_id}/{ms_id}: incoming by replica",
             )
-            _maybe_plot_tcn_forecast(
+            _maybe_plot_forecast(
                 meta=meta,
                 tau=tau_trace,
                 incoming=incoming,
                 out_path=app_out / (
-                    "tcn_forecast.png" if len(by_ms) == 1 else f"tcn_forecast_{ms_id}.png"
+                    "forecast_vs_actual.png" if len(by_ms) == 1 else f"forecast_vs_actual_{ms_id}.png"
                 ),
-                title=f"{app_id}/{ms_id}: TCN vs observed incoming",
+                title=f"{app_id}/{ms_id}: trace vs forecast",
                 cold_start_until=until,
             )
 
@@ -259,7 +259,7 @@ def _resource_plot_targets(containers: list) -> list:
     return ranked[:_MAX_REPLICA_RESOURCE_PLOTS]
 
 
-def _maybe_plot_tcn_forecast(
+def _maybe_plot_forecast(
     *,
     meta: dict,
     tau: list[int],
@@ -268,18 +268,41 @@ def _maybe_plot_tcn_forecast(
     title: str,
     cold_start_until: int | None = None,
 ) -> None:
-    from .tcn_hats import compute_tcn_hats
+    from .forecast_hats import compute_forecast_hats
 
-    hats = compute_tcn_hats(meta, tau, incoming)
+    hats = compute_forecast_hats(meta, tau, incoming)
     if hats is None:
         return
-    step1, step_h = hats
+    if hats.predictor == "tcn_delta":
+        step1_label = "TCN t+1"
+        horizon_label = f"TCN t+{hats.horizon}"
+        pretty = "TCN"
+    else:
+        step1_label = f"{hats.predictor} t+1"
+        horizon_label = f"{hats.predictor} t+{hats.horizon}"
+        pretty = hats.predictor
     plot_forecast_vs_actual(
         tau=tau,
         actual_counts=incoming,
-        pred_step1=step1,
-        pred_horizon=step_h,
+        pred_step1=hats.step1,
+        pred_horizon=hats.step_h,
         out_path=out_path,
-        title=title,
+        title=f"{title} ({pretty})",
         cold_start_until=cold_start_until,
+        step1_label=step1_label,
+        horizon_label=horizon_label,
     )
+    if hats.predictor == "tcn_delta":
+        tcn_path = out_path.with_name(out_path.name.replace("forecast_vs_actual", "tcn_forecast", 1))
+        if tcn_path != out_path:
+            plot_forecast_vs_actual(
+                tau=tau,
+                actual_counts=incoming,
+                pred_step1=hats.step1,
+                pred_horizon=hats.step_h,
+                out_path=tcn_path,
+                title=f"{title} ({pretty})",
+                cold_start_until=cold_start_until,
+                step1_label=step1_label,
+                horizon_label=horizon_label,
+            )

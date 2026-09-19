@@ -74,7 +74,7 @@ def compare_runs(
         totals=totals,
         out_path=out_path,
         title=(
-            f"Reactive baseline comparison (grey = no TCN, τ≤{until})"
+            f"Reactive baseline comparison (grey = no forecast, τ≤{until})"
             if until is not None
             else "Reactive baseline comparison"
         ),

@@ -8,8 +8,11 @@ This file is the map. Run data itself is gitignored.
 
 | If you want… | Open |
 |---|---|
-| **Latest** triangle (leftover μ floor, 19 Sep 2026) | `09-triangle-post-match/` |
-| QoS plots for that campaign | `09-triangle-post-match/<slice>/42_20260919T1709*/analysis/demo_app/ladder_qos.png` |
+| **Latest** reactive triangle (leftover μ floor, 19 Sep 2026) | `09-triangle-post-match/` |
+| **Latest** proactive triangle (persistence, 19 Sep 2026) | `10-triangle-proactive/` |
+| QoS plots (reactive) | `09-triangle-post-match/<slice>/42_20260919T1709*/analysis/demo_app/ladder_qos.png` |
+| QoS plots (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/ladder_qos.png` |
+| Forecast vs trace (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/forecast_vs_actual.png` |
 | Alibaba MS_588 | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
@@ -30,9 +33,10 @@ This file is the map. Run data itself is gitignored.
 | 06 | `06-triangle-beg-era/` | Aug 18–20 | Triangle with the **old global rung** |
 | 07 | `07-partition/` | Aug 26 | Algorithm 1 coords vs latency |
 | 08 | `08-ladder-60tick/` | Aug 15–27 | 60-tick ladder smokes (local / vicinity / proactive) |
-| 09 | `09-triangle-post-match/` | **Sep 17–19** | **Current** four triangle slices |
+| 09 | `09-triangle-post-match/` | **Sep 17–19** | Four triangle slices, `reactive_local` |
+| 10 | `10-triangle-proactive/` | **Sep 19** | Same four slices, `proactive_auto_scaler` (persistence) |
 
-### 09 — current triangle (look here first)
+### 09 — current triangle, reactive (look here first)
 
 | Slice | Config | Latest run |
 |---|---|---|
@@ -43,6 +47,19 @@ This file is the map. Run data itself is gitignored.
 
 Plots: `<run>/analysis/demo_app/ladder_qos.png` and `user_latency.png`.
 
+### 10 — same triangle, proactive
+
+Same topologies and trace as 09. Persistence front-end (`feature_window=10`), `sim.theta_route: 0.80`, ladder `cascade_home: false` / `use_near_saturation_up: true`.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| HorizontalScaling | `23-demo_400_triangle_horizontal_proactive.yaml` | `horizontal/42_20260919T184228Z` |
+| Fat vicinity | `24-demo_400_triangle_vicinity_proactive.yaml` | `vicinity/42_20260919T184237Z` |
+| Floor neighbor | `25-demo_400_triangle_skip_neighbor_proactive.yaml` | `skip_neighbor/42_20260919T184244Z` |
+| Vicinity then unmet | `22-demo_400_triangle_proactive.yaml` | `vicinity_then_unmet/42_20260919T184248Z` |
+
+Plots: `<run>/analysis/demo_app/ladder_qos.png`, `user_latency.png`, and `forecast_vs_actual.png` (trace vs persistence t+1 / t+3).
+
 ---
 
 ## Where a new run goes
@@ -50,6 +67,6 @@ Plots: `<run>/analysis/demo_app/ladder_qos.png` and `user_latency.png`.
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-The next unused campaign number is **10** (for example
-`results/10-alibaba-post-match/` when you re-run Alibaba after the paper match).
+The next unused campaign number is **11** (for example
+`results/11-alibaba-post-match/` when you re-run Alibaba after the paper match).
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

@@ -444,6 +444,18 @@ def test_yaml_loads_proactive(tmp_path: Path, project_root: Path):
     _ = tmp_path
 
 
+def test_yaml_loads_triangle_proactive(project_root: Path):
+    scaler = load_autoscaler_from_yaml(
+        project_root / "configs" / "22-demo_400_triangle_proactive.yaml"
+    )
+    assert scaler is not None
+    assert scaler.name == "proactive_auto_scaler"
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.ladder.cascade_home is False
+    assert scaler.params.ladder.use_near_saturation_up is True
+    assert scaler.params.ladder.theta_high == pytest.approx(0.80)
+
+
 def test_yaml_loads_alibaba_tcn(project_root: Path):
     pytest.importorskip("torch")
     scaler = load_autoscaler_from_yaml(project_root / "configs" / "13-demo_alibaba_proactive.yaml")

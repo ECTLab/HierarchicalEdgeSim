@@ -114,18 +114,15 @@ def load_run_meta(run_dir: Path) -> dict:
 
 
 def cold_start_until_tau(meta: dict) -> int | None:
-    """Last tick with no applied TCN decision (history length ``W``).
+    """Last tick with no applied forecast decision (history length ``W``).
 
-    Option A TCN only emits hats once ``feature_window`` samples exist. That
-    first decision is at τ=W and applies at τ=W+1, so drops on τ=1…W are
-    reactive cold-start, not PredictAndDecide. Persistence smokes are unchanged.
+    Hats exist once ``feature_window`` samples are in the buffer. The first
+    PredictAndDecide apply is at τ=W+1, so τ=1…W is reactive cold-start.
     """
     scaler = meta.get("autoscaler") or {}
     if scaler.get("name") != "proactive_auto_scaler":
         return None
     params = scaler.get("params") or {}
-    if params.get("predictor") != "tcn_delta":
-        return None
     window = int(params.get("feature_window") or 0)
     return window if window >= 1 else None
 

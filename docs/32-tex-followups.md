@@ -42,7 +42,7 @@ These are the cases where the simulator is the operational method.
 
 5. **Prefer-local util cap (not fill-to-μ).** Paper prefer-local fills home to \(\mu\), then leftover to loans. With M/M/1 that forces \(\rho=1\) on the home replica as soon as \(\Lambda\ge\mu_{\mathrm{home}}\), so sojourn hits \(T_{\mathrm{slo}}\) while borrowed replicas sit idle. Code: fill home to \(\theta_{\mathrm{route}}\cdot\mu\); spill to loans up to full remote \(\mu\); use the remaining home band only if loans are already full (no extra drops). \(\theta_{\mathrm{route}}\) is scaler `theta_high` when `reactive_local` / `reactive_vertical` is attached, else `sim.theta_route` (default \(1\) = old fill-to-\(\mu\)). Same-cluster fleets still split by \(\mu\)/headroom with no cap. Absorb into the tex prefer-local listing.
 
-6. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\Lambda/(1-\theta_{\mathrm{free}})\), never kill the last replica, peel the extra we would reclaim before terminating it, and do not vertical-shrink keepers in the same tick as a terminate.
+6. **Last-replica and surplus-down.** Paper terminate/shrink walks until residual \(\ge 0\), with no last-replica rule. Code: \(\mu_{\mathrm{tgt}}=\max(\Lambda/(1-\theta_{\mathrm{free}}), \min\mu_{\mathrm{step}}, \Lambda + c_{\mathrm{p99}})\), never kill the last replica, peel the extra we would reclaim before terminating it, and do not vertical-shrink keepers in the same tick as a terminate. The extra \(c_{\mathrm{p99}}\) keeps M/M/1 p99 sojourn \(\le T_{\mathrm{slo}}/2\) so a quiet leftover (Λ=5) does not sit at μ=8 and miss the SLA on variance.
 
 7. **Floor extras are fully releasable.** Paper ScheduleReleases terminates only when \(L\) covers a whole instance. A minima replica has \(\mu=0\), so the sim still terminates it when \(L>0\) even if \(L\) is smaller than the instance. Otherwise a leftover loan at the floor would sit forever while local headroom was the only surplus.
 
@@ -64,6 +64,7 @@ None of the remaining canvas “update the sim” rows. Leader heartbeat failove
 
 | Date | Note |
 |---|---|
+| 2026-09-19 | Leftover \(\mu_{\mathrm{tgt}}\) also floors at `min_mu_step` and M/M/1 p99 \(\le T_{\mathrm{slo}}/2\) (quiet-hold SLA miss). |
 | 2026-09-19 | Prefer-local util cap: home to \(\theta_{\mathrm{high}}\cdot\mu\), then loans, then leftover home band. Paper still fill-to-\(\mu\). |
 | 2026-09-18 | Local extras: peel the extra we would reclaim before terminate; do not shrink keepers in the same tick as a terminate. |
 | 2026-09-18 | Prefer-local routing and analytic offered delay (\(T_{\mathrm{net}}\) + M/M/1, drop as \(T_{\mathrm{slo}}\)). Absorbed into `proposed_method_complete.tex`. |

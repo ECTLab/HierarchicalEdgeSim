@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Protocol
 
-from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
+from hierarchical_edge_sim.env.config import DEFAULT_SLA_TIMEOUT_SEC, EPS, MicroserviceSpec
+
+# M/M/1 sojourn is Exp(μ−λ). P99 wait = this times 1/(μ−λ).
+_LN_P99 = -math.log(0.01)
 
 
 class UpDeltaParams(Protocol):
+    min_mu_step: float
+
+
+class TargetMuParams(Protocol):
+    theta_free: float
     min_mu_step: float
 
 
@@ -29,6 +38,31 @@ def remain_to_mu(remain_cpu: float, remain_ram: float, spec: MicroserviceSpec) -
     if not mus:
         return 0.0
     return min(mus)
+
+
+def target_mu(obs: dict[str, Any], params: TargetMuParams) -> float:
+    """Surplus-down serving-μ hold.
+
+    Relative slack ``Λ / (1 − θ_free)`` is not enough on a tiny leftover: M/M/1
+    p99 wait is ``−ln(0.01) / (μ − Λ)`` (req/tick at tick_sec=1). At Λ=5 and
+    θ_free=0.35 that is μ≈7.7, p99≈1.5 s, which misses a 1 s SLA even though
+    utilization is only 62%. Floor leftover μ at:
+
+    * one ``min_mu_step`` (a leftover replica is a real serving quantum), and
+    * enough absolute headroom that M/M/1 p99 sojourn is at most ``T_slo / 2``.
+    """
+    load = max(0.0, float(obs.get("Lambda") or 0.0))
+    q_tgt = min(max(1.0 - float(params.theta_free), EPS), 1.0)
+    mu_util = load / q_tgt
+    if load <= EPS:
+        return mu_util
+    mu_step = max(0.0, float(params.min_mu_step))
+    tick = float(obs.get("tick_sec") or 1.0)
+    sla = float(obs.get("sla_timeout_sec") or DEFAULT_SLA_TIMEOUT_SEC)
+    mu_slo = 0.0
+    if sla > EPS and tick > 0.0:
+        mu_slo = load + _LN_P99 * tick / (0.5 * sla)
+    return max(mu_util, mu_step, mu_slo)
 
 
 def up_delta(obs: dict[str, Any], params: UpDeltaParams) -> tuple[float, float]:

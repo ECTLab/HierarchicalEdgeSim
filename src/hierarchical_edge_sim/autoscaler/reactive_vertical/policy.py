@@ -8,7 +8,7 @@ from typing import Any
 from hierarchical_edge_sim.env.api import Env, NeedHorizontalAction, ResizeAction, ResizeResult
 from hierarchical_edge_sim.env.config import EPS
 
-from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
+from hierarchical_edge_sim.autoscaler.common.mu_scale import target_mu, up_delta
 
 from .distribute import ReplicaView, distribute_down, distribute_up
 from .params import ReactiveVerticalParams, validate_params
@@ -184,6 +184,8 @@ def _aggregate_ms(env: Env, ms_id: str, tau: int, params: ReactiveVerticalParams
         "sum_ram_alloc": sum(r.ram_alloc for r in replicas),
         "sum_h_cpu": sum_h_cpu,
         "spec": spec,
+        "tick_sec": float(env.world_spec.sim.tick_sec),
+        "sla_timeout_sec": float(env.world_spec.sim.sla_timeout_sec),
     }
 
 
@@ -211,9 +213,7 @@ def _intent_to_actions(env: Env, ms_id: str, tau: int, intent: str, obs: dict, p
         )
 
     # DOWN: full surplus toward μ_tgt (no α_down rate cap).
-    load = float(obs.get("Lambda") or 0.0)
-    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
-    mu_tgt = load / q_tgt
+    mu_tgt = target_mu(obs, params)
     rho_cpu = spec.cpu_per_request_cores
     rho_ram = spec.ram_per_request_mb
     ram_modeled = rho_ram > EPS

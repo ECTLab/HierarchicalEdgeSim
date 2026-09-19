@@ -1,6 +1,6 @@
 # Triangle ladder slices — four topologies, one trace
 
-**Status:** rerun 2026-09-19 after prefer-local util cap (`theta_high=0.80`)  
+**Status:** rerun 2026-09-19 after leftover μ floor (`min_mu_step` + M/M/1 p99 ≤ \(T_{\mathrm{slo}}/2\))  
 **Trace:** `traces/demo/api_400_triangle.csv` (Λ 40 → 180 by τ=200, 180 → 5 by τ=320, hold at 5)  
 **Physics:** `cpu_min=0.5`, `cpu_max=1.0` ⇒ μ_max = 50 req/tick; peak 180 needs four full replicas  
 **Scaler:** `use_near_saturation_up: true`, `theta_high: 0.80` (also the prefer-local routing cap)  
@@ -83,26 +83,26 @@ Alibaba regression (same one-cluster world, not a VicinityRound test):
 
 ---
 
-## Recorded runs (seed 42, 2026-09-19T162711Z–T162728Z)
+## Recorded runs (seed 42, 2026-09-19T170902Z–T170919Z)
 
 Trace conservation holds on every slice: **33,412 incoming = served + dropped**.
-Near-saturation up (`theta_high=0.80`) plus prefer-local **util cap** (home to \(0.80\mu\), leftover to loans, leftover home band only if loans are full). Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**. Surplus hold leaves **0.58 cores / 259.85 MB**. First extra (or first `unmet_demand`) is **τ=3** because start Λ=40 already sits on \(\theta_{\mathrm{high}}\) of the seed (μ=50).
+Near-saturation up (`theta_high=0.80`) plus prefer-local **util cap** (home to \(0.80\mu\), leftover to loans, leftover home band only if loans are full). Packed extras spawn at **0.75 / 268.5** and fill to **1.00 / 281**. Surplus hold now leaves **0.75 cores / 268.50 MB** (μ=25 = `min_mu_step`): relative \(\theta_{\mathrm{free}}\) alone would have parked leftover at μ≈8, where M/M/1 p99 is ~1.5 s. First extra (or first `unmet_demand`) is **τ=3** because start Λ=40 already sits on \(\theta_{\mathrm{high}}\) of the seed (μ=50).
 
 Configs 16 / 18 / 19 set `latency_ms`: c1–c2 **5 ms**, c1–c3 **40 ms**,
 c2–c3 **38 ms**. Horizontal (config 17) is one cluster, so \(T_{\mathrm{net}}=0\).
 
 | Slice | Run dir | Drop | SLA miss | Extra spawn | Extra terminate | Leftover |
 |---|---|---|---|---|---|---|
-| Horizontal | `results/09-triangle-post-match/horizontal/42_20260919T162711Z` | 4 / 0.01% | 0.58% | 4× `horizontal_spawn` on `c1-w2` | peel then next-tick `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
-| Vicinity | `results/09-triangle-post-match/vicinity/42_20260919T162718Z` | 0 / 0.00% | 0.09% | 4× `vicinity_spawn` on `c2-w1` | 4× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
-| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260919T162724Z` | 17,806 / 53.29% | 78.50% | none | none | `c-api-0` on `c1-w1` |
-| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260919T162728Z` | 6,743 / 20.18% | 53.33% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Horizontal | `results/09-triangle-post-match/horizontal/42_20260919T170902Z` | 4 / 0.01% | 0.51% | 4× `horizontal_spawn` on `c1-w2` | peel then next-tick `horizontal_terminate` (includes seed `c-api-0`) | `c-api-c1-w2-3` on `c1-w2` |
+| Vicinity | `results/09-triangle-post-match/vicinity/42_20260919T170909Z` | 0 / 0.00% | 0.02% | 4× `vicinity_spawn` on `c2-w1` | 4× `vicinity_down` then `vicinity_terminate` | `c-api-0` on `c1-w1` |
+| Skip → unmet | `results/09-triangle-post-match/skip_neighbor/42_20260919T170915Z` | 17,806 / 53.29% | 78.42% | none | none | `c-api-0` on `c1-w1` |
+| Vicinity then unmet | `results/09-triangle-post-match/vicinity_then_unmet/42_20260919T170919Z` | 6,743 / 20.18% | 53.25% | 1× `vicinity_spawn` on `c2` | 1× `vicinity_down` + `vicinity_terminate` | `c-api-0` on `c1-w1` |
 
-Compare to greedy fill-to-μ with the same scaler (`42_20260919T1608*`): drops unchanged; fat-vicinity SLA miss **25.21% → 0.09%**. At τ=16 (Λ=51, home μ=50, one packed loan) home now gets **40** and the loan **11** (was 50 / 1). Drop-only fill-to-μ from 18 Sep is `42_20260918T1916*` (28 drops, vicinity SLA 31.02%).
+Compare to greedy fill-to-μ with the same scaler (`42_20260919T1608*`): drops unchanged; fat-vicinity SLA miss **25.21% → 0.02%**. Quiet-hold SLA miss on that vicinity run was ~6.5% (μ=8 leftover); it is now **0%** (μ=25, p99=0.23 s). At τ=16 (Λ=51, home μ=50, one packed loan) home gets **40** and the loan **11** (was 50 / 1). Drop-only fill-to-μ from 18 Sep is `42_20260918T1916*` (28 drops, vicinity SLA 31.02%).
 
 UTC stamps in folder names will not match another machine. Prefer the latest `{seed}_{UTC}` dir under `results/09-triangle-post-match/`. August 2026 global-rung runs live under `results/06-triangle-beg-era/`; do not quote those numbers as current.
 
-Drop is overflow (did not fit). SLA miss is overflow **plus** served-but-slower-than \(T_{\mathrm{slo}}=1\,\mathrm{s}\). Horizontal is one pool (no prefer-local split), so the util cap does not apply; remaining 0.58% SLA is the early extra-spawn wobble. Fat vicinity now keeps home at \(\rho=0.80\) while loans have room: at peak \(\tau=200\), demand-weighted mean / p95 / p99 is **0.08 / 0.22 / 0.34 s** (horizontal) and **0.12 / 0.34 / 0.52 s** (vicinity, including 5 ms \(T_{\mathrm{net}}\)). Skip / unmet SLA miss is still mostly the drops. Vicinity-then-unmet improves only while the one loan has spare μ; after that both replicas run full and leftover is unmet.
+Drop is overflow (did not fit). SLA miss is overflow **plus** served-but-slower-than \(T_{\mathrm{slo}}=1\,\mathrm{s}\). Horizontal is one pool (no prefer-local split), so the util cap does not apply; remaining 0.51% SLA is the early extra-spawn wobble. Fat vicinity now keeps home at \(\rho=0.80\) while loans have room: at peak \(\tau=200\), demand-weighted mean / p95 / p99 is **0.08 / 0.22 / 0.34 s** (horizontal) and **0.12 / 0.34 / 0.52 s** (vicinity, including 5 ms \(T_{\mathrm{net}}\)). Skip / unmet SLA miss is still mostly the drops. Vicinity-then-unmet improves only while the one loan has spare μ; after that both replicas run full and leftover is unmet.
 
 Peak leftover at τ=200: **0** req/tick when five replicas cover 180 at 80% (horizontal / fat vicinity), **80** when two fit (180−100), **130** when only the seed fits (180−50). Horizontal’s 4 drops are the `x_up_streak` / apply-next-tick lag, not a capacity miss.
 
@@ -123,8 +123,7 @@ Horizontal extras after next-tick floor-kill (fourth extra dies first; leftover 
 299  resize     c-api-c1-w2-2   vertical_down     0.72 → 0.55
 307  resize     c-api-c1-w2-2   vertical_down     0.55 → 0.50
 308  terminate  c-api-c1-w2-2   horizontal_terminate
-316  resize     c-api-c1-w2-3   vertical_down     1.00 → 0.67
-324  resize     c-api-c1-w2-3   vertical_down     0.67 → 0.58   leftover hold
+316  resize     c-api-c1-w2-3   vertical_down     1.00 → 0.75   leftover hold
 ```
 
 Vicinity extras after ScheduleReleases (four loans; shrink, then kill):
@@ -138,7 +137,7 @@ Vicinity extras after ScheduleReleases (four loans; shrink, then kill):
 299  terminate  c-api-c2-w1-3  vicinity_terminate
 307  resize     c-api-c2-w1-4  vicinity_down
 315  terminate  c-api-c2-w1-4  vicinity_terminate
-323  resize     c-api-0        vertical_down      leftover hold
+323  resize     c-api-0        vertical_down      1.00 → 0.75   leftover hold
 ```
 
 Skip-neighbor logs `unmet_demand` from τ=3 through τ=296 and never places on c2 or c3.
@@ -149,6 +148,7 @@ Skip-neighbor logs `unmet_demand` from τ=3 through τ=296 and never places on c
 
 | Version | Date | Note |
 |---|---|---|
+| v11 | 2026-09-19 | Leftover μ floor (`min_mu_step` + p99 ≤ \(T_{\mathrm{slo}}/2\)); hold p99 1.5 s → 0.23 s (`42_20260919T170902Z`–`T170919Z`) |
 | v10 | 2026-09-19 | Prefer-local util cap + `theta_high=0.80`; vicinity SLA 25% → 0.09% (`42_20260919T162711Z`–`T162728Z`) |
 | v9 | 2026-09-18 | Next-tick floor-kill on local extras (`42_20260918T191645Z`–`T191647Z`); vicinity/skip/unmet unchanged |
 | v8 | 2026-09-18 | Rerun after `min_mu_step`; identical to v7 (`42_20260918T184024Z` / `T184025Z`) |

@@ -25,7 +25,7 @@ from hierarchical_edge_sim.autoscaler.common.distribute import (
     replica_mu,
     strip_need_horizontal,
 )
-from hierarchical_edge_sim.autoscaler.common.mu_scale import up_delta
+from hierarchical_edge_sim.autoscaler.common.mu_scale import target_mu, up_delta
 from hierarchical_edge_sim.env.api import Env, TerminateAction
 from hierarchical_edge_sim.env.config import EPS, MicroserviceSpec
 
@@ -133,6 +133,8 @@ def aggregate_ms(env: Env, ms_id: str, tau: int) -> dict:
         "sum_h_cpu": sum_h_cpu,
         "sum_h_ram": sum_h_ram,
         "spec": spec,
+        "tick_sec": float(env.world_spec.sim.tick_sec),
+        "sla_timeout_sec": float(env.world_spec.sim.sla_timeout_sec),
     }
 
 
@@ -166,9 +168,7 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     ram_modeled = spec.ram_per_request_mb > EPS
     rho_cpu = spec.cpu_per_request_cores
     rho_ram = spec.ram_per_request_mb
-    load = float(obs.get("Lambda") or 0.0)
-    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
-    mu_tgt = load / q_tgt
+    mu_tgt = target_mu(obs, params)
     n_replicas = len(obs.get("replicas") or [])
     h_cpu_tgt = mu_tgt * rho_cpu if rho_cpu > EPS else 0.0
     h_ram_tgt = mu_tgt * rho_ram if ram_modeled and rho_ram > EPS else 0.0
@@ -179,12 +179,6 @@ def down_delta(obs: dict, params: ReactiveLocalParams) -> tuple[float, float]:
     if delta_cpu > EPS or delta_ram > EPS:
         return delta_cpu, delta_ram
     return 0.0, 0.0
-
-
-def target_mu(obs: dict, params: ReactiveLocalParams) -> float:
-    load = float(obs.get("Lambda") or 0.0)
-    q_tgt = min(max(1.0 - params.theta_free, EPS), 1.0)
-    return load / q_tgt
 
 
 def ladder_up(

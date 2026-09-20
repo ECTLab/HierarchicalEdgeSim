@@ -6,6 +6,8 @@ Files are numbered by when the scenario **first appeared**. **Higher number = la
 | If you want… | Open |
 |---|---|
 | Current triangle (post paper-match) | `16`–`19` reactive, `22`–`25` proactive |
+| Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence |
+| Alibaba 8-MS vicinity (campaign 14) | `31` reactive, `32` persistence |
 | Alibaba MS_588 eval (campaign 11) | `26`–`30` |
 | Alibaba MS_588 (original S7 pair) | `12` reactive, `13` TCN |
 | Alibaba MS_150 | `14` reactive, `15` TCN |
@@ -52,6 +54,10 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 28 | `28-demo_alibaba_ms588_horizontal_tcn.yaml` | MS_588 4×8, TCN |
 | 29 | `29-demo_alibaba_ms588_vicinity_reactive.yaml` | MS_588 home+fat neighbor, reactive |
 | 30 | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | MS_588 home+fat neighbor, TCN |
+| 31 | `31-demo_alibaba_8ms_vicinity_reactive.yaml` | Eight Alibaba MS, 32+32 vicinity, reactive (campaign 14) |
+| 32 | `32-demo_alibaba_8ms_vicinity_persistence.yaml` | Same world, persistence (campaign 14) |
+| 33 | `33-demo_alibaba_2ms_vicinity_reactive.yaml` | MS_588 + MS_150, 16+32 vicinity, reactive (campaign 12) |
+| 34 | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | Same world, persistence (campaign 12) |
 
 ---
 
@@ -59,11 +65,11 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**
-- **Alibaba:** 12–15, **26–30**
+- **Alibaba:** 12–15, **26–34**
+- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **32**, **34**
 - **Current triangle:** **16–19** reactive, **22–25** proactive
 
-A new scenario gets the next number (`31-…`). Do not renumber existing files when you edit them.
+A new scenario gets the next number (`35-…`). Do not renumber existing files when you edit them.
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml

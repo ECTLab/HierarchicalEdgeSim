@@ -73,3 +73,5 @@ The previous TCN on this campaign (RF=7, `time_tick/720`, `42_20260920T070750Z` 
 August S7 on this world was reactive **15.44%** / TCN **7.48%**. Do not mix those folder names with campaign 11.
 
 Vicinity TCN `unmet_demand` lines are leftover residual after a home-only window, not a capacity miss.
+
+The first multi-MS follow-up is campaign 12 (MS_588 + MS_150): [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md).

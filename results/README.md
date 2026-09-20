@@ -13,7 +13,9 @@ This file is the map. Run data itself is gitignored.
 | QoS plots (reactive) | `09-triangle-post-match/<slice>/42_20260919T1709*/analysis/demo_app/ladder_qos.png` |
 | QoS plots (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/ladder_qos.png` |
 | Forecast vs trace (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/forecast_vs_actual.png` |
+| **Latest** 2-MS Alibaba vicinity (Sep 2026) | `12-alibaba-2ms-eval/` |
 | **Latest** MS_588 eval (Sep 2026) | `11-alibaba-ms588-eval/` |
+| **Latest** 8-MS Alibaba vicinity (Sep 2026) | `14-alibaba-8ms-eval/` |
 | Alibaba MS_588 (original S7 pair) | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
@@ -37,6 +39,9 @@ This file is the map. Run data itself is gitignored.
 | 09 | `09-triangle-post-match/` | **Sep 17–19** | Four triangle slices, `reactive_local` |
 | 10 | `10-triangle-proactive/` | **Sep 19** | Same four slices, `proactive_auto_scaler` (persistence) |
 | 11 | `11-alibaba-ms588-eval/` | **Sep 20** | MS_588 horizontal vs vicinity (reactive / persistence / TCN) |
+| 12 | `12-alibaba-2ms-eval/` | **Sep 20** | MS_588 + MS_150, 16+32 vicinity, reactive vs persistence |
+| 13 | *(reserved)* | — | 3–4 Alibaba MS; not built until campaign 12 looks right |
+| 14 | `14-alibaba-8ms-eval/` | **Sep 20** | Eight Alibaba MS, 32+32 vicinity, reactive vs persistence |
 
 ### 09 — current triangle, reactive (look here first)
 
@@ -76,6 +81,28 @@ Same 721-minute trace. Horizontal is the original 4×8 cluster. Vicinity splits 
 
 What the numbers mean: [../docs/33-alibaba-ms588-eval.md](../docs/33-alibaba-ms588-eval.md).
 
+### 12 — two Alibaba MS, vicinity
+
+Same physics as 11. Home 2×8, neighbor 4×8. MS_588 hourly needle + MS_150 always-on hog. Persistence vs reactive; no TCN.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| Vicinity reactive | `33-demo_alibaba_2ms_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T134640Z` |
+| Vicinity persistence | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | `vicinity_persistence/42_20260920T134642Z` |
+
+What the numbers mean: [../docs/35-alibaba-2ms-eval.md](../docs/35-alibaba-2ms-eval.md).
+
+### 14 — eight Alibaba MS, vicinity
+
+Same physics as 11. Home 4×8, neighbor 4×8. Persistence vs reactive; no TCN. This is the eight-way mix, not the next step after campaign 11.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| Vicinity reactive | `31-demo_alibaba_8ms_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T132205Z` |
+| Vicinity persistence | `32-demo_alibaba_8ms_vicinity_persistence.yaml` | `vicinity_persistence/42_20260920T132210Z` |
+
+What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-eval.md).
+
 ---
 
 ## Where a new run goes
@@ -83,5 +110,6 @@ What the numbers mean: [../docs/33-alibaba-ms588-eval.md](../docs/33-alibaba-ms5
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-The next unused campaign number is **12**.
+Campaign **13** is reserved for 3–4 Alibaba MS. Do not skip it. The next
+unused number for a different family is **15**.
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

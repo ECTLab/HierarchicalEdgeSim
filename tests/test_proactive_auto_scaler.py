@@ -490,6 +490,100 @@ def test_yaml_loads_ms588_eval_tcn(project_root: Path):
         assert scaler.params.model_dir == "models/tcn_delta_v1"
 
 
+def test_yaml_loads_alibaba_8ms_eval(project_root: Path):
+    import yaml
+
+    reactive_path = project_root / "configs" / "31-demo_alibaba_8ms_vicinity_reactive.yaml"
+    reactive = load_autoscaler_from_yaml(reactive_path)
+    assert reactive is not None
+    assert reactive.name == "reactive_local"
+    assert reactive.params.cascade_home is True
+    assert reactive.params.theta_high == pytest.approx(0.80)
+    reactive_cfg = yaml.safe_load(reactive_path.read_text())
+    assert "14-alibaba-8ms-eval" in reactive_cfg["sim"]["results_dir"]
+
+    persist_path = project_root / "configs" / "32-demo_alibaba_8ms_vicinity_persistence.yaml"
+    scaler = load_autoscaler_from_yaml(persist_path)
+    assert scaler is not None
+    assert scaler.name == "proactive_auto_scaler"
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.feature_window == 60
+    assert scaler.params.forecast_horizon == 5
+    assert scaler.params.cooldown_C == 5
+    assert scaler.params.ladder.cascade_home is True
+    assert scaler.params.ladder.theta_high == pytest.approx(0.80)
+    persist_cfg = yaml.safe_load(persist_path.read_text())
+    assert "14-alibaba-8ms-eval" in persist_cfg["sim"]["results_dir"]
+
+
+def test_alibaba_8ms_world_stamps_home_and_eight_traces(project_root: Path):
+    from hierarchical_edge_sim.env.api import Env
+
+    env = Env.from_config(project_root / "configs" / "32-demo_alibaba_8ms_vicinity_persistence.yaml")
+    ms_ids = sorted(env.list_microservices())
+    assert ms_ids == ["ms133", "ms150", "ms205", "ms215", "ms460", "ms588", "ms693", "ms859"]
+    assert env.get_app_owner_cluster_id("ms588") == "c1"
+    assert env.vicinity_of("c1") == "v1"
+    assert set(env.get_vicinity("v1").member_cluster_ids) == {"c1", "c2"}
+    traces = {
+        ms.id: ms.trace_file
+        for app in env.world_spec.apps
+        for ms in app.microservices
+    }
+    assert traces["ms588"] == "MS_588.csv"
+    assert traces["ms215"] == "MS_215.csv"
+    assert (project_root / "traces" / "alibaba" / "MS_215.csv").is_file()
+
+
+def test_yaml_loads_alibaba_2ms_eval(project_root: Path):
+    import yaml
+
+    reactive_path = project_root / "configs" / "33-demo_alibaba_2ms_vicinity_reactive.yaml"
+    reactive = load_autoscaler_from_yaml(reactive_path)
+    assert reactive is not None
+    assert reactive.name == "reactive_local"
+    assert reactive.params.cascade_home is True
+    assert reactive.params.theta_high == pytest.approx(0.80)
+    reactive_cfg = yaml.safe_load(reactive_path.read_text())
+    assert "12-alibaba-2ms-eval" in reactive_cfg["sim"]["results_dir"]
+
+    persist_path = project_root / "configs" / "34-demo_alibaba_2ms_vicinity_persistence.yaml"
+    scaler = load_autoscaler_from_yaml(persist_path)
+    assert scaler is not None
+    assert scaler.name == "proactive_auto_scaler"
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.feature_window == 60
+    assert scaler.params.forecast_horizon == 5
+    assert scaler.params.cooldown_C == 5
+    assert scaler.params.ladder.cascade_home is True
+    assert scaler.params.ladder.theta_high == pytest.approx(0.80)
+    persist_cfg = yaml.safe_load(persist_path.read_text())
+    assert "12-alibaba-2ms-eval" in persist_cfg["sim"]["results_dir"]
+
+
+def test_alibaba_2ms_world_stamps_home_and_two_traces(project_root: Path):
+    from hierarchical_edge_sim.env.api import Env
+
+    env = Env.from_config(project_root / "configs" / "34-demo_alibaba_2ms_vicinity_persistence.yaml")
+    ms_ids = sorted(env.list_microservices())
+    assert ms_ids == ["ms150", "ms588"]
+    assert env.get_app_owner_cluster_id("ms588") == "c1"
+    assert env.get_app_owner_cluster_id("ms150") == "c1"
+    assert env.vicinity_of("c1") == "v1"
+    assert set(env.get_vicinity("v1").member_cluster_ids) == {"c1", "c2"}
+    assert len(env.get_cluster("c1").server_ids) == 2
+    assert len(env.get_cluster("c2").server_ids) == 4
+    traces = {
+        ms.id: ms.trace_file
+        for app in env.world_spec.apps
+        for ms in app.microservices
+    }
+    assert traces["ms588"] == "MS_588.csv"
+    assert traces["ms150"] == "MS_150.csv"
+    assert (project_root / "traces" / "alibaba" / "MS_588.csv").is_file()
+    assert (project_root / "traces" / "alibaba" / "MS_150.csv").is_file()
+
+
 def test_yaml_loads_alibaba_ms150_tcn(project_root: Path):
     pytest.importorskip("torch")
     from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.tcn import (

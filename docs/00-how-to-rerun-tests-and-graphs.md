@@ -141,6 +141,32 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 # then compare_trace_vs_log.py on each run dir
 ```
 
+### B9) Alibaba two-MS vicinity (campaign 12)
+
+Same campaign-11 physics, MS_588 + MS_150 on one app, 16-core home + 32-core
+neighbor. Persistence (no TCN). Details:
+[35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md).
+
+```bash
+export PYTHONPATH="$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/33-demo_alibaba_2ms_vicinity_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/34-demo_alibaba_2ms_vicinity_persistence.yaml
+```
+
+### B10) Alibaba eight-MS vicinity (campaign 14)
+
+Same physics, eight traces, 32-core home + 32-core neighbor. Persistence
+(no TCN). Do this after campaigns 12 and 13, not as the next step after 11.
+Details: [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md).
+
+```bash
+export PYTHONPATH="$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/31-demo_alibaba_8ms_vicinity_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/32-demo_alibaba_8ms_vicinity_persistence.yaml
+```
+
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
 
 Same 4×8-core cluster, same initial `2.0 / 1024`. MS_150 still loads the original

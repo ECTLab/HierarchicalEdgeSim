@@ -1,7 +1,9 @@
 # Alibaba MS_588 — Option A TCN vs reactive
 
 721 one-minute ticks from Alibaba cluster-trace-microservices-v2021. Same world
-(4×8 cores, `tick_sec=60`). TCN is 60×2 → 5-step delta (`models/tcn_delta_v1`).
+(4×8 cores, `tick_sec=60`). The August numbers below used the original sequential
+60×2 TCN (`time_tick/720`, RF=7). Campaign 11 now loads a residual 60×3 cyclic-minute
+net from the same `models/tcn_delta_v1/` path — see [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md).
 
 The first S7 integration run dropped **69%** under TCN vs **15%** under
 `reactive_local`. That was a control-path mismatch with the usage model, not a
@@ -71,8 +73,9 @@ The drop rates in the current-pair table should match a fresh §B6 run. The
 
 | Artifact | Role |
 |---|---|
-| `models/tcn_delta_v1/tcn_delta_weights.pth` | Global TCN weights (~30 KB) |
-| `models/tcn_delta_v1/meta.json` | 60×2 → 5, time/720, MS_588 min=932 max=29778 |
+| `models/tcn_delta_v1/tcn_delta_weights.pth` | Residual TCN weights (~187 KB; RF=63, cyclic minute) |
+| `models/tcn_delta_v1/meta.json` | 60×3 → 5, `style=residual_tcn`, MS_588 min=932 max=29778 |
+| `models/tcn_delta_v1_ms150/` | Original sequential 60×2 weights; MS_150 min–max only |
 | `traces/alibaba/MS_588.csv` | 721 rows, `time_unit=time_tick+1`, `requests=total_requests` |
 
 The 47 MB full CSV and processed npy tensors stayed in `alibaba-trace`.

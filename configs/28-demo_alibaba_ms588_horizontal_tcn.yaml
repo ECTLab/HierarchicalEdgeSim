@@ -1,4 +1,4 @@
-# Same 4×8-core MS_588 world as 26, Option A TCN (models/tcn_delta_v1).
+# Same 4×8-core MS_588 world as 26, residual Option A TCN (models/tcn_delta_v1).
 # Paper predictor vs reactive (26) and persistence (27). Knobs match 13
 # (sustained_steps 99 keeps BEV-first; cooldown_C=5 is HPA 5 min down).
 

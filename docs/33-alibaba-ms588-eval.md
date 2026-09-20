@@ -50,22 +50,26 @@ done
 
 Plots: `<run>/analysis/demo_app/ladder_qos.png`, `user_latency.png`, `replicas_by_site.png`. Proactive also `forecast_vs_actual.png`. Overlay: `analysis/story/overview.png`.
 
-## Recorded runs (seed 42, 2026-09-20T070746Z–T070755Z)
+## Recorded runs (seed 42)
 
-Incoming **3,385,510** on every slice (conservation holds). Leftover μ floor is in the shared ladder, so quiet-end keepers sit above `cpu_min` (reactive 1.28 cores; TCN ~1.7).
+Incoming **3,385,510** on every slice (conservation holds). Leftover μ floor is in the shared ladder, so quiet-end keepers sit above `cpu_min` (reactive 1.28 cores; TCN ~2.2–2.5 — asymmetric loss still over-predicts valleys).
+
+TCN weights are the residual net in `models/tcn_delta_v1/` (RF=63, cyclic minute-of-hour, MS_588-only). Replay on this trace: t+1 MAE 1449 vs persistence 1343, but corr(actual)=**0.868** vs corr(lag-1)=0.559, and every hourly onset hat is ~27k (last-value ~4k).
 
 | Slice | Run dir | Drop | After τ≥61 | SLA miss | Peak live | Extra spawn | Leftover |
 |---|---|---|---|---|---|---|---|
 | Horizontal reactive | `horizontal_reactive/42_20260920T070746Z` | 489,422 / **14.46%** | — | 21.03% | 2 at τ=384 | 2× `horizontal_spawn` on `c1-w1` | `c-api-1` 1.28 / 294.86 |
 | Horizontal persistence | `horizontal_persistence/42_20260920T070747Z` | 244,909 / **7.23%** | 6.67% | 9.34% | 7 at τ=382 | 47× `horizontal_spawn` (`c1-w1/w2/w3`) | `c-api-c1-w3-9` 1.73 / 317.30 |
-| Horizontal TCN | `horizontal_tcn/42_20260920T070750Z` | 182,918 / **5.40%** | **4.66%** | 7.37% | 7 at τ=82 | 47× `horizontal_spawn` | `c-api-c1-w3-9` 1.73 / 317.30 |
+| Horizontal TCN | `horizontal_tcn/42_20260920T103619Z` | 39,097 / **1.15%** | **0.00%** | 1.76% | 8 at τ=257 | 61× `horizontal_spawn` (`c1-w1/w2/w3`) | `c-api-c1-w3-5` 2.49 / 355.63 |
 | Vicinity reactive | `vicinity_reactive/42_20260920T070751Z` | 489,422 / **14.46%** | — | 21.03% | 2 at τ=384 | 2× `horizontal_spawn` on home; **no** `vicinity_spawn` | `c-api-1` 1.28 / 294.86 |
-| Vicinity TCN | `vicinity_tcn/42_20260920T070755Z` | 181,332 / **5.36%** | **4.61%** | 7.37% | 7 at τ=82 | 3× home `horizontal_spawn` + **39× `vicinity_spawn` on c2** | `c-api-c1-w1-3` 1.68 / 314.80 |
+| Vicinity TCN | `vicinity_tcn/42_20260920T103632Z` | 39,097 / **1.15%** | **0.00%** | 1.77% | 8 at τ=135 | 6× home `horizontal_spawn` + **41× `vicinity_spawn` on c2** | `c-api-c1-w1-6` 2.20 / 340.91 |
 
-Paths are under `results/11-alibaba-ms588-eval/`. Overlay: `horizontal_tcn/…/analysis/story/overview.png` and `vicinity_tcn/…/analysis/story/overview.png`. Forecast: `forecast_vs_actual.png` on the three proactive dirs.
+Paths are under `results/11-alibaba-ms588-eval/`. Overlay: `horizontal_reactive/…/analysis/story/overview.png` (horizontal three-way) and `vicinity_tcn/…/analysis/story/overview.png`. Forecast: `forecast_vs_actual.png` on the three proactive dirs.
 
-**What this shows.** Reactive never uses the extra 24 cores: two local extras, same 14.46% whether the pool is one cluster or a vicinity. Persistence already halves drops (7.23%) with last-value hats. TCN is best (5.40% / 5.36%) and hits peak replica count at τ=82, one minute after the trace peak (τ=81). Vicinity TCN is the rung check: loans on `c2`, then 39× `vicinity_terminate` in the valleys; QoS matches in-cluster TCN because the 32-core pool is the same.
+**What this shows.** Reactive never uses the extra 24 cores: two local extras, same 14.46% whether the pool is one cluster or a vicinity. Persistence already halves drops (7.23%) with last-value hats, but it still *follows* the spike. TCN now *leads* it: live≥5 from τ=75, six minutes before the τ=81 peak, so every post-warmup drop is **0**. The remaining 1.15% / ~1.76% SLA miss is the cold-start hour (including the τ≈21 spike with no hats). Vicinity TCN is the rung check: 41 loans on `c2` and 41× `vicinity_terminate` in the valleys; QoS matches in-cluster TCN because the 32-core pool is the same.
 
-August S7 on this world was reactive **15.44%** / TCN **7.48%**. This HEAD is a bit lower (leftover μ floor + current allocate). Do not mix those folder names with campaign 11.
+The previous TCN on this campaign (RF=7, `time_tick/720`, `42_20260920T070750Z` / `T070755Z`) was 5.40% / 5.36% with 4.66% still dropping after τ=61 — hats echoed the valley (~7k vs 24–30k). Do not mix that folder with the rows above.
 
-Vicinity reactive logging one `unmet_demand` is leftover residual after a home-only window, not a capacity miss.
+August S7 on this world was reactive **15.44%** / TCN **7.48%**. Do not mix those folder names with campaign 11.
+
+Vicinity TCN `unmet_demand` lines are leftover residual after a home-only window, not a capacity miss.

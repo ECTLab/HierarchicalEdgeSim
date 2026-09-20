@@ -1,4 +1,8 @@
-"""Option A TCN: 60×2 (normalized load, time/720) → 5-step delta → absolute RPS."""
+"""Option A TCN: lookback × features → H-step delta → absolute RPS.
+
+Architecture and time encoding come from ``meta.json`` so v1 (linear time,
+2-layer stack) and v2 (cyclic minute, residual TCN) can coexist.
+"""
 
 from __future__ import annotations
 
@@ -25,9 +29,66 @@ def _build_tcn_module(
     num_channels: list[int],
     kernel_size: int,
     output_size: int,
+    style: str = "sequential",
+    dropout: float = 0.0,
 ) -> Any:
-    """Same dilated-causal stack as alibaba-trace ``train_tcn.TCNPredictor``."""
+    """Match alibaba-trace ``train_tcn.TCNPredictor`` for the given style."""
     import torch.nn as nn
+
+    if style == "residual_tcn":
+
+        class Chomp1d(nn.Module):
+            def __init__(self, chomp_size: int) -> None:
+                super().__init__()
+                self.chomp_size = int(chomp_size)
+
+            def forward(self, x):
+                if self.chomp_size <= 0:
+                    return x
+                return x[:, :, : -self.chomp_size].contiguous()
+
+        class TemporalBlock(nn.Module):
+            def __init__(
+                self,
+                n_inputs: int,
+                n_outputs: int,
+                ksize: int,
+                dilation: int,
+                drop: float,
+            ) -> None:
+                super().__init__()
+                padding = (ksize - 1) * dilation
+                self.net = nn.Sequential(
+                    nn.Conv1d(n_inputs, n_outputs, ksize, padding=padding, dilation=dilation),
+                    Chomp1d(padding),
+                    nn.ReLU(),
+                    nn.Dropout(drop),
+                )
+                self.downsample = nn.Conv1d(n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
+                self.relu = nn.ReLU()
+
+            def forward(self, x):
+                out = self.net(x)
+                res = x if self.downsample is None else self.downsample(x)
+                return self.relu(out + res)
+
+        class ResidualTCN(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                blocks: list[nn.Module] = []
+                for i, out_ch in enumerate(num_channels):
+                    in_ch = input_size if i == 0 else num_channels[i - 1]
+                    blocks.append(
+                        TemporalBlock(in_ch, out_ch, kernel_size, dilation=2**i, drop=dropout)
+                    )
+                self.network = nn.Sequential(*blocks)
+                self.fc = nn.Linear(num_channels[-1], output_size)
+
+            def forward(self, x):
+                out = self.network(x.transpose(1, 2))
+                return self.fc(out[:, :, -1])
+
+        return ResidualTCN()
 
     class TCNPredictor(nn.Module):
         def __init__(self) -> None:
@@ -61,7 +122,7 @@ def _build_tcn_module(
 
 
 class TcnDeltaPredictor:
-    """Load ``models/tcn_delta_v1`` and emit H absolute RPS values."""
+    """Load a ``models/tcn_delta_*`` directory and emit H absolute RPS values."""
 
     def __init__(self, meta: dict[str, Any], weights_path: Path) -> None:
         import torch
@@ -69,7 +130,9 @@ class TcnDeltaPredictor:
         self.meta = dict(meta)
         self.lookback = int(meta["lookback"])
         self.forecast_horizon = int(meta["horizon"])
-        self.time_scale = float(meta["time_scale"])
+        self.time_scale = float(meta.get("time_scale") or 720.0)
+        self.time_encoding = str(meta.get("time_encoding") or "linear")
+        self.time_period = int(meta.get("time_period") or self.time_scale or 60)
         self.tick_sec = float(meta["tick_sec"])
         self.load_min = float(meta["load_min"])
         self.load_max = float(meta["load_max"])
@@ -79,6 +142,8 @@ class TcnDeltaPredictor:
             num_channels=list(arch.get("num_channels") or [32, 64]),
             kernel_size=int(arch.get("kernel_size", 3)),
             output_size=int(arch.get("output_size", self.forecast_horizon)),
+            style=str(arch.get("style") or "sequential"),
+            dropout=float(arch.get("dropout") or 0.0),
         )
         module.load_state_dict(_load_state_dict(weights_path))
         module.eval()
@@ -124,6 +189,8 @@ class TcnDeltaPredictor:
             load_min=self.load_min,
             load_max=self.load_max,
             time_scale=self.time_scale,
+            time_encoding=self.time_encoding,
+            time_period=self.time_period,
         )
         x = self._torch.tensor([window], dtype=self._torch.float32)
         with self._torch.no_grad():

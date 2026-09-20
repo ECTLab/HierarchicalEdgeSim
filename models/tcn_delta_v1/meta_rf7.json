@@ -1,0 +1,30 @@
+{
+  "name": "tcn_delta_v1",
+  "source": "alibaba-trace/data/tcn_delta_weights.pth + final_normalized_dataset.csv",
+  "msname": "MS_588",
+  "lookback": 60,
+  "horizon": 5,
+  "input_size": 2,
+  "time_scale": 720.0,
+  "tick_sec": 60.0,
+  "load_min": 932.0,
+  "load_max": 29778.0,
+  "load_units": "total_requests_per_minute",
+  "time_tick_offset": 0,
+  "weights_file": "tcn_delta_weights.pth",
+  "arch": {
+    "input_size": 2,
+    "num_channels": [
+      32,
+      64
+    ],
+    "kernel_size": 3,
+    "output_size": 5
+  },
+  "notes": [
+    "Option A: 60x2 [normalized_load, time_tick/720] -> 5-step delta",
+    "absolute_norm = last_known_norm + delta",
+    "Min-max is the full-series scaler used when the TCN was trained (same leakage as alibaba-trace).",
+    "Simulator time_unit = time_tick + 1; requests = total_requests."
+  ]
+}

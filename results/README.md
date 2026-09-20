@@ -70,9 +70,9 @@ Same 721-minute trace. Horizontal is the original 4×8 cluster. Vicinity splits 
 |---|---|---|
 | Horizontal reactive | `26-demo_alibaba_ms588_horizontal_reactive.yaml` | `horizontal_reactive/42_20260920T070746Z` |
 | Horizontal persistence | `27-demo_alibaba_ms588_horizontal_persistence.yaml` | `horizontal_persistence/42_20260920T070747Z` |
-| Horizontal TCN | `28-demo_alibaba_ms588_horizontal_tcn.yaml` | `horizontal_tcn/42_20260920T070750Z` |
+| Horizontal TCN | `28-demo_alibaba_ms588_horizontal_tcn.yaml` | `horizontal_tcn/42_20260920T103619Z` |
 | Vicinity reactive | `29-demo_alibaba_ms588_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T070751Z` |
-| Vicinity TCN | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | `vicinity_tcn/42_20260920T070755Z` |
+| Vicinity TCN | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | `vicinity_tcn/42_20260920T103632Z` |
 
 What the numbers mean: [../docs/33-alibaba-ms588-eval.md](../docs/33-alibaba-ms588-eval.md).
 

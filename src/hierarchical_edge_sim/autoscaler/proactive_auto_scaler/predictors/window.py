@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 EPS = 1e-12
 
 
@@ -33,6 +35,13 @@ def time_window(close_time_tick: int, lookback: int) -> list[int]:
     return list(range(start, int(close_time_tick) + 1))
 
 
+def cyclic_minute_features(tick: int, period: int = 60) -> tuple[float, float]:
+    """sin/cos of minute-of-hour so tick 0 and tick 60 are the same phase."""
+    p = max(int(period), 1)
+    angle = 2.0 * math.pi * (int(tick) % p) / float(p)
+    return math.sin(angle), math.cos(angle)
+
+
 def build_option_a_window(
     counts: list[float],
     time_ticks: list[int],
@@ -40,11 +49,27 @@ def build_option_a_window(
     load_min: float,
     load_max: float,
     time_scale: float,
+    time_encoding: str = "linear",
+    time_period: int | None = None,
 ) -> list[list[float]]:
     if len(counts) != len(time_ticks):
         raise ValueError(f"counts ({len(counts)}) and time_ticks ({len(time_ticks)}) differ")
     if not counts:
         raise ValueError("feature window must be non-empty")
+    encoding = str(time_encoding or "linear")
+    if encoding == "cyclic_minute":
+        period = int(time_period or time_scale or 60)
+        rows: list[list[float]] = []
+        for count, tick in zip(counts, time_ticks):
+            sine, cosine = cyclic_minute_features(int(tick), period)
+            rows.append(
+                [
+                    clip_unit(normalize_load(count, load_min, load_max)),
+                    sine,
+                    cosine,
+                ]
+            )
+        return rows
     scale = max(float(time_scale), EPS)
     return [
         [

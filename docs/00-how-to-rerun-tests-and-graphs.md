@@ -143,8 +143,9 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
 
-Same 4×8-core cluster, same initial `2.0 / 1024`, same TCN weights. Only the
-trace and the per-MS min–max change (`models/tcn_delta_v1_ms150/`, 240–40083).
+Same 4×8-core cluster, same initial `2.0 / 1024`. MS_150 still loads the original
+sequential 60×2 weights in `models/tcn_delta_v1_ms150/` (240–40083), not the
+campaign-11 residual net. Only the trace and the per-MS min–max change.
 MS_150 is ~4.6× heavier than MS_588 and is not 60-minute periodic. Recorded
 numbers: [30-alibaba-tcn-ms150-results.md](./30-alibaba-tcn-ms150-results.md).
 

@@ -58,6 +58,9 @@ def test_demo_config_loads_scaler(project_root: Path):
         "23-demo_400_triangle_horizontal_proactive.yaml",
         "24-demo_400_triangle_vicinity_proactive.yaml",
         "25-demo_400_triangle_skip_neighbor_proactive.yaml",
+        "26-demo_alibaba_ms588_horizontal_reactive.yaml",
+        "27-demo_alibaba_ms588_horizontal_persistence.yaml",
+        "29-demo_alibaba_ms588_vicinity_reactive.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None

@@ -124,6 +124,23 @@ Overlay story plots: [31-alibaba-story-plots.md](./31-alibaba-story-plots.md).
 The 69% → 3.79% rows in the results doc are historical (including hold-over-spike).
 Do not commit `results/`.
 
+### B8) Alibaba MS_588 evaluation (campaign 11)
+
+Same trace, five configs: in-cluster reactive / persistence / TCN, plus a
+vicinity split (home 8 cores, fat neighbor 24) so VicinityRound covers the
+hourly spike. Details: [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md).
+
+```bash
+export PYTHONPATH="/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/26-demo_alibaba_ms588_horizontal_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/27-demo_alibaba_ms588_horizontal_persistence.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/28-demo_alibaba_ms588_horizontal_tcn.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/29-demo_alibaba_ms588_vicinity_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/30-demo_alibaba_ms588_vicinity_tcn.yaml
+# then compare_trace_vs_log.py on each run dir
+```
+
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
 
 Same 4×8-core cluster, same initial `2.0 / 1024`, same TCN weights. Only the
@@ -256,7 +273,7 @@ RUN_DIR=$(.venv/bin/python examples/run_env_only.py configs/04-demo_60_two_clust
 
 ## 6) Reactive ladder figures (before S7)
 
-`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; vertical/horizontal/vicinity/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest. Proactive runs also write **forecast_vs_actual.png** (trace vs t+1 / t+H hats; TCN still also writes `tcn_forecast.png`).
+`compare_trace_vs_log.py` now also writes **ladder_qos.png** (incoming and drops on one request axis; sum CPU alloc on a panel below; vertical/horizontal/vicinity/cascade markers from `actions.csv`) and **replicas_by_site.png**. Terminated replicas are kept on disk so those series stay honest. Proactive runs also write **forecast_vs_actual.png** (trace vs t+1 / t+H hats).
 
 ### Ladder smoke configs
 
@@ -305,7 +322,7 @@ LOCAL=$(.venv/bin/python examples/run_with_autoscaler.py configs/07-demo_300_two
   --run off "$OFF" --run vertical "$VERT" --run local "$LOCAL"
 ```
 
-Writes `baseline_comparison.png` under the first run’s `analysis/` (or `--out PATH`): dropped time series, live replica count, and bars for total drops / peak replicas / OK actions. When a TCN run is in the set, the first ``W`` ticks (lookback, no hats; first apply at τ=W+1) are grey, and the bar panel splits dropped load into τ≤W vs τ≥W+1.
+Writes `baseline_comparison.png` under the first run’s `analysis/` (or `--out PATH`): dropped time series, live replica count, and a bar of whole-run total drops. Peak replicas stay on the time-series panel — they cannot share a bar axis with drop counts (hundreds of thousands vs a handful of replicas). When a proactive run is in the set, the first ``W`` ticks (lookback, no hats; first apply at τ=W+1) are grey on the time series.
 
 S7 should reuse these two figure types (per-run ladder + labeled comparison) rather than a new plotting stack.
 
@@ -354,9 +371,9 @@ Analytic delay, not a request-level trace. Mean is demand-weighted; p95/p99 are 
 
 This is the physics check, not the scaler claim.
 
-- Thick **trace** under dashed **sum incoming** means the MS trace was fully offered (`trace == sum(incoming)`).
+- Thick **trace** is the MS offered load. Analysis already asserts `trace == sum(incoming)` before this figure is written, so the plot does not draw a second “sum incoming” line.
 - **sum served** + **sum dropped** = incoming. Served is the stepped ceiling from `μ`; each BEV resize raises the plateau.
-- Thin per-replica incoming lines are the **routing split**, not a second total. They must add up to sum incoming. After BEH they will *not* each look like the trace.
+- Per-replica incoming is on **routing_split.png**, not this figure. Those thin lines must add up to the trace. After BEH they will *not* each look like the trace.
 
 On this config the new replica (`c-api-c1-w1-1`, spawned at `cpu_min`) stays at **0 incoming** until BEV gives it headroom (around `τ=35–40` in the worked run). Until then weighted routing sends everything to `c-api-1`. That is the model, not a missing container.
 

@@ -66,7 +66,7 @@ def analyze_run(
     """Analyze one run directory and write plots under ``<run_dir>/analysis/<app_id>/``.
 
     For each application:
-      - one combined requests plot (trace vs sum incoming/served/dropped)
+      - one combined requests plot (trace vs sum served/dropped)
       - per-container CPU and RAM plots
       - ladder QoS (incoming, CPU alloc, drops + action markers)
       - user latency (offered mean/p95/p99 and SLA-miss rate)
@@ -292,17 +292,6 @@ def _maybe_plot_forecast(
         step1_label=step1_label,
         horizon_label=horizon_label,
     )
-    if hats.predictor == "tcn_delta":
-        tcn_path = out_path.with_name(out_path.name.replace("forecast_vs_actual", "tcn_forecast", 1))
-        if tcn_path != out_path:
-            plot_forecast_vs_actual(
-                tau=tau,
-                actual_counts=incoming,
-                pred_step1=hats.step1,
-                pred_horizon=hats.step_h,
-                out_path=tcn_path,
-                title=f"{title} ({pretty})",
-                cold_start_until=cold_start_until,
-                step1_label=step1_label,
-                horizon_label=horizon_label,
-            )
+    stale = out_path.with_name(out_path.name.replace("forecast_vs_actual", "tcn_forecast", 1))
+    if stale != out_path and stale.exists():
+        stale.unlink()

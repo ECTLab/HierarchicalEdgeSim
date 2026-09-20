@@ -22,7 +22,7 @@ from .plots import (
     plot_story_replicas,
     plot_story_serve_capacity,
 )
-from .tcn_hats import compute_tcn_hats
+from .forecast_hats import compute_forecast_hats
 
 
 def write_story_plots(
@@ -69,7 +69,7 @@ def write_story_plots(
     cpu_by_label: list[tuple[str, list[float]]] = []
     dropped_by_label: list[tuple[str, list[float]]] = []
     replicas_by_label: list[tuple[str, list[float]]] = []
-    hats: tuple[list[float], list[float]] | None = None
+    forecast = None
     for label, _run_dir, meta, containers in packed:
         mu_by_label.append((label, serve_mu_series(tau, containers, spec)))
         cpu_by_label.append((label, sum_aligned(tau, containers, "cpu_capacity")))
@@ -81,13 +81,31 @@ def write_story_plots(
         replicas_by_label.append(
             (label, [sum(counts[site][i] for site in counts) for i in range(len(tau))])
         )
-        if hats is None:
-            hats = compute_tcn_hats(meta, tau, incoming)
+        candidate = compute_forecast_hats(meta, tau, incoming)
+        if candidate is None:
+            continue
+        if forecast is None or (
+            candidate.predictor == "tcn_delta" and forecast.predictor != "tcn_delta"
+        ):
+            forecast = candidate
 
     cpu_oracle = [packed_cpu_cores(v, spec, theta=1.0) for v in incoming]
     cpu_sweet = [packed_cpu_cores(v, spec, theta=spec.theta_target) for v in incoming]
-    hat1 = hats[0] if hats is not None else None
-    hat5 = hats[1] if hats is not None else None
+    hat1 = forecast.step1 if forecast is not None else None
+    hat5 = forecast.step_h if forecast is not None else None
+    hat_horizon = forecast.horizon if forecast is not None else 0
+    if forecast is not None and forecast.predictor == "tcn_delta":
+        hat_pretty = "TCN"
+        hat1_label = "TCN t+1"
+        hat5_label = f"TCN t+{hat_horizon}"
+    elif forecast is not None:
+        hat_pretty = forecast.predictor
+        hat1_label = f"{forecast.predictor} t+1"
+        hat5_label = f"{forecast.predictor} t+{hat_horizon}"
+    else:
+        hat_pretty = ""
+        hat1_label = "forecast t+1"
+        hat5_label = "forecast t+H"
 
     targets = [out_dir]
     for _label, run_dir, _meta, _containers in packed:
@@ -101,6 +119,9 @@ def write_story_plots(
             continue
         seen.add(directory)
         directory.mkdir(parents=True, exist_ok=True)
+        stale_tcn = directory / "tcn_forecast.png"
+        if stale_tcn.exists():
+            stale_tcn.unlink()
         plot_story_serve_capacity(
             tau=tau,
             incoming=incoming,
@@ -138,11 +159,11 @@ def write_story_plots(
                 actual_counts=incoming,
                 pred_step1=hat1,
                 pred_horizon=hat5,
-                out_path=directory / "tcn_forecast.png",
-                title="Incoming vs TCN t+1 and t+5 (hats start after lookback)",
+                out_path=directory / "forecast_vs_actual.png",
+                title=f"Incoming vs {hat_pretty} t+1 and t+{hat_horizon} (hats start after lookback)",
                 cold_start_until=cold_start_until,
-                step1_label="TCN t+1",
-                horizon_label="TCN t+5",
+                step1_label=hat1_label,
+                horizon_label=hat5_label,
             )
         plot_story_overview(
             tau=tau,
@@ -158,6 +179,8 @@ def write_story_plots(
             out_path=directory / "overview.png",
             title="Load, capacity, forecast, drops, replicas",
             cold_start_until=cold_start_until,
+            hat1_label=hat1_label,
+            hat5_label=hat5_label,
         )
         written.extend(sorted(directory.glob("*.png")))
     return written

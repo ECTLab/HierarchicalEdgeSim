@@ -180,7 +180,6 @@ def plot_combined_requests(
     fig, ax = plt.subplots(figsize=(11, 5))
     _draw_cold_start_span(ax, cold_start_until)
     ax.plot(tau, trace_requests, label="trace", linewidth=2.4, color="#222222")
-    ax.plot(tau, total_incoming, label="sum incoming", linestyle="--", linewidth=1.8, color="#1f77b4")
     ax.plot(tau, total_served, label="sum served", linewidth=1.8, color="#2ca02c")
     ax.plot(tau, total_dropped, label="sum dropped", linewidth=1.8, color="#d62728")
     ax.set_xlabel("time_unit")
@@ -438,22 +437,24 @@ def plot_baseline_comparison(
     out_path: Path,
     title: str,
     cold_start_until: int | None = None,
-    drop_windows: list[tuple[str, float, float]] | None = None,
 ) -> None:
-    """series: (label, tau, dropped, replica_count). totals: (label, sum_drop, max_replicas, n_ok_actions).
-
-    When ``drop_windows`` is set (label, dropped_in_lookback, dropped_after), the
-    bar panel compares those two windows instead of mixing drop counts with
-    replica/action counts.
-    """
+    """series: (label, tau, dropped, replica_count). totals: (label, sum_drop, max_replicas, n_ok_actions)."""
     fig, axes = plt.subplots(3, 1, figsize=(11, 10), sharex=False)
     ax_drop, ax_rep, ax_bar = axes
 
     _draw_cold_start_span(ax_drop, cold_start_until)
     _draw_cold_start_span(ax_rep, cold_start_until, legend=False)
-    for label, tau, dropped, replicas in series:
-        ax_drop.plot(tau, dropped, label=label, linewidth=2)
-        ax_rep.plot(tau, replicas, label=label, linewidth=2, drawstyle="steps-post")
+    for i, (label, tau, dropped, replicas) in enumerate(series):
+        style = _story_line_style(label, i)
+        ax_drop.plot(tau, dropped, label=label, linewidth=2, **style)
+        ax_rep.plot(
+            tau,
+            replicas,
+            label=label,
+            linewidth=2,
+            drawstyle="steps-post",
+            **style,
+        )
     ax_drop.set_ylabel("dropped requests")
     ax_drop.set_title(title)
     ax_drop.grid(True, alpha=0.3)
@@ -466,42 +467,15 @@ def plot_baseline_comparison(
     _legend(ax_rep)
     _ylim_from_zero(ax_rep)
 
-    if drop_windows:
-        labels = [row[0] for row in drop_windows]
-        x = list(range(len(labels)))
-        width = 0.35
-        before = [row[1] for row in drop_windows]
-        after = [row[2] for row in drop_windows]
-        w = int(cold_start_until or 0)
-        ax_bar.bar(
-            [i - width / 2 for i in x],
-            before,
-            width=width,
-            label=f"dropped τ≤{w}" if w else "dropped (lookback)",
-            color="#9e9e9e",
-        )
-        ax_bar.bar(
-            [i + width / 2 for i in x],
-            after,
-            width=width,
-            label=f"dropped τ≥{w + 1}" if w else "dropped (after forecast on)",
-            color="#d62728",
-        )
-    else:
-        labels = [row[0] for row in totals]
-        x = list(range(len(labels)))
-        width = 0.25
-        drops = [row[1] for row in totals]
-        max_rep = [row[2] for row in totals]
-        n_act = [float(row[3]) for row in totals]
-        ax_bar.bar([i - width for i in x], drops, width=width, label="total dropped")
-        ax_bar.bar(x, max_rep, width=width, label="peak replicas")
-        ax_bar.bar([i + width for i in x], n_act, width=width, label="OK actions")
+    labels = [row[0] for row in totals]
+    x = list(range(len(labels)))
+    drops = [row[1] for row in totals]
+    ax_bar.bar(x, drops, color=[_story_color(label, i) for i, label in enumerate(labels)])
     ax_bar.set_xticks(x)
     ax_bar.set_xticklabels(labels)
-    ax_bar.set_ylabel("count")
+    ax_bar.set_ylabel("total dropped")
     ax_bar.grid(True, axis="y", alpha=0.3)
-    _legend(ax_bar, ncol=3)
+    _ylim_from_zero(ax_bar)
     _save(fig, out_path)
 
 
@@ -512,15 +486,35 @@ _STORY_COLORS = {
     "hat1": "#1f77b4",
     "hat5": "#ff7f0e",
     "reactive_local": "#d62728",
+    "vicinity_reactive": "#d62728",
+    "persistence": "#9467bd",
     "proactive_tcn": "#2ca02c",
+    "vicinity_tcn": "#2ca02c",
+    "off": "#7f7f7f",
+    "vertical": "#8c564b",
+    "local": "#e377c2",
 }
+
+_STORY_FALLBACK = ("#d62728", "#9467bd", "#2ca02c", "#17becf", "#8c564b", "#e377c2")
 
 
 def _story_color(label: str, fallback_index: int) -> str:
     if label in _STORY_COLORS:
         return _STORY_COLORS[label]
-    cycle = ("#d62728", "#2ca02c", "#1f77b4", "#ff7f0e", "#9467bd", "#8c564b")
-    return cycle[fallback_index % len(cycle)]
+    return _STORY_FALLBACK[fallback_index % len(_STORY_FALLBACK)]
+
+
+def _story_linestyle(label: str) -> str:
+    if label == "persistence":
+        return "--"
+    return "-"
+
+
+def _story_line_style(label: str, fallback_index: int) -> dict[str, str]:
+    return {
+        "color": _story_color(label, fallback_index),
+        "linestyle": _story_linestyle(label),
+    }
 
 
 def plot_story_serve_capacity(
@@ -540,9 +534,9 @@ def plot_story_serve_capacity(
             tau,
             mu,
             label=f"{label} serve μ",
-            color=_story_color(label, i),
             linewidth=1.8,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax.set_xlabel("time_unit")
     ax.set_ylabel("requests / min")
@@ -585,9 +579,9 @@ def plot_story_cpu(
             tau,
             cpu,
             label=f"{label} provided",
-            color=_story_color(label, i),
             linewidth=1.8,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax.set_xlabel("time_unit")
     ax.set_ylabel("CPU cores")
@@ -609,7 +603,13 @@ def plot_story_dropped(
     fig, ax = plt.subplots(figsize=(11, 5))
     _draw_cold_start_span(ax, cold_start_until)
     for i, (label, dropped) in enumerate(dropped_by_label):
-        ax.plot(tau, dropped, label=f"{label} dropped", color=_story_color(label, i), linewidth=1.8)
+        ax.plot(
+            tau,
+            dropped,
+            label=f"{label} dropped",
+            linewidth=1.8,
+            **_story_line_style(label, i),
+        )
     ax.set_xlabel("time_unit")
     ax.set_ylabel("dropped requests")
     ax.set_title(title)
@@ -634,9 +634,9 @@ def plot_story_replicas(
             tau,
             replicas,
             label=f"{label} replicas",
-            color=_story_color(label, i),
             linewidth=1.8,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax.set_xlabel("time_unit")
     ax.set_ylabel("live replicas")
@@ -663,6 +663,8 @@ def plot_story_overview(
     out_path: Path,
     title: str,
     cold_start_until: int | None = None,
+    hat1_label: str = "forecast t+1",
+    hat5_label: str = "forecast t+H",
 ) -> None:
     n_rows = 5 if hat1 is not None else 4
     fig, axes = plt.subplots(
@@ -686,9 +688,9 @@ def plot_story_overview(
             tau,
             mu,
             label=f"{label} serve μ",
-            color=_story_color(label, i),
             linewidth=1.6,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax_mu.set_ylabel("requests / min")
     ax_mu.set_title(title)
@@ -711,9 +713,9 @@ def plot_story_overview(
             tau,
             cpu,
             label=f"{label} provided",
-            color=_story_color(label, i),
             linewidth=1.6,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax_cpu.set_ylabel("CPU cores")
     ax_cpu.grid(True, alpha=0.3)
@@ -723,8 +725,8 @@ def plot_story_overview(
     if ax_hat is not None and hat1 is not None and hat5 is not None:
         _draw_cold_start_span(ax_hat, cold_start_until, legend=False)
         ax_hat.plot(tau, incoming, label="incoming", color=_STORY_COLORS["incoming"], linewidth=2.0)
-        ax_hat.plot(tau, hat1, label="TCN t+1", color=_STORY_COLORS["hat1"], linewidth=1.5)
-        ax_hat.plot(tau, hat5, label="TCN t+5", color=_STORY_COLORS["hat5"], linewidth=1.3, linestyle="--")
+        ax_hat.plot(tau, hat1, label=hat1_label, color=_STORY_COLORS["hat1"], linewidth=1.5)
+        ax_hat.plot(tau, hat5, label=hat5_label, color=_STORY_COLORS["hat5"], linewidth=1.3, linestyle="--")
         ax_hat.set_ylabel("requests / min")
         ax_hat.grid(True, alpha=0.3)
         _legend(ax_hat, ncol=3)
@@ -732,7 +734,13 @@ def plot_story_overview(
 
     _draw_cold_start_span(ax_drop, cold_start_until, legend=False)
     for i, (label, dropped) in enumerate(dropped_by_label):
-        ax_drop.plot(tau, dropped, label=f"{label} dropped", color=_story_color(label, i), linewidth=1.6)
+        ax_drop.plot(
+            tau,
+            dropped,
+            label=f"{label} dropped",
+            linewidth=1.6,
+            **_story_line_style(label, i),
+        )
     ax_drop.set_ylabel("dropped")
     ax_drop.grid(True, alpha=0.3)
     _legend(ax_drop)
@@ -744,9 +752,9 @@ def plot_story_overview(
             tau,
             replicas,
             label=f"{label} replicas",
-            color=_story_color(label, i),
             linewidth=1.6,
             drawstyle="steps-post",
+            **_story_line_style(label, i),
         )
     ax_rep.set_xlabel("time_unit")
     ax_rep.set_ylabel("replicas")

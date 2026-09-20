@@ -13,7 +13,8 @@ This file is the map. Run data itself is gitignored.
 | QoS plots (reactive) | `09-triangle-post-match/<slice>/42_20260919T1709*/analysis/demo_app/ladder_qos.png` |
 | QoS plots (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/ladder_qos.png` |
 | Forecast vs trace (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/forecast_vs_actual.png` |
-| Alibaba MS_588 | `04-alibaba-ms588/` |
+| **Latest** MS_588 eval (Sep 2026) | `11-alibaba-ms588-eval/` |
+| Alibaba MS_588 (original S7 pair) | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
 | How a config chooses its folder | `results_dir` in [../configs/README.md](../configs/README.md) |
@@ -35,6 +36,7 @@ This file is the map. Run data itself is gitignored.
 | 08 | `08-ladder-60tick/` | Aug 15–27 | 60-tick ladder smokes (local / vicinity / proactive) |
 | 09 | `09-triangle-post-match/` | **Sep 17–19** | Four triangle slices, `reactive_local` |
 | 10 | `10-triangle-proactive/` | **Sep 19** | Same four slices, `proactive_auto_scaler` (persistence) |
+| 11 | `11-alibaba-ms588-eval/` | **Sep 20** | MS_588 horizontal vs vicinity (reactive / persistence / TCN) |
 
 ### 09 — current triangle, reactive (look here first)
 
@@ -60,6 +62,20 @@ Same topologies and trace as 09. Persistence front-end (`feature_window=10`), `s
 
 Plots: `<run>/analysis/demo_app/ladder_qos.png`, `user_latency.png`, and `forecast_vs_actual.png` (trace vs persistence t+1 / t+3).
 
+### 11 — MS_588 eval
+
+Same 721-minute trace. Horizontal is the original 4×8 cluster. Vicinity splits those 32 cores into home 8 + fat neighbor 24.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| Horizontal reactive | `26-demo_alibaba_ms588_horizontal_reactive.yaml` | `horizontal_reactive/42_20260920T070746Z` |
+| Horizontal persistence | `27-demo_alibaba_ms588_horizontal_persistence.yaml` | `horizontal_persistence/42_20260920T070747Z` |
+| Horizontal TCN | `28-demo_alibaba_ms588_horizontal_tcn.yaml` | `horizontal_tcn/42_20260920T070750Z` |
+| Vicinity reactive | `29-demo_alibaba_ms588_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T070751Z` |
+| Vicinity TCN | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | `vicinity_tcn/42_20260920T070755Z` |
+
+What the numbers mean: [../docs/33-alibaba-ms588-eval.md](../docs/33-alibaba-ms588-eval.md).
+
 ---
 
 ## Where a new run goes
@@ -67,6 +83,5 @@ Plots: `<run>/analysis/demo_app/ladder_qos.png`, `user_latency.png`, and `foreca
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-The next unused campaign number is **11** (for example
-`results/11-alibaba-post-match/` when you re-run Alibaba after the paper match).
+The next unused campaign number is **12**.
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

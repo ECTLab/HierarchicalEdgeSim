@@ -1,0 +1,64 @@
+# MS_588, 4×8-core home cluster (same world as 12). Isolates in-cluster
+# Vertical + HorizontalScaling on a real 721-minute trace. Peak Λ=29778
+# needs ~3.4 packed replicas (μ_max=(4.0-0.5)/0.0004=8750 req/min).
+# Campaign: results/11-alibaba-ms588-eval/
+
+sim:
+  tick_sec: 60.0
+  results_dir: results/11-alibaba-ms588-eval/horizontal_reactive/
+  seed: 42
+
+traces_dir: traces/alibaba/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w2
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w3
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c1-w4
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.0004
+        ram_per_request_mb: 0.02
+        trace_file: MS_588.csv
+        containers:
+          - id: c-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 2.0
+            ram_alloc_mb: 1024
+
+autoscaler:
+  enabled: true
+  name: reactive_local
+  decision_every_k_ticks: 1
+  params:
+    x_up_streak: 3
+    y_down_streak: 8
+    cooldown_ticks: 5
+    eps_drop: 1.0e-9
+    theta_free: 0.35
+    theta_high: 0.90
+    use_near_saturation_up: false
+    min_mu_step: 25
+    prefer_consolidate_down: true
+    sustained_up_streak: 6
+    cascade_home: true
+    grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
+    shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

@@ -45,11 +45,11 @@ Same folder also has the individual panels:
 | `overview.png` | All panels stacked (start here) |
 | `serve_capacity.png` | Incoming vs serve μ. Drops when incoming is above the μ line |
 | `cpu_needed_vs_provided.png` | Oracle CPU to serve all, 60% target (sweet spot), CPU each scaler gave |
-| `tcn_forecast.png` | Incoming vs TCN t+1 / t+5 (hats start after lookback) |
-
-Per-run `compare_trace_vs_log.py` also writes `analysis/demo_app/forecast_vs_actual.png` (same overlay; persistence demos use that name only).
+| `forecast_vs_actual.png` | Incoming vs t+1 / t+H hats (TCN if a compared run uses it; otherwise persistence) |
 | `dropped.png` | Reactive vs TCN dropped requests |
 | `replicas.png` | Live replica count |
+
+Per-run `compare_trace_vs_log.py` writes `analysis/demo_app/forecast_vs_actual.png` for that run’s own predictor. The story copy is the overlay (TCN hats when a TCN run is in the comparison).
 
 Grey band is τ≤60: TCN has no hats yet; both scalers are the reactive ladder.
 

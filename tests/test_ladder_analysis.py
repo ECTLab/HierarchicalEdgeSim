@@ -310,6 +310,7 @@ def test_maybe_plot_forecast_writes_persistence_png(tmp_path: Path):
     )
     assert out.is_file()
     assert out.stat().st_size > 0
+    assert not (tmp_path / "tcn_forecast.png").exists()
 
 
 class _KillSpawned:
@@ -371,3 +372,16 @@ def test_compare_runs_writes_png(tmp_path: Path):
     assert (story / "serve_capacity.png").is_file()
     assert (story / "cpu_needed_vs_provided.png").is_file()
     assert (story / "overview.png").is_file()
+    assert not (story / "tcn_forecast.png").exists()
+
+
+def test_story_scaler_colors_are_distinct():
+    from analysis.plots import _story_color, _story_linestyle
+
+    persistence = _story_color("persistence", 1)
+    tcn = _story_color("proactive_tcn", 2)
+    reactive = _story_color("reactive_local", 0)
+    assert persistence != tcn
+    assert persistence != reactive
+    assert tcn != reactive
+    assert _story_linestyle("persistence") != _story_linestyle("proactive_tcn")

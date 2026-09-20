@@ -1,0 +1,75 @@
+# Same MS_588 load and 32-core pool as 26, split so VicinityRound fires.
+# Home c1 is one 8-core worker (two packed replicas max, μ≤17500). Peak
+# 29778 must borrow onto fat c2 (3×8) in v1. Prefer-local cap 0.80 so
+# home is not stuffed to ρ=1 while loans sit idle.
+
+sim:
+  tick_sec: 60.0
+  results_dir: results/11-alibaba-ms588-eval/vicinity_reactive/
+  seed: 42
+  theta_route: 0.80
+
+traces_dir: traces/alibaba/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - id: c1-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+    - id: c2
+      servers:
+        - id: c2-w1
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c2-w2
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+        - id: c2-w3
+          cpu_cap_cores: 8.0
+          ram_cap_mb: 16384
+
+  vicinities:
+    - id: v1
+      members: [c1, c2]
+      leader: c1
+
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: api
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.0004
+        ram_per_request_mb: 0.02
+        trace_file: MS_588.csv
+        containers:
+          - id: c-api-1
+            server_id: c1-w1
+            cpu_alloc_cores: 2.0
+            ram_alloc_mb: 1024
+
+autoscaler:
+  enabled: true
+  name: reactive_local
+  decision_every_k_ticks: 1
+  params:
+    x_up_streak: 3
+    y_down_streak: 8
+    cooldown_ticks: 5
+    eps_drop: 1.0e-9
+    theta_free: 0.35
+    theta_high: 0.80
+    use_near_saturation_up: false
+    min_mu_step: 25
+    prefer_consolidate_down: true
+    sustained_up_streak: 6
+    cascade_home: false
+    grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
+    shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }

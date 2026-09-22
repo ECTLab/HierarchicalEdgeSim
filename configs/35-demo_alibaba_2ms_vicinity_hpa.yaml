@@ -1,0 +1,73 @@
+# Same two-MS world as 33/34 (campaign 12). Kubernetes HPA replica formula
+# as the industry external baseline: desired = ceil(n × util / target),
+# target 80%, tolerance 10%, 5-tick scale-down window (HPA 300s). Horizontal
+# only, home cluster c1 only — no vertical packing, no VicinityRound.
+# New replicas clone the seed template (2.0/1024). leftover → unmet_demand.
+
+sim:
+  tick_sec: 60.0
+  results_dir: results/12-alibaba-2ms-eval/vicinity_hpa/
+  seed: 42
+  theta_route: 0.80
+
+traces_dir: traces/alibaba/
+
+x-worker: &w8
+  cpu_cap_cores: 8.0
+  ram_cap_mb: 16384
+
+x-ms: &alibaba_ms
+  cpu_min_cores: 0.5
+  cpu_max_cores: 4.0
+  ram_min_mb: 256
+  ram_max_mb: 4096
+  cpu_per_request_cores: 0.0004
+  ram_per_request_mb: 0.02
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - {id: c1-w1, <<: *w8}
+        - {id: c1-w2, <<: *w8}
+    - id: c2
+      servers:
+        - {id: c2-w1, <<: *w8}
+        - {id: c2-w2, <<: *w8}
+        - {id: c2-w3, <<: *w8}
+        - {id: c2-w4, <<: *w8}
+
+  vicinities:
+    - id: v1
+      members: [c1, c2]
+      leader: c1
+
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+
+apps:
+  - id: demo_app
+    microservices:
+      - <<: *alibaba_ms
+        id: ms588
+        trace_file: MS_588.csv
+        containers:
+          - {id: c-ms588-1, server_id: c1-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
+        id: ms150
+        trace_file: MS_150.csv
+        containers:
+          - {id: c-ms150-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+
+autoscaler:
+  enabled: true
+  name: kubernetes_hpa
+  decision_every_k_ticks: 1
+  params:
+    target_util: 0.80
+    tolerance: 0.10
+    min_replicas: 1
+    max_replicas: 100
+    scale_down_window: 5
+    scale_up_pods: 4
+    scale_up_percent: 100.0

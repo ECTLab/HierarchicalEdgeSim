@@ -487,25 +487,45 @@ _STORY_COLORS = {
     "hat5": "#ff7f0e",
     "reactive_local": "#d62728",
     "vicinity_reactive": "#d62728",
+    "horizontal_reactive": "#d62728",
     "persistence": "#9467bd",
+    "vicinity_persistence": "#9467bd",
+    "horizontal_persistence": "#9467bd",
     "proactive_tcn": "#2ca02c",
     "vicinity_tcn": "#2ca02c",
+    "horizontal_tcn": "#2ca02c",
+    "vicinity_hpa": "#17becf",
     "off": "#7f7f7f",
     "vertical": "#8c564b",
     "local": "#e377c2",
 }
 
-_STORY_FALLBACK = ("#d62728", "#9467bd", "#2ca02c", "#17becf", "#8c564b", "#e377c2")
+# Family match for labels like vicinity_hpa / horizontal_persistence that are
+# not exact keys. Order matters: check hpa before a generic fallback.
+_STORY_FAMILY_COLORS = (
+    ("hpa", "#17becf"),
+    ("persistence", "#9467bd"),
+    ("tcn", "#2ca02c"),
+    ("reactive", "#d62728"),
+)
+
+# Must not start with reactive red: unmapped first --run used to collide with
+# vicinity_reactive when fallback_index was 0.
+_STORY_FALLBACK = ("#8c564b", "#e377c2", "#bcbd22", "#7f7f7f", "#17becf", "#9467bd")
 
 
 def _story_color(label: str, fallback_index: int) -> str:
     if label in _STORY_COLORS:
         return _STORY_COLORS[label]
+    key = label.lower()
+    for family, color in _STORY_FAMILY_COLORS:
+        if family in key:
+            return color
     return _STORY_FALLBACK[fallback_index % len(_STORY_FALLBACK)]
 
 
 def _story_linestyle(label: str) -> str:
-    if label == "persistence":
+    if "persistence" in label.lower():
         return "--"
     return "-"
 

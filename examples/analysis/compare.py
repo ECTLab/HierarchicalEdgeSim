@@ -44,8 +44,6 @@ def compare_runs(
             raise KeyError(f"{label}: no containers after filters")
         if chosen_app is None:
             chosen_app = containers[0].app_id
-        if chosen_ms is None:
-            chosen_ms = containers[0].microservice_id
         n = int(meta.get("N") or 0)
         tau = list(range(1, n + 1)) if n else sorted({t for c in containers for t in c.tau})
         dropped = sum_aligned(tau, containers, "dropped")

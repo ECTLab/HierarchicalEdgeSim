@@ -381,7 +381,19 @@ def test_story_scaler_colors_are_distinct():
     persistence = _story_color("persistence", 1)
     tcn = _story_color("proactive_tcn", 2)
     reactive = _story_color("reactive_local", 0)
+    hpa = _story_color("vicinity_hpa", 0)
+    v_reactive = _story_color("vicinity_reactive", 1)
+    v_persist = _story_color("vicinity_persistence", 2)
     assert persistence != tcn
     assert persistence != reactive
     assert tcn != reactive
+    assert hpa != v_reactive
+    assert hpa != reactive
+    assert hpa != v_persist
+    assert v_persist == persistence
+    assert v_reactive == reactive
+    assert _story_color("horizontal_tcn", 0) == tcn
     assert _story_linestyle("persistence") != _story_linestyle("proactive_tcn")
+    assert _story_linestyle("vicinity_persistence") == "--"
+    assert _story_linestyle("horizontal_persistence") == "--"
+    assert _story_linestyle("vicinity_hpa") == "-"

@@ -7,11 +7,13 @@ from pathlib import Path
 from .aggregate import (
     app_owner_cluster_id,
     cluster_to_vicinity,
+    group_containers_by_microservice,
     ms_physics_from_meta,
     packed_cpu_cores,
     replica_counts_by_site,
     serve_mu_series,
     sum_aligned,
+    sum_series,
 )
 from .io import find_container_logs, load_run_meta, read_container_log
 from .plots import (
@@ -23,6 +25,30 @@ from .plots import (
     plot_story_serve_capacity,
 )
 from .forecast_hats import compute_forecast_hats
+
+
+def _serve_mu_by_ms(tau: list[int], containers: list, meta: dict, app_id: str) -> list[float]:
+    parts: list[list[float]] = []
+    for ms_id, group in group_containers_by_microservice(containers).items():
+        spec = ms_physics_from_meta(meta, app_id, ms_id)
+        parts.append(serve_mu_series(tau, group, spec))
+    return sum_series(parts) if parts else [0.0] * len(tau)
+
+
+def _oracle_cpu_by_ms(
+    tau: list[int],
+    containers: list,
+    meta: dict,
+    app_id: str,
+    *,
+    theta: float,
+) -> list[float]:
+    parts: list[list[float]] = []
+    for ms_id, group in group_containers_by_microservice(containers).items():
+        spec = ms_physics_from_meta(meta, app_id, ms_id)
+        incoming = sum_aligned(tau, group, "incoming")
+        parts.append([packed_cpu_cores(v, spec, theta=theta) for v in incoming])
+    return sum_series(parts) if parts else [0.0] * len(tau)
 
 
 def write_story_plots(
@@ -51,18 +77,20 @@ def write_story_plots(
             raise KeyError(f"{label}: no containers after filters")
         if chosen_app is None:
             chosen_app = containers[0].app_id
-        if chosen_ms is None:
-            chosen_ms = containers[0].microservice_id
         n = int(meta.get("N") or 0)
         tau = list(range(1, n + 1)) if n else sorted({t for c in containers for t in c.tau})
         packed.append((label, run_dir, meta, containers))
 
-    assert chosen_app is not None and chosen_ms is not None
+    assert chosen_app is not None
     physics_meta = next(
         (meta for _, _, meta, _ in packed if (meta.get("autoscaler") or {}).get("name") == "proactive_auto_scaler"),
         packed[0][2],
     )
-    spec = ms_physics_from_meta(physics_meta, chosen_app, chosen_ms)
+    first_groups = group_containers_by_microservice(packed[0][3])
+    theta_sweet = 0.60
+    if first_groups:
+        first_ms = next(iter(first_groups))
+        theta_sweet = ms_physics_from_meta(physics_meta, chosen_app, first_ms).theta_target
 
     incoming = sum_aligned(tau, packed[0][3], "incoming")
     mu_by_label: list[tuple[str, list[float]]] = []
@@ -71,7 +99,7 @@ def write_story_plots(
     replicas_by_label: list[tuple[str, list[float]]] = []
     forecast = None
     for label, _run_dir, meta, containers in packed:
-        mu_by_label.append((label, serve_mu_series(tau, containers, spec)))
+        mu_by_label.append((label, _serve_mu_by_ms(tau, containers, physics_meta, chosen_app)))
         cpu_by_label.append((label, sum_aligned(tau, containers, "cpu_capacity")))
         dropped_by_label.append((label, sum_aligned(tau, containers, "dropped")))
         owner = app_owner_cluster_id(meta, chosen_app)
@@ -89,8 +117,10 @@ def write_story_plots(
         ):
             forecast = candidate
 
-    cpu_oracle = [packed_cpu_cores(v, spec, theta=1.0) for v in incoming]
-    cpu_sweet = [packed_cpu_cores(v, spec, theta=spec.theta_target) for v in incoming]
+    cpu_oracle = _oracle_cpu_by_ms(tau, packed[0][3], physics_meta, chosen_app, theta=1.0)
+    cpu_sweet = _oracle_cpu_by_ms(
+        tau, packed[0][3], physics_meta, chosen_app, theta=theta_sweet
+    )
     hat1 = forecast.step1 if forecast is not None else None
     hat5 = forecast.step_h if forecast is not None else None
     hat_horizon = forecast.horizon if forecast is not None else 0

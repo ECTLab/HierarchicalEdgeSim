@@ -61,10 +61,16 @@ def test_demo_config_loads_scaler(project_root: Path):
         "26-demo_alibaba_ms588_horizontal_reactive.yaml",
         "27-demo_alibaba_ms588_horizontal_persistence.yaml",
         "29-demo_alibaba_ms588_vicinity_reactive.yaml",
+        "35-demo_alibaba_2ms_vicinity_hpa.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None
-        assert scaler.name in {"reactive_vertical", "reactive_local", "proactive_auto_scaler"}
+        assert scaler.name in {
+            "reactive_vertical",
+            "reactive_local",
+            "proactive_auto_scaler",
+            "kubernetes_hpa",
+        }
 
 
 def test_integration_up_then_alloc_rises(tmp_path, project_root: Path):

@@ -189,6 +189,19 @@ def test_earlier_ms_takes_raw_free_cores(tmp_path: Path):
     assert {a.ms_id for a in unmet} == {"ms_a", "ms_b"}
 
 
+def test_yaml_loads_campaign13_proscale(project_root: Path):
+    path = project_root / "configs" / "42-demo_alibaba_4ms_vicinity_proscale.yaml"
+    scaler = load_autoscaler_from_yaml(path)
+    assert scaler is not None
+    assert scaler.name == "proscale"
+    assert scaler.params.sma_window == 2
+    cfg = yaml.safe_load(path.read_text())
+    assert cfg["topology"]["latency_ms"][0]["ms"] == pytest.approx(5.0)
+    assert "13-alibaba-4ms-eval" in cfg["sim"]["results_dir"]
+    env = Env.from_config(path)
+    assert sorted(env.list_microservices()) == ["ms150", "ms215", "ms588", "ms693"]
+
+
 def test_yaml_loads_campaign12_proscale(project_root: Path):
     path = project_root / "configs" / "36-demo_alibaba_2ms_vicinity_proscale.yaml"
     scaler = load_autoscaler_from_yaml(path)

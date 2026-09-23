@@ -7,7 +7,7 @@
 **Configs:** `33` reactive, `34` persistence, `35` Kubernetes HPA, `36` ProScale-style, `37` per-MS TCN  
 **Related:** [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md) (single MS_588), [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) (eight-MS, campaign 14)
 
-One app, two microservices. Persistence PredictAndDecide vs the reactive ladder vs Kubernetes HPA (home only) vs a reduced ProScale clone (fixed-size replicas, two-point moving average, greedy home then neighbor) vs one residual TCN per microservice. This is the first multi-MS step after campaign 11. Campaign 13 (3–4 MS) is next if these slices look right; do not jump to campaign 14.
+One app, two microservices. Persistence PredictAndDecide vs the reactive ladder vs Kubernetes HPA (home only) vs a reduced ProScale clone (fixed-size replicas, two-point moving average, greedy home then neighbor) vs one residual TCN per microservice. This is the first multi-MS step after campaign 11. Four-MS results are in [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md). Do not jump to campaign 14.
 
 Home is sized below concurrent peak (~39 cores of headroom at \(\theta=0.60\); max concurrent 58,787 at \(\tau=81\)). MS_150 mean already wants ~14.5 cores, so a 16-core home is the hog’s sitting room; the MS_588 needle and MS_150’s own peaks must loan onto `c2`. `cascade_home: true` so a shrink on one MS can pull the *other* MS’s loan home.
 

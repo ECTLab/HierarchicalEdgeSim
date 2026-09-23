@@ -79,6 +79,34 @@ def test_params_defaults_and_unknown_predictor():
         )
 
 
+def test_model_dirs_persistence_keeps_that_microservice_on_last_value(monkeypatch):
+    import hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.tcn as tcn_mod
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.policy import _default_predictor
+
+    sentinel = object()
+
+    def _fake(cls, path):
+        _ = cls, path
+        return sentinel
+
+    monkeypatch.setattr(tcn_mod.TcnDeltaPredictor, "from_model_dir", classmethod(_fake))
+    params = validate_params(
+        {
+            "predictor": "tcn_delta",
+            "feature_window": 60,
+            "forecast_horizon": 5,
+            "model_dirs": {
+                "ms215": "models/tcn_delta_ms215_v1",
+                "ms693": "persistence",
+            },
+        }
+    )
+    mapped = _default_predictor(params)
+    assert mapped.predictor_for("ms215") is sentinel
+    assert isinstance(mapped.predictor_for("ms693"), PersistencePredictor)
+    assert mapped.predictor_for("ms588") is sentinel
+
+
 def test_sensing_routes_each_microservice_to_its_model():
     from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.history import RpsHistory
     from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.model_map import (
@@ -613,6 +641,55 @@ def test_alibaba_8ms_world_stamps_home_and_eight_traces(project_root: Path):
     assert traces["ms588"] == "MS_588.csv"
     assert traces["ms215"] == "MS_215.csv"
     assert (project_root / "traces" / "alibaba" / "MS_215.csv").is_file()
+
+
+def test_yaml_loads_4ms_tcn_per_microservice(project_root: Path):
+    pytest.importorskip("torch")
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.model_map import (
+        MicroserviceModelMap,
+    )
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.persistence import (
+        PersistencePredictor,
+    )
+
+    scaler = load_autoscaler_from_yaml(
+        project_root / "configs" / "40-demo_alibaba_4ms_vicinity_tcn.yaml"
+    )
+    assert scaler is not None
+    assert isinstance(scaler._predictor, MicroserviceModelMap)
+    assert scaler.params.model_dirs["ms150"] == "models/tcn_delta_ms150_v3"
+    assert scaler.params.model_dirs["ms588"] == "models/tcn_delta_ms588_v2"
+    assert scaler.params.model_dirs["ms215"] == "models/tcn_delta_ms215_v1"
+    assert scaler.params.model_dirs["ms693"] == "models/tcn_delta_ms693_v1"
+    assert scaler._predictor.predictor_for("ms150").time_encoding == "rebound"
+    assert scaler._predictor.predictor_for("ms588").time_encoding == "cyclic_minute"
+    assert scaler._predictor.predictor_for("ms215").load_min == pytest.approx(41.0)
+    assert scaler._predictor.predictor_for("ms693").load_max == pytest.approx(9397.0)
+    assert not isinstance(scaler._predictor.predictor_for("ms693"), PersistencePredictor)
+
+
+def test_yaml_loads_alibaba_4ms_eval(project_root: Path):
+    import yaml
+    from hierarchical_edge_sim.env.api import Env
+
+    reactive_path = project_root / "configs" / "38-demo_alibaba_4ms_vicinity_reactive.yaml"
+    reactive = load_autoscaler_from_yaml(reactive_path)
+    assert reactive is not None
+    assert reactive.name == "reactive_local"
+    assert reactive.params.cascade_home is True
+    assert "13-alibaba-4ms-eval" in yaml.safe_load(reactive_path.read_text())["sim"]["results_dir"]
+
+    persist_path = project_root / "configs" / "39-demo_alibaba_4ms_vicinity_persistence.yaml"
+    scaler = load_autoscaler_from_yaml(persist_path)
+    assert scaler is not None
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.feature_window == 60
+    assert scaler.params.forecast_horizon == 5
+
+    env = Env.from_config(persist_path)
+    assert sorted(env.list_microservices()) == ["ms150", "ms215", "ms588", "ms693"]
+    home_ids = env.world.clusters["c1"].server_ids
+    assert sum(env.world.servers[sid].cpu_cap_cores for sid in home_ids) == pytest.approx(24.0)
 
 
 def test_yaml_loads_alibaba_2ms_eval(project_root: Path):

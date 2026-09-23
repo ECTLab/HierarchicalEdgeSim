@@ -14,6 +14,7 @@ This file is the map. Run data itself is gitignored.
 | QoS plots (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/ladder_qos.png` |
 | Forecast vs trace (proactive) | `10-triangle-proactive/<slice>/42_20260919T1842*/analysis/demo_app/forecast_vs_actual.png` |
 | **Latest** 2-MS Alibaba vicinity (Sep 2026) | `12-alibaba-2ms-eval/` |
+| **Latest** 4-MS Alibaba vicinity (Sep 2026) | `13-alibaba-4ms-eval/` |
 | **Latest** MS_588 eval (Sep 2026) | `11-alibaba-ms588-eval/` |
 | **Latest** 8-MS Alibaba vicinity (Sep 2026) | `14-alibaba-8ms-eval/` |
 | Alibaba MS_588 (original S7 pair) | `04-alibaba-ms588/` |
@@ -40,7 +41,7 @@ This file is the map. Run data itself is gitignored.
 | 10 | `10-triangle-proactive/` | **Sep 19** | Same four slices, `proactive_auto_scaler` (persistence) |
 | 11 | `11-alibaba-ms588-eval/` | **Sep 20** | MS_588 horizontal vs vicinity (reactive / persistence / TCN) |
 | 12 | `12-alibaba-2ms-eval/` | **Sep 20** | MS_588 + MS_150, 16+32 vicinity, reactive vs persistence |
-| 13 | *(reserved)* | — | 3–4 Alibaba MS; not built until campaign 12 looks right |
+| 13 | `13-alibaba-4ms-eval/` | **Sep 23** | MS_150 + MS_588 + MS_215 + MS_693, 24+32 vicinity |
 | 14 | `14-alibaba-8ms-eval/` | **Sep 20** | Eight Alibaba MS, 32+32 vicinity, reactive vs persistence |
 
 ### 09 — current triangle, reactive (look here first)
@@ -94,6 +95,20 @@ Same physics as 11. Home 2×8, neighbor 4×8. MS_588 hourly needle + MS_150 alwa
 | Vicinity TCN | `37-demo_alibaba_2ms_vicinity_tcn.yaml` | `vicinity_tcn/42_20260923T180029Z` |
 
 What the numbers mean: [../docs/35-alibaba-2ms-eval.md](../docs/35-alibaba-2ms-eval.md).
+
+### 13 — four Alibaba MS, vicinity
+
+Same physics as 11. Home 3×8, neighbor 4×8. Hog, two hourly needles, and a 3-minute sawtooth. Reactive vs persistence vs per-MS TCN vs Kubernetes HPA (home only) vs a ProScale-style clone.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| Vicinity reactive | `38-demo_alibaba_4ms_vicinity_reactive.yaml` | `vicinity_reactive/42_20260923T201554Z` |
+| Vicinity persistence | `39-demo_alibaba_4ms_vicinity_persistence.yaml` | `vicinity_persistence/42_20260923T201557Z` |
+| Vicinity TCN | `40-demo_alibaba_4ms_vicinity_tcn.yaml` | `vicinity_tcn/42_20260923T202311Z` |
+| Vicinity HPA | `41-demo_alibaba_4ms_vicinity_hpa.yaml` | `vicinity_hpa/42_20260923T205312Z` |
+| Vicinity ProScale | `42-demo_alibaba_4ms_vicinity_proscale.yaml` | `vicinity_proscale/42_20260923T205314Z` |
+
+What the numbers mean: [../docs/36-alibaba-4ms-eval.md](../docs/36-alibaba-4ms-eval.md).
 
 ### 14 — eight Alibaba MS, vicinity
 

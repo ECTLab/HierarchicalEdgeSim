@@ -232,6 +232,15 @@ class ProactiveAutoScaler:
         self._pending_proactive_window.clear()
 
 
+def _predictor_for_model_dir(path: str, params: ProactiveAutoScalerParams):
+    """A map entry of ``persistence`` keeps that microservice on last-value."""
+    if path == "persistence":
+        return PersistencePredictor(forecast_horizon=params.forecast_horizon)
+    from .predictors.tcn import TcnDeltaPredictor
+
+    return TcnDeltaPredictor.from_model_dir(path)
+
+
 def _default_predictor(params: ProactiveAutoScalerParams) -> OneStepRpsPredictor | HorizonRpsPredictor:
     if params.predictor == "tcn_delta":
         from .predictors.model_map import MicroserviceModelMap
@@ -241,7 +250,7 @@ def _default_predictor(params: ProactiveAutoScalerParams) -> OneStepRpsPredictor
         if not params.model_dirs:
             return default
         by_ms = {
-            ms_id: TcnDeltaPredictor.from_model_dir(path)
+            ms_id: _predictor_for_model_dir(path, params)
             for ms_id, path in params.model_dirs.items()
         }
         return MicroserviceModelMap(default, by_ms)

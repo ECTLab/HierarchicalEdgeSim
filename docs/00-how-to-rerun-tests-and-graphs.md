@@ -160,6 +160,23 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/37-demo_alibaba_2ms_vicinity_tcn.yaml
 ```
 
+### B11) Alibaba four-MS vicinity (campaign 13)
+
+Same physics, four traces (MS_150, MS_588, MS_215, MS_693), 24-core home +
+32-core neighbor. Reactive, persistence, per-MS TCN, Kubernetes HPA (home
+only), and a ProScale-style clone. Config 40 needs torch on `PYTHONPATH`.
+Details: [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md).
+
+```bash
+export PYTHONPATH="/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/38-demo_alibaba_4ms_vicinity_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/39-demo_alibaba_4ms_vicinity_persistence.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/40-demo_alibaba_4ms_vicinity_tcn.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/41-demo_alibaba_4ms_vicinity_hpa.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/42-demo_alibaba_4ms_vicinity_proscale.yaml
+```
+
 ### B10) Alibaba eight-MS vicinity (campaign 14)
 
 Same physics, eight traces, 32-core home + 32-core neighbor. Persistence

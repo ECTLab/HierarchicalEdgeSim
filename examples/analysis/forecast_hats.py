@@ -138,6 +138,8 @@ def _tcn_hats(
 
     model_dirs = params.get("model_dirs") or {}
     mapped = model_dirs.get(ms_id) if ms_id else None
+    if mapped == "persistence":
+        return _persistence_hats(meta, params, tau, incoming)
     model_dir = mapped or params.get("model_dir") or "models/tcn_delta_ms588_v2"
     try:
         predictor = TcnDeltaPredictor.from_model_dir(model_dir)

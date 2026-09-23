@@ -180,6 +180,21 @@ def test_scale_down_uses_window_max(tmp_path):
     assert all(a.reason == "horizontal_terminate" for a in terms)
 
 
+def test_yaml_loads_campaign13_hpa(project_root: Path):
+    path = project_root / "configs" / "41-demo_alibaba_4ms_vicinity_hpa.yaml"
+    scaler = load_autoscaler_from_yaml(path)
+    assert scaler is not None
+    assert scaler.name == "kubernetes_hpa"
+    assert scaler.params.target_util == pytest.approx(0.80)
+    cfg = yaml.safe_load(path.read_text())
+    assert cfg["topology"]["latency_ms"][0]["ms"] == pytest.approx(5.0)
+    assert "13-alibaba-4ms-eval" in cfg["sim"]["results_dir"]
+    env = Env.from_config(path)
+    assert sorted(env.list_microservices()) == ["ms150", "ms215", "ms588", "ms693"]
+    home_ids = env.world.clusters["c1"].server_ids
+    assert sum(env.world.servers[sid].cpu_cap_cores for sid in home_ids) == pytest.approx(24.0)
+
+
 def test_yaml_loads_campaign12_hpa(project_root: Path):
     path = project_root / "configs" / "35-demo_alibaba_2ms_vicinity_hpa.yaml"
     scaler = load_autoscaler_from_yaml(path)

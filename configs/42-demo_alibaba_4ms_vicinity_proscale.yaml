@@ -1,0 +1,79 @@
+# Same four-MS world as 38 (campaign 13). Reduced ProScale clone: SMA N=2,
+# fixed seed-sized replicas (2.0/1024), greedy fill of home c1 then neighbor
+# c2 against raw free cores. No vertical resize, no reserve, no cascade.
+# No cloud offload. c1–c2 latency stays 5.0 ms.
+
+sim:
+  tick_sec: 60.0
+  results_dir: results/13-alibaba-4ms-eval/vicinity_proscale/
+  seed: 42
+  theta_route: 0.80
+
+traces_dir: traces/alibaba/
+
+x-worker: &w8
+  cpu_cap_cores: 8.0
+  ram_cap_mb: 16384
+
+x-ms: &alibaba_ms
+  cpu_min_cores: 0.5
+  cpu_max_cores: 4.0
+  ram_min_mb: 256
+  ram_max_mb: 4096
+  cpu_per_request_cores: 0.0004
+  ram_per_request_mb: 0.02
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - {id: c1-w1, <<: *w8}
+        - {id: c1-w2, <<: *w8}
+        - {id: c1-w3, <<: *w8}
+    - id: c2
+      servers:
+        - {id: c2-w1, <<: *w8}
+        - {id: c2-w2, <<: *w8}
+        - {id: c2-w3, <<: *w8}
+        - {id: c2-w4, <<: *w8}
+
+  vicinities:
+    - id: v1
+      members: [c1, c2]
+      leader: c1
+
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+
+apps:
+  - id: demo_app
+    microservices:
+      - <<: *alibaba_ms
+        id: ms588
+        trace_file: MS_588.csv
+        containers:
+          - {id: c-ms588-1, server_id: c1-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
+        id: ms150
+        trace_file: MS_150.csv
+        containers:
+          - {id: c-ms150-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
+        id: ms215
+        trace_file: MS_215.csv
+        containers:
+          - {id: c-ms215-1, server_id: c1-w3, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
+        id: ms693
+        trace_file: MS_693.csv
+        containers:
+          - {id: c-ms693-1, server_id: c1-w3, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+
+autoscaler:
+  enabled: true
+  name: proscale
+  decision_every_k_ticks: 1
+  params:
+    sma_window: 2
+    min_replicas: 1
+    max_replicas: 100

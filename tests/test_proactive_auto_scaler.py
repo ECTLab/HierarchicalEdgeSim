@@ -552,6 +552,24 @@ def test_yaml_loads_ms588_eval_tcn(project_root: Path):
         assert scaler.params.model_dir == "models/tcn_delta_ms588_v2"
 
 
+def test_yaml_loads_2ms_tcn_per_microservice(project_root: Path):
+    pytest.importorskip("torch")
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.model_map import (
+        MicroserviceModelMap,
+    )
+
+    scaler = load_autoscaler_from_yaml(
+        project_root / "configs" / "37-demo_alibaba_2ms_vicinity_tcn.yaml"
+    )
+    assert scaler is not None
+    assert scaler.params.predictor == "tcn_delta"
+    assert scaler.params.model_dirs["ms150"] == "models/tcn_delta_ms150_v3"
+    assert scaler.params.model_dirs["ms588"] == "models/tcn_delta_ms588_v2"
+    assert isinstance(scaler._predictor, MicroserviceModelMap)
+    assert scaler._predictor.predictor_for("ms150").time_encoding == "rebound"
+    assert scaler._predictor.predictor_for("ms588").time_encoding == "cyclic_minute"
+
+
 def test_yaml_loads_alibaba_8ms_eval(project_root: Path):
     import yaml
 

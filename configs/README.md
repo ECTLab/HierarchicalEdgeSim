@@ -60,6 +60,7 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 34 | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | Same world, persistence (campaign 12) |
 | 35 | `35-demo_alibaba_2ms_vicinity_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 12) |
 | 36 | `36-demo_alibaba_2ms_vicinity_proscale.yaml` | Same world, ProScale-style SMA + greedy neighbor (campaign 12) |
+| 37 | `37-demo_alibaba_2ms_vicinity_tcn.yaml` | Same world, per-MS residual TCN (campaign 12) |
 
 ---
 
@@ -67,11 +68,11 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Alibaba:** 12–15, **26–36**
-- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **32**, **34**
+- **Alibaba:** 12–15, **26–37**
+- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **32**, **34**, **37**
 - **Current triangle:** **16–19** reactive, **22–25** proactive
 
-A new scenario gets the next number (`36-…`). Do not renumber existing files when you edit them.
+A new scenario gets the next number (`38-…`). Do not renumber existing files when you edit them.
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml

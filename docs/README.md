@@ -56,7 +56,7 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 | 32 | [32-tex-followups.md](./32-tex-followups.md) | **Latest** paper-match punch list |
 | 33 | [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md) | MS_588 horizontal vs vicinity eval |
 | 34 | [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) | Eight Alibaba MS, vicinity, persistence (campaign 14) |
-| 35 | [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) | Two Alibaba MS (588+150), HPA, ProScale, ladder, persistence (campaign 12) |
+| 35 | [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) | Two Alibaba MS (588+150), HPA, ProScale, ladder, persistence, per-MS TCN (campaign 12) |
 
 ---
 

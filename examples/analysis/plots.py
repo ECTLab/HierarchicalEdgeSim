@@ -495,6 +495,7 @@ _STORY_COLORS = {
     "vicinity_tcn": "#2ca02c",
     "horizontal_tcn": "#2ca02c",
     "vicinity_hpa": "#17becf",
+    "vicinity_proscale": "#bcbd22",
     "off": "#7f7f7f",
     "vertical": "#8c564b",
     "local": "#e377c2",
@@ -503,6 +504,7 @@ _STORY_COLORS = {
 # Family match for labels like vicinity_hpa / horizontal_persistence that are
 # not exact keys. Order matters: check hpa before a generic fallback.
 _STORY_FAMILY_COLORS = (
+    ("proscale", "#bcbd22"),
     ("hpa", "#17becf"),
     ("persistence", "#9467bd"),
     ("tcn", "#2ca02c"),

@@ -83,13 +83,14 @@ What the numbers mean: [../docs/33-alibaba-ms588-eval.md](../docs/33-alibaba-ms5
 
 ### 12 — two Alibaba MS, vicinity
 
-Same physics as 11. Home 2×8, neighbor 4×8. MS_588 hourly needle + MS_150 always-on hog. Persistence vs reactive vs Kubernetes HPA (home only).
+Same physics as 11. Home 2×8, neighbor 4×8. MS_588 hourly needle + MS_150 always-on hog. Persistence vs reactive vs Kubernetes HPA (home only) vs a ProScale-style clone.
 
 | Slice | Config | Latest run |
 |---|---|---|
 | Vicinity reactive | `33-demo_alibaba_2ms_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T134640Z` |
 | Vicinity persistence | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | `vicinity_persistence/42_20260920T134642Z` |
 | Vicinity HPA | `35-demo_alibaba_2ms_vicinity_hpa.yaml` | `vicinity_hpa/42_20260921T064646Z` |
+| Vicinity ProScale | `36-demo_alibaba_2ms_vicinity_proscale.yaml` | `vicinity_proscale/42_20260922T073902Z` |
 
 What the numbers mean: [../docs/35-alibaba-2ms-eval.md](../docs/35-alibaba-2ms-eval.md).
 

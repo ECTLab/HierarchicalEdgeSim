@@ -6,7 +6,7 @@ Files are numbered by when the scenario **first appeared**. **Higher number = la
 | If you want… | Open |
 |---|---|
 | Current triangle (post paper-match) | `16`–`19` reactive, `22`–`25` proactive |
-| Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence, `35` HPA |
+| Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence, `35` HPA, `36` ProScale |
 | Alibaba 8-MS vicinity (campaign 14) | `31` reactive, `32` persistence |
 | Alibaba MS_588 eval (campaign 11) | `26`–`30` |
 | Alibaba MS_588 (original S7 pair) | `12` reactive, `13` TCN |
@@ -59,6 +59,7 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 33 | `33-demo_alibaba_2ms_vicinity_reactive.yaml` | MS_588 + MS_150, 16+32 vicinity, reactive (campaign 12) |
 | 34 | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | Same world, persistence (campaign 12) |
 | 35 | `35-demo_alibaba_2ms_vicinity_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 12) |
+| 36 | `36-demo_alibaba_2ms_vicinity_proscale.yaml` | Same world, ProScale-style SMA + greedy neighbor (campaign 12) |
 
 ---
 
@@ -66,7 +67,7 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Alibaba:** 12–15, **26–35**
+- **Alibaba:** 12–15, **26–36**
 - **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **32**, **34**
 - **Current triangle:** **16–19** reactive, **22–25** proactive
 

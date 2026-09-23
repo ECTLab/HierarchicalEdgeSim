@@ -382,6 +382,7 @@ def test_story_scaler_colors_are_distinct():
     tcn = _story_color("proactive_tcn", 2)
     reactive = _story_color("reactive_local", 0)
     hpa = _story_color("vicinity_hpa", 0)
+    proscale = _story_color("vicinity_proscale", 0)
     v_reactive = _story_color("vicinity_reactive", 1)
     v_persist = _story_color("vicinity_persistence", 2)
     assert persistence != tcn
@@ -390,6 +391,8 @@ def test_story_scaler_colors_are_distinct():
     assert hpa != v_reactive
     assert hpa != reactive
     assert hpa != v_persist
+    assert proscale not in {hpa, reactive, v_reactive, v_persist, tcn}
+    assert _story_linestyle("vicinity_proscale") == "-"
     assert v_persist == persistence
     assert v_reactive == reactive
     assert _story_color("horizontal_tcn", 0) == tcn

@@ -145,7 +145,8 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 
 Same campaign-11 physics, MS_588 + MS_150 on one app, 16-core home + 32-core
 neighbor. Persistence vs reactive ladder vs Kubernetes HPA (home only, no
-loans). Details: [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md).
+loans) vs a ProScale-style clone (fixed-size pods, SMA, greedy neighbor).
+Details: [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md).
 
 ```bash
 export PYTHONPATH="$PWD/src:$PWD/examples"
@@ -153,6 +154,7 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/33-demo_alibaba_2ms_vicinity_reactive.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/34-demo_alibaba_2ms_vicinity_persistence.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/35-demo_alibaba_2ms_vicinity_hpa.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/36-demo_alibaba_2ms_vicinity_proscale.yaml
 ```
 
 ### B10) Alibaba eight-MS vicinity (campaign 14)

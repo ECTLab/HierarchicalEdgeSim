@@ -52,4 +52,8 @@ def build_from_wrapper(wrapper: AutoscalerWrapper | None) -> Any | None:
         from hierarchical_edge_sim.autoscaler.kubernetes_hpa import build
 
         return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
+    if wrapper.name == "proscale":
+        from hierarchical_edge_sim.autoscaler.proscale import build
+
+        return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
     raise AutoscalerLoadError(f"no builder registered for '{wrapper.name}'")

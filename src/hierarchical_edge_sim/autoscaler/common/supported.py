@@ -5,4 +5,5 @@ SUPPORTED_AUTOSCALERS: list[str] = [
     "reactive_local",
     "proactive_auto_scaler",
     "kubernetes_hpa",
+    "proscale",
 ]

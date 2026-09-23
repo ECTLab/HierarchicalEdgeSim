@@ -302,6 +302,7 @@ def test_maybe_plot_forecast_writes_persistence_png(tmp_path: Path):
     out = tmp_path / "forecast_vs_actual.png"
     _maybe_plot_forecast(
         meta=meta,
+        ms_id="api",
         tau=tau,
         incoming=incoming,
         out_path=out,

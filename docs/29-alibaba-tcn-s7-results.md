@@ -76,9 +76,10 @@ The drop rates in the current-pair table should match a fresh §B6 run. The
 | `models/tcn_delta_v1/tcn_delta_weights.pth` | Residual TCN weights (~187 KB; RF=63, cyclic minute) |
 | `models/tcn_delta_v1/meta.json` | 60×3 → 5, `style=residual_tcn`, MS_588 min=932 max=29778 |
 | `models/tcn_delta_v1_ms150/` | Original sequential 60×2 weights; MS_150 min–max only |
+| `models/tcn_delta_ms150_v2/` | MS_150-only residual net (same recipe as v1). Weights and `meta.json` only |
 | `traces/alibaba/MS_588.csv` | 721 rows, `time_unit=time_tick+1`, `requests=total_requests` |
 
-The 47 MB full CSV and processed npy tensors stayed in `alibaba-trace`.
+The 47 MB full CSV, processed npy tensors, and the trace-versus-hat figures stayed in `alibaba-trace`. MS_150 training is `src/prepare_data.py --subset ms150`, `src/train_tcn.py`, and `src/inference.py` in that repo. The full-series figure is `data/tcn_delta_ms150_trace.png`.
 
 Same controller on **MS_150** (transfer, not a retune):
 [30-alibaba-tcn-ms150-results.md](./30-alibaba-tcn-ms150-results.md).

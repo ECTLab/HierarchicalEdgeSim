@@ -234,9 +234,17 @@ class ProactiveAutoScaler:
 
 def _default_predictor(params: ProactiveAutoScalerParams) -> OneStepRpsPredictor | HorizonRpsPredictor:
     if params.predictor == "tcn_delta":
+        from .predictors.model_map import MicroserviceModelMap
         from .predictors.tcn import TcnDeltaPredictor
 
-        return TcnDeltaPredictor.from_model_dir(params.model_dir)
+        default = TcnDeltaPredictor.from_model_dir(params.model_dir)
+        if not params.model_dirs:
+            return default
+        by_ms = {
+            ms_id: TcnDeltaPredictor.from_model_dir(path)
+            for ms_id, path in params.model_dirs.items()
+        }
+        return MicroserviceModelMap(default, by_ms)
     return PersistencePredictor(forecast_horizon=params.forecast_horizon)
 
 

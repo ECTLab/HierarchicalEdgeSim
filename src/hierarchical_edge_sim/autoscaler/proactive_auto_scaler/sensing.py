@@ -62,6 +62,7 @@ class ProactiveSensing:
                 predicted = tuple(
                     _predict(
                         self.predictor,
+                        ms_id=ms_id,
                         history=history,
                         steps=self.params.forecast_horizon,
                         feature_window=self.params.feature_window,
@@ -94,6 +95,7 @@ class ProactiveSensing:
 def _predict(
     predictor: Any,
     *,
+    ms_id: str,
     history: RpsHistory,
     steps: int,
     feature_window: int,
@@ -103,6 +105,8 @@ def _predict(
 ) -> list[float]:
     counts = history.as_list()
     rps = history.as_rps(ticks_per_window=ticks_per_window, tick_sec=tick_sec)
+    if hasattr(predictor, "predictor_for"):
+        predictor = predictor.predictor_for(ms_id)
     if hasattr(predictor, "predict_horizon"):
         ticks = time_window(close_time_tick, feature_window)
         return [

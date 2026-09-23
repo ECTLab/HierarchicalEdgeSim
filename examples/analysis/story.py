@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from .aggregate import (
@@ -24,7 +25,47 @@ from .plots import (
     plot_story_replicas,
     plot_story_serve_capacity,
 )
-from .forecast_hats import compute_forecast_hats
+from .forecast_hats import ForecastSeries, compute_forecast_hats
+
+
+def _sum_aligned_numbers(parts: list[list[float]]) -> list[float]:
+    n = len(parts[0])
+    out: list[float] = []
+    for i in range(n):
+        vals = [series[i] for series in parts]
+        if any(math.isnan(v) for v in vals):
+            out.append(float("nan"))
+        else:
+            out.append(float(sum(vals)))
+    return out
+
+
+def _forecast_for_run(meta: dict, tau: list[int], containers: list) -> ForecastSeries | None:
+    """Hats per microservice, then summed.
+
+    A residual TCN is not linear, and each MS may load its own min/max.
+    Persistence of a sum equals the sum of persistences, so this matches
+    the old single-series hats for that predictor.
+    """
+    parts: list[ForecastSeries] = []
+    for ms_id, group in group_containers_by_microservice(containers).items():
+        incoming = sum_aligned(tau, group, "incoming")
+        hats = compute_forecast_hats(meta, tau, incoming, ms_id=ms_id)
+        if hats is None:
+            return None
+        parts.append(hats)
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    first = parts[0]
+    return ForecastSeries(
+        step1=_sum_aligned_numbers([p.step1 for p in parts]),
+        step_h=_sum_aligned_numbers([p.step_h for p in parts]),
+        predictor=first.predictor,
+        horizon=first.horizon,
+        lookback=first.lookback,
+    )
 
 
 def _serve_mu_by_ms(tau: list[int], containers: list, meta: dict, app_id: str) -> list[float]:
@@ -109,7 +150,7 @@ def write_story_plots(
         replicas_by_label.append(
             (label, [sum(counts[site][i] for site in counts) for i in range(len(tau))])
         )
-        candidate = compute_forecast_hats(meta, tau, incoming)
+        candidate = _forecast_for_run(meta, tau, containers)
         if candidate is None:
             continue
         if forecast is None or (

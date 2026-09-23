@@ -18,6 +18,8 @@ def compute_forecast_hats(
     meta: dict,
     tau: list[int],
     incoming: list[float],
+    *,
+    ms_id: str | None = None,
 ) -> ForecastSeries | None:
     """Return hats aligned to the ticks they forecast, or ``None``.
 
@@ -31,7 +33,7 @@ def compute_forecast_hats(
         return None
     predictor = str(params.get("predictor") or "persistence")
     if predictor == "tcn_delta":
-        return _tcn_hats(meta, params, tau, incoming)
+        return _tcn_hats(meta, params, tau, incoming, ms_id=ms_id)
     if predictor == "persistence":
         return _persistence_hats(meta, params, tau, incoming)
     return None
@@ -119,6 +121,8 @@ def _tcn_hats(
     params: dict,
     tau: list[int],
     incoming: list[float],
+    *,
+    ms_id: str | None = None,
 ) -> ForecastSeries | None:
     try:
         from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.tcn import (
@@ -132,7 +136,9 @@ def _tcn_hats(
     except ImportError:
         return None
 
-    model_dir = params.get("model_dir") or "models/tcn_delta_v1"
+    model_dirs = params.get("model_dirs") or {}
+    mapped = model_dirs.get(ms_id) if ms_id else None
+    model_dir = mapped or params.get("model_dir") or "models/tcn_delta_v1"
     try:
         predictor = TcnDeltaPredictor.from_model_dir(model_dir)
     except Exception:

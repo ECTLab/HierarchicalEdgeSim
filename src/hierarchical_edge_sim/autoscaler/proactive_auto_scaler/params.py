@@ -27,6 +27,9 @@ class ProactiveAutoScalerParams:
     cooldown_C: int = 3
     predictor: str = "persistence"
     model_dir: str = "models/tcn_delta_v1"
+    # Optional per-microservice checkpoints. Each directory has its own
+    # min/max. Ids missing from the map use ``model_dir``.
+    model_dirs: dict[str, str] = field(default_factory=dict)
     time_tick_offset: int = 0
     kappa_min: float = 0.5
     window_kappa: int | None = None
@@ -51,6 +54,12 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         data.pop("window_W", None)
 
     predictor = str(data.pop("predictor", "persistence"))
+    raw_dirs = data.pop("model_dirs", {}) or {}
+    if not isinstance(raw_dirs, dict):
+        raise ValueError("model_dirs must be a mapping of microservice id to model directory")
+    model_dirs = {str(ms_id): str(path) for ms_id, path in raw_dirs.items()}
+    if any(not path.strip() for path in model_dirs.values()):
+        raise ValueError("model_dirs values must be non-empty directories")
     if "hold_down_ticks" in data:
         raise ValueError(
             "hold_down_ticks was removed; cooldown_C delays scale-down only "
@@ -80,6 +89,7 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         cooldown_C=int(data.pop("cooldown_C", 5 if predictor == "tcn_delta" else 3)),
         predictor=predictor,
         model_dir=str(data.pop("model_dir", "models/tcn_delta_v1")),
+        model_dirs=model_dirs,
         time_tick_offset=int(data.pop("time_tick_offset", 0)),
         kappa_min=kappa_min,
         window_kappa=window_kappa,

@@ -58,6 +58,68 @@ def test_params_defaults_and_unknown_predictor():
         validate_params({"predictor": "lstm"})
     with pytest.raises(ValueError, match="feature_window=60"):
         validate_params({"predictor": "tcn_delta", "feature_window": 10, "forecast_horizon": 5})
+    mapped = validate_params(
+        {
+            "predictor": "tcn_delta",
+            "feature_window": 60,
+            "forecast_horizon": 5,
+            "model_dirs": {"ms150": "models/tcn_delta_ms150_v2", "ms588": "models/tcn_delta_v1"},
+        }
+    )
+    assert mapped.model_dirs["ms150"] == "models/tcn_delta_ms150_v2"
+    assert mapped.model_dir == "models/tcn_delta_v1"
+    with pytest.raises(ValueError, match="model_dirs"):
+        validate_params(
+            {
+                "predictor": "tcn_delta",
+                "feature_window": 60,
+                "forecast_horizon": 5,
+                "model_dirs": {"ms150": "  "},
+            }
+        )
+
+
+def test_sensing_routes_each_microservice_to_its_model():
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.history import RpsHistory
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.model_map import (
+        MicroserviceModelMap,
+    )
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.sensing import _predict
+
+    class _ConstHorizon:
+        def __init__(self, value: float) -> None:
+            self.value = value
+
+        def predict_horizon(self, history_rps, *, time_ticks, counts):
+            _ = (history_rps, time_ticks, counts)
+            return [self.value]
+
+    router = MicroserviceModelMap(_ConstHorizon(1.0), {"ms150": _ConstHorizon(150.0)})
+    history = RpsHistory(2)
+    history.append(10.0)
+    history.append(20.0)
+    ms150 = _predict(
+        router,
+        ms_id="ms150",
+        history=history,
+        steps=1,
+        feature_window=2,
+        ticks_per_window=1,
+        tick_sec=60.0,
+        close_time_tick=1,
+    )
+    other = _predict(
+        router,
+        ms_id="ms588",
+        history=history,
+        steps=1,
+        feature_window=2,
+        ticks_per_window=1,
+        tick_sec=60.0,
+        close_time_tick=1,
+    )
+    assert ms150 == [150.0]
+    assert other == [1.0]
 
 
 def test_window_rps_conversion():

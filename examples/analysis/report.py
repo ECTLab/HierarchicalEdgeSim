@@ -177,6 +177,7 @@ def analyze_run(
             )
             _maybe_plot_forecast(
                 meta=meta,
+                ms_id=ms_id,
                 tau=tau_trace,
                 incoming=incoming,
                 out_path=app_out / (
@@ -262,6 +263,7 @@ def _resource_plot_targets(containers: list) -> list:
 def _maybe_plot_forecast(
     *,
     meta: dict,
+    ms_id: str,
     tau: list[int],
     incoming: list[float],
     out_path: Path,
@@ -270,7 +272,7 @@ def _maybe_plot_forecast(
 ) -> None:
     from .forecast_hats import compute_forecast_hats
 
-    hats = compute_forecast_hats(meta, tau, incoming)
+    hats = compute_forecast_hats(meta, tau, incoming, ms_id=ms_id)
     if hats is None:
         return
     if hats.predictor == "tcn_delta":

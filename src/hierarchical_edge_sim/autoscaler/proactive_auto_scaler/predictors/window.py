@@ -42,6 +42,28 @@ def cyclic_minute_features(tick: int, period: int = 60) -> tuple[float, float]:
     return math.sin(angle), math.cos(angle)
 
 
+def _rebound_rows(
+    counts: list[float],
+    load_min: float,
+    load_max: float,
+) -> list[list[float]]:
+    span = max(float(load_max) - float(load_min), EPS)
+    rows: list[list[float]] = []
+    prev: float | None = None
+    running_max = 0.0
+    for count in counts:
+        level = clip_unit((float(count) - float(load_min)) / span)
+        if prev is None:
+            velocity = 0.0
+            running_max = level
+        else:
+            velocity = level - prev
+            running_max = max(running_max, level)
+        rows.append([level, velocity, running_max - level])
+        prev = level
+    return rows
+
+
 def build_option_a_window(
     counts: list[float],
     time_ticks: list[int],
@@ -57,6 +79,11 @@ def build_option_a_window(
     if not counts:
         raise ValueError("feature window must be non-empty")
     encoding = str(time_encoding or "linear")
+    if encoding == "rebound":
+        # MS_150: level, one-step change, and how far the latest count sits
+        # under the max of this lookback. All three are functions of the
+        # counts alone, so a drop already in the window can be read as a hole.
+        return _rebound_rows(counts, load_min, load_max)
     if encoding == "cyclic_minute":
         period = int(time_period or time_scale or 60)
         rows: list[list[float]] = []

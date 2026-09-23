@@ -44,6 +44,22 @@ def test_time_window_and_option_a_shape():
     assert 0.0 <= window[-1][0] <= 1.0
 
 
+def test_rebound_window_marks_a_hole_under_the_lookback_max():
+    counts = [10.0, 10.0, 50.0, 20.0]
+    window = build_option_a_window(
+        counts,
+        [0, 1, 2, 3],
+        load_min=0.0,
+        load_max=100.0,
+        time_scale=60.0,
+        time_encoding="rebound",
+    )
+    assert [round(v, 6) for v in window[0]] == [0.1, 0.0, 0.0]
+    assert window[1] == pytest.approx([0.1, 0.0, 0.0])
+    assert window[2] == pytest.approx([0.5, 0.4, 0.0])
+    assert window[3] == pytest.approx([0.2, -0.3, 0.3])
+
+
 def test_cyclic_minute_window_wraps_the_hour():
     ticks = time_window(59, 60)
     counts = [1000.0] * 60

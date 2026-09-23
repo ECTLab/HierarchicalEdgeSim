@@ -63,11 +63,11 @@ def test_params_defaults_and_unknown_predictor():
             "predictor": "tcn_delta",
             "feature_window": 60,
             "forecast_horizon": 5,
-            "model_dirs": {"ms150": "models/tcn_delta_ms150_v2", "ms588": "models/tcn_delta_v1"},
+            "model_dirs": {"ms150": "models/tcn_delta_ms150_v2", "ms588": "models/tcn_delta_ms588_v2"},
         }
     )
     assert mapped.model_dirs["ms150"] == "models/tcn_delta_ms150_v2"
-    assert mapped.model_dir == "models/tcn_delta_v1"
+    assert mapped.model_dir == "models/tcn_delta_ms588_v2"
     with pytest.raises(ValueError, match="model_dirs"):
         validate_params(
             {
@@ -549,7 +549,7 @@ def test_yaml_loads_ms588_eval_tcn(project_root: Path):
         assert scaler is not None
         assert scaler.params.predictor == "tcn_delta"
         assert scaler.params.feature_window == 60
-        assert scaler.params.model_dir == "models/tcn_delta_v1"
+        assert scaler.params.model_dir == "models/tcn_delta_ms588_v2"
 
 
 def test_yaml_loads_alibaba_8ms_eval(project_root: Path):

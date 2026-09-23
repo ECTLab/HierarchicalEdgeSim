@@ -153,7 +153,7 @@ class TcnDeltaPredictor:
     @classmethod
     def from_model_dir(cls, model_dir: str | Path | None = None) -> "TcnDeltaPredictor":
         root = _project_root()
-        directory = Path(model_dir) if model_dir else root / "models" / "tcn_delta_v1"
+        directory = Path(model_dir) if model_dir else root / "models" / "tcn_delta_ms588_v2"
         if not directory.is_absolute():
             directory = (root / directory).resolve()
         meta_path = directory / "meta.json"

@@ -72,7 +72,7 @@ def test_tcn_emits_five_rps(project_root: Path):
         TcnDeltaPredictor,
     )
 
-    pred = TcnDeltaPredictor.from_model_dir(project_root / "models" / "tcn_delta_v1")
+    pred = TcnDeltaPredictor.from_model_dir(project_root / "models" / "tcn_delta_ms588_v2")
     assert pred.time_encoding == "cyclic_minute"
     assert pred.meta["arch"]["style"] == "residual_tcn"
     assert int(pred.meta["arch"]["input_size"]) == 3
@@ -95,7 +95,7 @@ def test_ms588_tcn_leads_hourly_onset_from_valley(project_root: Path):
         TcnDeltaPredictor,
     )
 
-    pred = TcnDeltaPredictor.from_model_dir(project_root / "models" / "tcn_delta_v1")
+    pred = TcnDeltaPredictor.from_model_dir(project_root / "models" / "tcn_delta_ms588_v2")
     counts = [4000.0] * 60
     ticks = time_window(79, 60)
     hats = pred.predict_horizon(

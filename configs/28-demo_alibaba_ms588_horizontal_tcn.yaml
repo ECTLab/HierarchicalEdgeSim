@@ -1,4 +1,4 @@
-# Same 4×8-core MS_588 world as 26, residual Option A TCN (models/tcn_delta_v1).
+# Same 4×8-core MS_588 world as 26, residual Option A TCN (models/tcn_delta_ms588_v2).
 # Paper predictor vs reactive (26) and persistence (27). Knobs match 13
 # (sustained_steps 99 keeps BEV-first; cooldown_C=5 is HPA 5 min down).
 
@@ -57,7 +57,7 @@ autoscaler:
     sustained_steps: 99
     cooldown_C: 5
     predictor: tcn_delta
-    model_dir: models/tcn_delta_v1
+    model_dir: models/tcn_delta_ms588_v2
     time_tick_offset: 0
     x_up_streak: 3
     y_down_streak: 8

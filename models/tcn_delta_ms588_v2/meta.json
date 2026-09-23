@@ -1,5 +1,5 @@
 {
-  "name": "tcn_delta_v2",
+  "name": "tcn_delta_ms588_v2",
   "source": "alibaba-trace residual TCN, cyclic minute, MS_588 only",
   "msname": "MS_588",
   "lookback": 60,

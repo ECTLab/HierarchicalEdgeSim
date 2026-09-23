@@ -26,7 +26,7 @@ class ProactiveAutoScalerParams:
     # scaleDown 300s. On Alibaba (1 window = 1 min) cooldown_C=5 is that 5 min.
     cooldown_C: int = 3
     predictor: str = "persistence"
-    model_dir: str = "models/tcn_delta_v1"
+    model_dir: str = "models/tcn_delta_ms588_v2"
     # Optional per-microservice checkpoints. Each directory has its own
     # min/max. Ids missing from the map use ``model_dir``.
     model_dirs: dict[str, str] = field(default_factory=dict)
@@ -88,7 +88,7 @@ def validate_params(raw: dict[str, Any]) -> ProactiveAutoScalerParams:
         sustained_steps=sustained_steps,
         cooldown_C=int(data.pop("cooldown_C", 5 if predictor == "tcn_delta" else 3)),
         predictor=predictor,
-        model_dir=str(data.pop("model_dir", "models/tcn_delta_v1")),
+        model_dir=str(data.pop("model_dir", "models/tcn_delta_ms588_v2")),
         model_dirs=model_dirs,
         time_tick_offset=int(data.pop("time_tick_offset", 0)),
         kappa_min=kappa_min,

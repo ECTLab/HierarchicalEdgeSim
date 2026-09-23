@@ -1,6 +1,6 @@
 {
   "name": "tcn_delta_v1_ms150",
-  "source": "alibaba-trace/data/tcn_delta_weights.pth + final_normalized_dataset.csv",
+  "source": "alibaba-trace/data/tcn_delta_ms588_v2/tcn_delta_weights_rf7.pth + final_normalized_dataset.csv",
   "msname": "MS_150",
   "lookback": 60,
   "horizon": 5,
@@ -22,7 +22,7 @@
     "output_size": 5
   },
   "notes": [
-    "Same global Option A weights as tcn_delta_v1; per-MS min-max is MS_150 (training convention).",
+    "Same sequential RF=7 weights as models/tcn_delta_ms588_v2/tcn_delta_weights_rf7.pth; per-MS min-max is MS_150.",
     "Do not reuse MS_588 932-29778 on this series — the TCN sees normalized load.",
     "absolute_norm = last_known_norm + delta",
     "Simulator time_unit = time_tick + 1; requests = total_requests."

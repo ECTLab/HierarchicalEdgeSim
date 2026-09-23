@@ -13,7 +13,7 @@ Five runs, not a full matrix. Horizontal world matches `12`/`13`. Vicinity is th
 |---|---|---|---|
 | `26-demo_alibaba_ms588_horizontal_reactive.yaml` | Ladder, no hats | 4×8 in `c1` | `reactive_local` |
 | `27-demo_alibaba_ms588_horizontal_persistence.yaml` | PredictAndDecide ablation | same | persistence, \(W=60\), \(H=5\) |
-| `28-demo_alibaba_ms588_horizontal_tcn.yaml` | Paper predictor | same | TCN `models/tcn_delta_v1` |
+| `28-demo_alibaba_ms588_horizontal_tcn.yaml` | Paper predictor | same | TCN `models/tcn_delta_ms588_v2` |
 | `29-demo_alibaba_ms588_vicinity_reactive.yaml` | VicinityRound on real spikes | `c1` 1×8 + `c2` 3×8 in `v1` | `reactive_local`, \(\theta_{\mathrm{route}}=0.80\) |
 | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | TCN + VicinityRound | same as 29 | TCN, \(\theta_{\mathrm{route}}=0.80\) |
 
@@ -54,7 +54,7 @@ Plots: `<run>/analysis/demo_app/ladder_qos.png`, `user_latency.png`, `replicas_b
 
 Incoming **3,385,510** on every slice (conservation holds). Leftover μ floor is in the shared ladder, so quiet-end keepers sit above `cpu_min` (reactive 1.28 cores; TCN ~2.2–2.5 — asymmetric loss still over-predicts valleys).
 
-TCN weights are the residual net in `models/tcn_delta_v1/` (RF=63, cyclic minute-of-hour, MS_588-only). Replay on this trace: t+1 MAE 1449 vs persistence 1343, but corr(actual)=**0.868** vs corr(lag-1)=0.559, and every hourly onset hat is ~27k (last-value ~4k).
+TCN weights are the residual net in `models/tcn_delta_ms588_v2/` (RF=63, cyclic minute-of-hour, MS_588-only). Replay on this trace: t+1 MAE 1449 vs persistence 1343, but corr(actual)=**0.868** vs corr(lag-1)=0.559, and every hourly onset hat is ~27k (last-value ~4k).
 
 | Slice | Run dir | Drop | After τ≥61 | SLA miss | Peak live | Extra spawn | Leftover |
 |---|---|---|---|---|---|---|---|

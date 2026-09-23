@@ -1,6 +1,6 @@
 {
-  "name": "tcn_delta_v1",
-  "source": "alibaba-trace/data/tcn_delta_weights.pth + final_normalized_dataset.csv",
+  "name": "tcn_delta_ms588_rf7",
+  "source": "alibaba-trace/data/tcn_delta_ms588_v2/tcn_delta_weights_rf7.pth + final_normalized_dataset.csv",
   "msname": "MS_588",
   "lookback": 60,
   "horizon": 5,
@@ -11,7 +11,7 @@
   "load_max": 29778.0,
   "load_units": "total_requests_per_minute",
   "time_tick_offset": 0,
-  "weights_file": "tcn_delta_weights.pth",
+  "weights_file": "tcn_delta_weights_rf7.pth",
   "arch": {
     "input_size": 2,
     "num_channels": [

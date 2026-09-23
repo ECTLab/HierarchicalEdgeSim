@@ -62,7 +62,7 @@ autoscaler:
     # 1 window = 1 min here, so 5 ≈ five minutes. Scale-up is not delayed.
     cooldown_C: 5
     predictor: tcn_delta
-    model_dir: models/tcn_delta_v1
+    model_dir: models/tcn_delta_ms588_v2
     time_tick_offset: 0
     x_up_streak: 3
     y_down_streak: 8

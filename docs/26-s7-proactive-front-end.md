@@ -19,7 +19,7 @@ PredictAndDecide sits in front of the same AllocateResources path as `reactive_l
 | Item | Choice |
 |---|---|
 | Predictor I/O | **Option A:** lookback `60×3` `[normalized_load, sin/cos(2π·(tick%60)/60)]` → 5-step **delta** (residual TCN, RF=63). MS_150 still loads the old `60×2` sequential weights via `meta.arch.style`. |
-| Default demo backend | `tcn_delta` (`models/tcn_delta_v1/`, weights from `alibaba-trace`) |
+| Default demo backend | `tcn_delta` (`models/tcn_delta_ms588_v2/`, weights from `alibaba-trace`) |
 | Test / smoke backend | `persistence` (last sample, no torch) |
 | Cold start | **reactive-only** until `W` real samples exist (`κ` blend is v2) |
 | History purity | durable buffer holds observed request counts only |
@@ -64,7 +64,7 @@ Decide residual is the gap from current alloc `A` to `A_req = n·min + (cpu_per_
 
 | Piece | Role |
 |---|---|
-| `models/tcn_delta_v1/` | Residual TCN weights + `meta.json` (MS_588 min/max, 60×3 cyclic minute → 5, RF=63) |
+| `models/tcn_delta_ms588_v2/` | Residual TCN weights + `meta.json` (MS_588 min/max, 60×3 cyclic minute → 5, RF=63) |
 | `models/tcn_delta_v1_ms150/` | Same weights; MS_150 min/max 240–40083 |
 | `traces/alibaba/MS_588.csv` | 721 one-minute ticks from Alibaba v2021 |
 | `traces/alibaba/MS_150.csv` | Same format; heavier, not 60-minute periodic |

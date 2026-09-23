@@ -3,7 +3,7 @@
 721 one-minute ticks from Alibaba cluster-trace-microservices-v2021. Same world
 (4×8 cores, `tick_sec=60`). The August numbers below used the original sequential
 60×2 TCN (`time_tick/720`, RF=7). Campaign 11 now loads a residual 60×3 cyclic-minute
-net from the same `models/tcn_delta_v1/` path — see [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md).
+net from the same `models/tcn_delta_ms588_v2/` path — see [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md).
 
 The first S7 integration run dropped **69%** under TCN vs **15%** under
 `reactive_local`. That was a control-path mismatch with the usage model, not a
@@ -73,13 +73,13 @@ The drop rates in the current-pair table should match a fresh §B6 run. The
 
 | Artifact | Role |
 |---|---|
-| `models/tcn_delta_v1/tcn_delta_weights.pth` | Residual TCN weights (~187 KB; RF=63, cyclic minute) |
-| `models/tcn_delta_v1/meta.json` | 60×3 → 5, `style=residual_tcn`, MS_588 min=932 max=29778 |
+| `models/tcn_delta_ms588_v2/tcn_delta_weights.pth` | Residual TCN weights (~187 KB; RF=63, cyclic minute) |
+| `models/tcn_delta_ms588_v2/meta.json` | 60×3 → 5, `style=residual_tcn`, MS_588 min=932 max=29778 |
 | `models/tcn_delta_v1_ms150/` | Original sequential 60×2 weights; MS_150 min–max only |
-| `models/tcn_delta_ms150_v2/` | MS_150-only residual net (same recipe as v1). Weights and `meta.json` only |
+| `models/tcn_delta_ms150_v2/` | MS_150-only residual net (same recipe as the MS_588 residual). Weights and `meta.json` only |
 | `traces/alibaba/MS_588.csv` | 721 rows, `time_unit=time_tick+1`, `requests=total_requests` |
 
-The 47 MB full CSV, processed npy tensors, and the trace-versus-hat figures stayed in `alibaba-trace`. MS_150 training is `src/prepare_data.py --subset ms150`, `src/train_tcn.py`, and `src/inference.py` in that repo. The full-series figure is `data/tcn_delta_ms150_trace.png`.
+The 47 MB full CSV, processed npy tensors, and the trace-versus-hat figures stayed in `alibaba-trace`. MS_150 training is `src/prepare_data.py --subset ms150`, `src/train_tcn.py`, and `src/inference.py` in that repo. The full-series figure is `data/tcn_delta_ms150_v2_trace.png`. The MS_588 checkpoint in that repo is `data/tcn_delta_ms588_v2/`.
 
 Same controller on **MS_150** (transfer, not a retune):
 [30-alibaba-tcn-ms150-results.md](./30-alibaba-tcn-ms150-results.md).

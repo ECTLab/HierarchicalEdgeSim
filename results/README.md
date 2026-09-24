@@ -93,6 +93,8 @@ Same physics as 11. Home 2×8, neighbor 4×8. MS_588 hourly needle + MS_150 alwa
 | Vicinity HPA | `35-demo_alibaba_2ms_vicinity_hpa.yaml` | `vicinity_hpa/42_20260921T064646Z` |
 | Vicinity ProScale | `36-demo_alibaba_2ms_vicinity_proscale.yaml` | `vicinity_proscale/42_20260922T073902Z` |
 | Vicinity TCN | `37-demo_alibaba_2ms_vicinity_tcn.yaml` | `vicinity_tcn/42_20260923T180029Z` |
+| Vicinity persistence, θ=0.75 | `48-demo_alibaba_2ms_vicinity_persistence_theta75.yaml` | `vicinity_persistence_theta75/42_20260924T111051Z` |
+| Vicinity TCN, θ=0.75 | `49-demo_alibaba_2ms_vicinity_tcn_theta75.yaml` | `vicinity_tcn_theta75/42_20260924T111059Z` |
 
 What the numbers mean: [../docs/35-alibaba-2ms-eval.md](../docs/35-alibaba-2ms-eval.md).
 
@@ -131,5 +133,5 @@ What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-e
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-The next unused campaign number is **15**. The next config number is `48-…`.
+The next unused campaign number is **15**. The next config number is `50-…`.
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

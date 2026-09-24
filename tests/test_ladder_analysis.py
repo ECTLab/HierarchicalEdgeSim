@@ -401,3 +401,10 @@ def test_story_scaler_colors_are_distinct():
     assert _story_linestyle("vicinity_persistence") == "--"
     assert _story_linestyle("horizontal_persistence") == "--"
     assert _story_linestyle("vicinity_hpa") == "-"
+    theta75_p = _story_color("vicinity_persistence_theta75", 0)
+    theta75_t = _story_color("vicinity_tcn_theta75", 1)
+    assert theta75_p != v_persist
+    assert theta75_t != tcn
+    assert theta75_p != theta75_t
+    assert _story_linestyle("vicinity_persistence_theta75") == "-."
+    assert _story_linestyle("vicinity_tcn_theta75") == "-."

@@ -6,7 +6,7 @@ Files are numbered by when the scenario **first appeared**. **Higher number = la
 | If you want… | Open |
 |---|---|
 | Current triangle (post paper-match) | `16`–`19` reactive, `22`–`25` proactive |
-| Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence, `35` HPA, `36` ProScale |
+| Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence, `35` HPA, `36` ProScale, `37` TCN, `48`–`49` θ=0.75 |
 | Alibaba 4-MS vicinity (campaign 13) | `38` reactive, `39` persistence, `40` TCN, `41` HPA, `42` ProScale |
 | Alibaba 8-MS vicinity (campaign 14) | `43` reactive, `44` persistence, `45` HPA, `46` ProScale, `47` TCN |
 | Alibaba MS_588 eval (campaign 11) | `26`–`30` |
@@ -72,6 +72,8 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 45 | `45-demo_alibaba_8ms_sized_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 14) |
 | 46 | `46-demo_alibaba_8ms_sized_proscale.yaml` | Same world, ProScale-style SMA + greedy neighbor (campaign 14) |
 | 47 | `47-demo_alibaba_8ms_sized_tcn.yaml` | Same world, one residual TCN per microservice (campaign 14) |
+| 48 | `48-demo_alibaba_2ms_vicinity_persistence_theta75.yaml` | Campaign 12 world, persistence, \(\theta_{\mathrm{target}}=0.75\) |
+| 49 | `49-demo_alibaba_2ms_vicinity_tcn_theta75.yaml` | Campaign 12 world, per-MS TCN, \(\theta_{\mathrm{target}}=0.75\) |
 
 ---
 
@@ -79,11 +81,11 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Alibaba:** 12–15, **26–30**, **33–47**
-- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **34**, **37**, **39–40**, **44**, **47**
+- **Alibaba:** 12–15, **26–30**, **33–49**
+- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **34**, **37**, **39–40**, **44**, **47–49**
 - **Current triangle:** **16–19** reactive, **22–25** proactive
 
-A new scenario gets the next number (`48-…`). Do not renumber existing files when you edit them.
+A new scenario gets the next number (`50-…`). Do not renumber existing files when you edit them.
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml

@@ -494,6 +494,8 @@ _STORY_COLORS = {
     "proactive_tcn": "#2ca02c",
     "vicinity_tcn": "#2ca02c",
     "horizontal_tcn": "#2ca02c",
+    "vicinity_persistence_theta75": "#6b3fa0",
+    "vicinity_tcn_theta75": "#16661a",
     "vicinity_hpa": "#17becf",
     "vicinity_proscale": "#bcbd22",
     "off": "#7f7f7f",
@@ -527,7 +529,10 @@ def _story_color(label: str, fallback_index: int) -> str:
 
 
 def _story_linestyle(label: str) -> str:
-    if "persistence" in label.lower():
+    key = label.lower()
+    if "theta75" in key:
+        return "-."
+    if "persistence" in key:
         return "--"
     return "-"
 

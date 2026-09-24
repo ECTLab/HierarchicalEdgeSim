@@ -782,6 +782,27 @@ def test_yaml_loads_alibaba_2ms_eval(project_root: Path):
     assert scaler.params.ladder.theta_high == pytest.approx(0.80)
     persist_cfg = yaml.safe_load(persist_path.read_text())
     assert "12-alibaba-2ms-eval" in persist_cfg["sim"]["results_dir"]
+    assert scaler.params.theta_target == pytest.approx(0.60)
+
+
+def test_yaml_loads_alibaba_2ms_theta75(project_root: Path):
+    import yaml
+
+    persist_path = project_root / "configs" / "48-demo_alibaba_2ms_vicinity_persistence_theta75.yaml"
+    scaler = load_autoscaler_from_yaml(persist_path)
+    assert scaler is not None
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.theta_target == pytest.approx(0.75)
+    assert scaler.params.theta_down < scaler.params.theta_target < scaler.params.theta_up
+    cfg = yaml.safe_load(persist_path.read_text())
+    assert cfg["sim"]["results_dir"].endswith("vicinity_persistence_theta75/")
+    assert cfg["sim"]["theta_route"] == pytest.approx(0.80)
+
+    tcn_path = project_root / "configs" / "49-demo_alibaba_2ms_vicinity_tcn_theta75.yaml"
+    tcn_cfg = yaml.safe_load(tcn_path.read_text())
+    assert tcn_cfg["autoscaler"]["params"]["theta_target"] == pytest.approx(0.75)
+    assert tcn_cfg["autoscaler"]["params"]["model_dirs"]["ms150"] == "models/tcn_delta_ms150_v3"
+    assert tcn_cfg["sim"]["results_dir"].endswith("vicinity_tcn_theta75/")
 
 
 def test_alibaba_2ms_world_stamps_home_and_two_traces(project_root: Path):

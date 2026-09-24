@@ -146,8 +146,9 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 Same campaign-11 physics, MS_588 + MS_150 on one app, 16-core home + 32-core
 neighbor. Persistence vs reactive ladder vs Kubernetes HPA (home only, no
 loans) vs a ProScale-style clone (fixed-size pods, SMA, greedy neighbor) vs
-per-MS TCN (config 37; `ms150` uses `models/tcn_delta_ms150_v3`). Config 37
-needs torch on `PYTHONPATH`.
+per-MS TCN (config 37; `ms150` uses `models/tcn_delta_ms150_v3`). Configs 48 and 49
+are the same persistence and TCN ladders with \(\theta_{\mathrm{target}}=0.75\)
+instead of 0.60. Configs 37 and 49 need torch on `PYTHONPATH`.
 Details: [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md).
 
 ```bash
@@ -158,6 +159,8 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/35-demo_alibaba_2ms_vicinity_hpa.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/36-demo_alibaba_2ms_vicinity_proscale.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/37-demo_alibaba_2ms_vicinity_tcn.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/48-demo_alibaba_2ms_vicinity_persistence_theta75.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/49-demo_alibaba_2ms_vicinity_tcn_theta75.yaml
 ```
 
 ### B10) Alibaba eight-MS vicinity (campaign 14)

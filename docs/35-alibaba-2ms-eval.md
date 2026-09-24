@@ -86,4 +86,4 @@ ProScale is the row that may use `c2` without the ladder. At the same ~16-core b
 
 TCN is the same ladder as persistence with a different hat per MS (`tcn_delta_ms588_v2` on the needle, `tcn_delta_ms150_v3` on the hog). After the shared cold start, drop is **0.11%** and the whole-run drop is **0.83%**, with offered means 69 / 55 ms. That costs **30.4** mean cores against persistence’s 24.6, and the live count peaks at 18 with `c2` full. Almost all of the remaining 157,203 drops are the 138,606 requests lost at τ≤60, before either forecast is applied.
 
-Do not mix these folders with campaign 11 (single MS_588) or campaign 14 (eight MS). Campaign 13 is reserved for 3–4 MS.
+Do not mix these folders with campaign 11 (single MS_588) or campaign 14 (eight MS).

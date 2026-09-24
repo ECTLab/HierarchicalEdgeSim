@@ -5,7 +5,7 @@
 **Pool:** 56 cores — home `c1` 3×8, neighbor `c2` 4×8, vicinity `v1`  
 **Campaign:** `results/13-alibaba-4ms-eval/`  
 **Configs:** `38` reactive, `39` persistence, `40` per-MS TCN, `41` Kubernetes HPA, `42` ProScale-style  
-**Related:** [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) (two MS), [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) (eight MS, deferred)
+**Related:** [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) (two MS), [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) (eight MS)
 
 One app, four microservices. Reactive ladder, persistence, one residual TCN per microservice, Kubernetes HPA (home only), and a reduced ProScale clone (fixed-size replicas, two-point moving average, greedy home then neighbor). Same seeds (2.0/1024), \(\theta_{\mathrm{route}}=0.80\), and 5.0 ms between `c1` and `c2` on every slice. `cascade_home: true` on the ladder configs. Cold start on 39 and 40 is reactive until \(\tau=60\). HPA and ProScale scale from the first tick and never resize.
 

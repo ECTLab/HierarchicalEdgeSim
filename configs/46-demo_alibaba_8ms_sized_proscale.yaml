@@ -1,11 +1,11 @@
-# Eight Alibaba traces, one app, 32-core home + 32-core neighbor (campaign 14).
-# Home is too small for concurrent peak (~64 cores of headroom); VicinityRound
-# must loan onto c2. Reactive baseline for config 32 (same world, persistence).
-# Seeds at 2.0/1024, two per home worker. cascade_home on: eight MS share c1.
+# Same eight-MS world as 43 (campaign 14). Reduced ProScale clone: SMA N=2,
+# fixed seed-sized replicas (2.0/1024), greedy fill of home c1 then neighbor
+# c2 against raw free cores. No vertical resize, no reserve, no cascade.
+# No cloud offload. c1–c2 latency stays 5.0 ms.
 
 sim:
   tick_sec: 60.0
-  results_dir: results/14-alibaba-8ms-eval/vicinity_reactive/
+  results_dir: results/14-alibaba-8ms-eval/vicinity_proscale/
   seed: 42
   theta_route: 0.80
 
@@ -31,12 +31,14 @@ topology:
         - {id: c1-w2, <<: *w8}
         - {id: c1-w3, <<: *w8}
         - {id: c1-w4, <<: *w8}
+        - {id: c1-w5, <<: *w8}
     - id: c2
       servers:
         - {id: c2-w1, <<: *w8}
         - {id: c2-w2, <<: *w8}
         - {id: c2-w3, <<: *w8}
         - {id: c2-w4, <<: *w8}
+        - {id: c2-w5, <<: *w8}
 
   vicinities:
     - id: v1
@@ -65,11 +67,6 @@ apps:
         containers:
           - {id: c-ms150-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
       - <<: *alibaba_ms
-        id: ms693
-        trace_file: MS_693.csv
-        containers:
-          - {id: c-ms693-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
-      - <<: *alibaba_ms
         id: ms215
         trace_file: MS_215.csv
         containers:
@@ -80,6 +77,11 @@ apps:
         containers:
           - {id: c-ms205-1, server_id: c1-w3, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
       - <<: *alibaba_ms
+        id: ms693
+        trace_file: MS_693.csv
+        containers:
+          - {id: c-ms693-1, server_id: c1-w4, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
         id: ms460
         trace_file: MS_460.csv
         containers:
@@ -88,23 +90,13 @@ apps:
         id: ms859
         trace_file: MS_859.csv
         containers:
-          - {id: c-ms859-1, server_id: c1-w4, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+          - {id: c-ms859-1, server_id: c1-w5, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
 
 autoscaler:
   enabled: true
-  name: reactive_local
+  name: proscale
   decision_every_k_ticks: 1
   params:
-    x_up_streak: 3
-    y_down_streak: 8
-    cooldown_ticks: 5
-    eps_drop: 1.0e-9
-    theta_free: 0.35
-    theta_high: 0.80
-    use_near_saturation_up: false
-    min_mu_step: 25
-    prefer_consolidate_down: true
-    sustained_up_streak: 6
-    cascade_home: true
-    grow_weights: { drop: 0.5, util: 0.3, room: 0.2 }
-    shrink_weights: { slack: 0.5, no_drop: 0.3, room: 0.2 }
+    sma_window: 2
+    min_replicas: 1
+    max_replicas: 100

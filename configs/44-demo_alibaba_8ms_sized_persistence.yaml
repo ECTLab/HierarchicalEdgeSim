@@ -1,6 +1,6 @@
-# Same eight-MS world as 31 (campaign 14). PredictAndDecide with persistence (W=60, H=5).
-# Hats are last observed load per MS — no TCN. Cold start is reactive until τ=60.
-# cascade_home on so CheckCascadingMigration can pull a *different* MS home.
+# Same eight-MS world as 43. PredictAndDecide with persistence (W=60, H=5).
+# Hats are last observed load per MS. Cold start is reactive until τ=60.
+# cascade_home on so a shrink on one MS can pull a different MS home.
 
 sim:
   tick_sec: 60.0
@@ -30,12 +30,14 @@ topology:
         - {id: c1-w2, <<: *w8}
         - {id: c1-w3, <<: *w8}
         - {id: c1-w4, <<: *w8}
+        - {id: c1-w5, <<: *w8}
     - id: c2
       servers:
         - {id: c2-w1, <<: *w8}
         - {id: c2-w2, <<: *w8}
         - {id: c2-w3, <<: *w8}
         - {id: c2-w4, <<: *w8}
+        - {id: c2-w5, <<: *w8}
 
   vicinities:
     - id: v1
@@ -64,11 +66,6 @@ apps:
         containers:
           - {id: c-ms150-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
       - <<: *alibaba_ms
-        id: ms693
-        trace_file: MS_693.csv
-        containers:
-          - {id: c-ms693-1, server_id: c1-w2, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
-      - <<: *alibaba_ms
         id: ms215
         trace_file: MS_215.csv
         containers:
@@ -79,6 +76,11 @@ apps:
         containers:
           - {id: c-ms205-1, server_id: c1-w3, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
       - <<: *alibaba_ms
+        id: ms693
+        trace_file: MS_693.csv
+        containers:
+          - {id: c-ms693-1, server_id: c1-w4, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+      - <<: *alibaba_ms
         id: ms460
         trace_file: MS_460.csv
         containers:
@@ -87,7 +89,7 @@ apps:
         id: ms859
         trace_file: MS_859.csv
         containers:
-          - {id: c-ms859-1, server_id: c1-w4, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+          - {id: c-ms859-1, server_id: c1-w5, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
 
 autoscaler:
   enabled: true

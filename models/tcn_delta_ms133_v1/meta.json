@@ -1,0 +1,44 @@
+{
+  "name": "tcn_delta_ms133_v1",
+  "source": "alibaba-trace residual TCN, cyclic minute, MS_133 only",
+  "msname": "MS_133",
+  "lookback": 60,
+  "horizon": 5,
+  "time_encoding": "cyclic_minute",
+  "time_period": 60,
+  "time_scale": 60.0,
+  "tick_sec": 60.0,
+  "load_min": 1158.0,
+  "load_max": 2035.0,
+  "load_units": "total_requests_per_minute",
+  "time_tick_offset": 0,
+  "weights_file": "tcn_delta_weights.pth",
+  "arch": {
+    "style": "residual_tcn",
+    "input_size": 3,
+    "num_channels": [
+      32,
+      64,
+      64,
+      64,
+      64
+    ],
+    "kernel_size": 3,
+    "dropout": 0.1,
+    "output_size": 5
+  },
+  "train": {
+    "subset": "ms133",
+    "n_ms": 1,
+    "asymmetric_alpha": 10.0,
+    "peak_delta": 0.15,
+    "peak_weight": 25.0,
+    "seed": 42,
+    "receptive_field": 63
+  },
+  "notes": [
+    "Option A: 60x3 [normalized_load, sin(2\u03c0\u00b7(tick%60)/60), cos] -> 5-step delta",
+    "absolute_norm = last_known_norm + delta",
+    "Min-max is still the full-series per-MS scaler from the CSV."
+  ]
+}

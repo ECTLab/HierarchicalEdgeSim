@@ -42,7 +42,7 @@ This file is the map. Run data itself is gitignored.
 | 11 | `11-alibaba-ms588-eval/` | **Sep 20** | MS_588 horizontal vs vicinity (reactive / persistence / TCN) |
 | 12 | `12-alibaba-2ms-eval/` | **Sep 20** | MS_588 + MS_150, 16+32 vicinity, reactive vs persistence |
 | 13 | `13-alibaba-4ms-eval/` | **Sep 23** | MS_150 + MS_588 + MS_215 + MS_693, 24+32 vicinity |
-| 14 | `14-alibaba-8ms-eval/` | **Sep 20** | Eight Alibaba MS, 32+32 vicinity, reactive vs persistence |
+| 14 | `14-alibaba-8ms-eval/` | **Sep 24** | Eight Alibaba MS, 40+40 vicinity |
 
 ### 09 — current triangle, reactive (look here first)
 
@@ -112,12 +112,15 @@ What the numbers mean: [../docs/36-alibaba-4ms-eval.md](../docs/36-alibaba-4ms-e
 
 ### 14 — eight Alibaba MS, vicinity
 
-Same physics as 11. Home 4×8, neighbor 4×8. Persistence vs reactive; no TCN. This is the eight-way mix, not the next step after campaign 11.
+Same physics as 11. Home 5×8, neighbor 5×8. Reactive, persistence, Kubernetes HPA (home only), ProScale-style clone, per-MS TCN.
 
 | Slice | Config | Latest run |
 |---|---|---|
-| Vicinity reactive | `31-demo_alibaba_8ms_vicinity_reactive.yaml` | `vicinity_reactive/42_20260920T132205Z` |
-| Vicinity persistence | `32-demo_alibaba_8ms_vicinity_persistence.yaml` | `vicinity_persistence/42_20260920T132210Z` |
+| Vicinity reactive | `43-demo_alibaba_8ms_sized_reactive.yaml` | `vicinity_reactive/42_20260924T095349Z` |
+| Vicinity persistence | `44-demo_alibaba_8ms_sized_persistence.yaml` | `vicinity_persistence/42_20260924T095353Z` |
+| Vicinity HPA | `45-demo_alibaba_8ms_sized_hpa.yaml` | `vicinity_hpa/42_20260924T095523Z` |
+| Vicinity ProScale | `46-demo_alibaba_8ms_sized_proscale.yaml` | `vicinity_proscale/42_20260924T095526Z` |
+| Vicinity TCN | `47-demo_alibaba_8ms_sized_tcn.yaml` | `vicinity_tcn/42_20260924T104509Z` |
 
 What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-eval.md).
 
@@ -128,6 +131,5 @@ What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-e
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-Campaign **13** is reserved for 3–4 Alibaba MS. Do not skip it. The next
-unused number for a different family is **15**.
+The next unused campaign number is **15**. The next config number is `48-…`.
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

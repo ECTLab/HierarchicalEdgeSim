@@ -80,9 +80,13 @@ The drop rates in the current-pair table should match a fresh §B6 run. The
 | `models/tcn_delta_ms150_v3/` | MS_150 rebound residual (`time_encoding=rebound`). Weights and `meta.json` only |
 | `models/tcn_delta_ms215_v1/` | MS_215 cyclic-minute residual. Weights and `meta.json` only (load 41–32050) |
 | `models/tcn_delta_ms693_v1/` | MS_693 cyclic-minute residual. Weights and `meta.json` only (load 2394–9397) |
+| `models/tcn_delta_ms133_v1/` | MS_133 cyclic-minute residual. Weights and `meta.json` only (load 1158–2035) |
+| `models/tcn_delta_ms859_v1/` | MS_859 cyclic-minute residual. Weights and `meta.json` only (load 5784–16049) |
+| `models/tcn_delta_ms205_v1/` | MS_205 rebound residual. Weights and `meta.json` only (load 880–17012) |
+| `models/tcn_delta_ms460_v1/` | MS_460 rebound residual. Weights and `meta.json` only (load 1532–16163) |
 | `traces/alibaba/MS_588.csv` | 721 rows, `time_unit=time_tick+1`, `requests=total_requests` |
 
-The 47 MB full CSV, processed npy tensors, and the trace-versus-hat figures stayed in `alibaba-trace`. MS_150 training is `src/prepare_data.py --subset ms150`, `src/train_tcn.py`, and `src/inference.py` in that repo. The cyclic-minute figure is `data/tcn_delta_ms150_v2_trace.png`. The rebound model’s figure is `data/tcn_delta_ms150_v3_trace.png`. The MS_588 checkpoint in that repo is `data/tcn_delta_ms588_v2/`. MS_215 and MS_693 use `prepare_data.py --subset ms215` / `--subset ms693` and `train_tcn.py` into `data/tcn_delta_ms215_v1/` and `data/tcn_delta_ms693_v1/`.
+The 47 MB full CSV, processed npy tensors, and the trace-versus-hat figures stayed in `alibaba-trace`. MS_150 training is `src/prepare_data.py --subset ms150`, `src/train_tcn.py`, and `src/inference.py` in that repo. The cyclic-minute figure is `data/tcn_delta_ms150_v2_trace.png`. The rebound model’s figure is `data/tcn_delta_ms150_v3_trace.png`. The MS_588 checkpoint in that repo is `data/tcn_delta_ms588_v2/`. MS_215, MS_693, MS_133, and MS_859 use `prepare_data.py --subset <ms>` and `train_tcn.py` into `data/tcn_delta_ms215_v1/`, `data/tcn_delta_ms693_v1/`, `data/tcn_delta_ms133_v1/`, and `data/tcn_delta_ms859_v1/`. MS_205 and MS_460 use `train_ms150_rebound.py --ms MS_205` and `--ms MS_460` into `data/tcn_delta_ms205_v1/` and `data/tcn_delta_ms460_v1/`.
 
 Same controller on **MS_150** (transfer, not a retune):
 [30-alibaba-tcn-ms150-results.md](./30-alibaba-tcn-ms150-results.md).

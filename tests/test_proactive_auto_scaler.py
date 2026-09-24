@@ -601,7 +601,7 @@ def test_yaml_loads_2ms_tcn_per_microservice(project_root: Path):
 def test_yaml_loads_alibaba_8ms_eval(project_root: Path):
     import yaml
 
-    reactive_path = project_root / "configs" / "31-demo_alibaba_8ms_vicinity_reactive.yaml"
+    reactive_path = project_root / "configs" / "43-demo_alibaba_8ms_sized_reactive.yaml"
     reactive = load_autoscaler_from_yaml(reactive_path)
     assert reactive is not None
     assert reactive.name == "reactive_local"
@@ -610,7 +610,7 @@ def test_yaml_loads_alibaba_8ms_eval(project_root: Path):
     reactive_cfg = yaml.safe_load(reactive_path.read_text())
     assert "14-alibaba-8ms-eval" in reactive_cfg["sim"]["results_dir"]
 
-    persist_path = project_root / "configs" / "32-demo_alibaba_8ms_vicinity_persistence.yaml"
+    persist_path = project_root / "configs" / "44-demo_alibaba_8ms_sized_persistence.yaml"
     scaler = load_autoscaler_from_yaml(persist_path)
     assert scaler is not None
     assert scaler.name == "proactive_auto_scaler"
@@ -627,7 +627,7 @@ def test_yaml_loads_alibaba_8ms_eval(project_root: Path):
 def test_alibaba_8ms_world_stamps_home_and_eight_traces(project_root: Path):
     from hierarchical_edge_sim.env.api import Env
 
-    env = Env.from_config(project_root / "configs" / "32-demo_alibaba_8ms_vicinity_persistence.yaml")
+    env = Env.from_config(project_root / "configs" / "44-demo_alibaba_8ms_sized_persistence.yaml")
     ms_ids = sorted(env.list_microservices())
     assert ms_ids == ["ms133", "ms150", "ms205", "ms215", "ms460", "ms588", "ms693", "ms859"]
     assert env.get_app_owner_cluster_id("ms588") == "c1"
@@ -666,6 +666,72 @@ def test_yaml_loads_4ms_tcn_per_microservice(project_root: Path):
     assert scaler._predictor.predictor_for("ms215").load_min == pytest.approx(41.0)
     assert scaler._predictor.predictor_for("ms693").load_max == pytest.approx(9397.0)
     assert not isinstance(scaler._predictor.predictor_for("ms693"), PersistencePredictor)
+
+
+def test_yaml_loads_8ms_sized_tcn_per_microservice(project_root: Path):
+    pytest.importorskip("torch")
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.model_map import (
+        MicroserviceModelMap,
+    )
+    from hierarchical_edge_sim.autoscaler.proactive_auto_scaler.predictors.persistence import (
+        PersistencePredictor,
+    )
+
+    scaler = load_autoscaler_from_yaml(
+        project_root / "configs" / "47-demo_alibaba_8ms_sized_tcn.yaml"
+    )
+    assert scaler is not None
+    assert isinstance(scaler._predictor, MicroserviceModelMap)
+    assert scaler._predictor.predictor_for("ms150").time_encoding == "rebound"
+    assert scaler._predictor.predictor_for("ms588").time_encoding == "cyclic_minute"
+    assert scaler._predictor.predictor_for("ms215").load_min == pytest.approx(41.0)
+    assert scaler._predictor.predictor_for("ms693").load_max == pytest.approx(9397.0)
+    assert scaler._predictor.predictor_for("ms133").time_encoding == "cyclic_minute"
+    assert scaler._predictor.predictor_for("ms859").time_encoding == "cyclic_minute"
+    assert scaler._predictor.predictor_for("ms205").time_encoding == "rebound"
+    assert scaler._predictor.predictor_for("ms460").time_encoding == "rebound"
+    assert scaler._predictor.predictor_for("ms133").load_min == pytest.approx(1158.0)
+    assert scaler._predictor.predictor_for("ms205").load_min == pytest.approx(880.0)
+    assert scaler._predictor.predictor_for("ms460").load_max == pytest.approx(16163.0)
+    assert scaler._predictor.predictor_for("ms859").load_max == pytest.approx(16049.0)
+    for ms_id in ("ms133", "ms205", "ms460", "ms859"):
+        assert not isinstance(scaler._predictor.predictor_for(ms_id), PersistencePredictor)
+
+
+def test_yaml_loads_alibaba_8ms_sized(project_root: Path):
+    import yaml
+    from hierarchical_edge_sim.env.api import Env
+
+    reactive_path = project_root / "configs" / "43-demo_alibaba_8ms_sized_reactive.yaml"
+    reactive = load_autoscaler_from_yaml(reactive_path)
+    assert reactive is not None
+    assert reactive.name == "reactive_local"
+    assert reactive.params.cascade_home is True
+    assert "14-alibaba-8ms-eval" in yaml.safe_load(reactive_path.read_text())["sim"]["results_dir"]
+
+    persist_path = project_root / "configs" / "44-demo_alibaba_8ms_sized_persistence.yaml"
+    scaler = load_autoscaler_from_yaml(persist_path)
+    assert scaler is not None
+    assert scaler.params.predictor == "persistence"
+    assert scaler.params.feature_window == 60
+    assert scaler.params.forecast_horizon == 5
+
+    env = Env.from_config(persist_path)
+    assert sorted(env.list_microservices()) == [
+        "ms133",
+        "ms150",
+        "ms205",
+        "ms215",
+        "ms460",
+        "ms588",
+        "ms693",
+        "ms859",
+    ]
+    home_ids = env.world.clusters["c1"].server_ids
+    neighbor_ids = env.world.clusters["c2"].server_ids
+    assert sum(env.world.servers[sid].cpu_cap_cores for sid in home_ids) == pytest.approx(40.0)
+    assert sum(env.world.servers[sid].cpu_cap_cores for sid in neighbor_ids) == pytest.approx(40.0)
+    assert env.world_spec.latency_ms[0].ms == pytest.approx(5.0)
 
 
 def test_yaml_loads_alibaba_4ms_eval(project_root: Path):

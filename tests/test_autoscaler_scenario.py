@@ -65,6 +65,8 @@ def test_demo_config_loads_scaler(project_root: Path):
         "36-demo_alibaba_2ms_vicinity_proscale.yaml",
         "41-demo_alibaba_4ms_vicinity_hpa.yaml",
         "42-demo_alibaba_4ms_vicinity_proscale.yaml",
+        "45-demo_alibaba_8ms_sized_hpa.yaml",
+        "46-demo_alibaba_8ms_sized_proscale.yaml",
     ):
         scaler = load_autoscaler_from_yaml(project_root / "configs" / name)
         assert scaler is not None

@@ -160,6 +160,23 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/37-demo_alibaba_2ms_vicinity_tcn.yaml
 ```
 
+### B10) Alibaba eight-MS vicinity (campaign 14)
+
+Same physics, eight traces, 40-core home + 40-core neighbor. Reactive,
+persistence, Kubernetes HPA (home only), a ProScale-style clone, and per-MS
+TCN. Config 47 needs torch; every series has its own residual checkpoint.
+Details: [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md).
+
+```bash
+export PYTHONPATH="/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/43-demo_alibaba_8ms_sized_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/44-demo_alibaba_8ms_sized_persistence.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/45-demo_alibaba_8ms_sized_hpa.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/46-demo_alibaba_8ms_sized_proscale.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/47-demo_alibaba_8ms_sized_tcn.yaml
+```
+
 ### B11) Alibaba four-MS vicinity (campaign 13)
 
 Same physics, four traces (MS_150, MS_588, MS_215, MS_693), 24-core home +
@@ -175,19 +192,6 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/40-demo_alibaba_4ms_vicinity_tcn.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/41-demo_alibaba_4ms_vicinity_hpa.yaml
 .venv/bin/python examples/run_with_autoscaler.py configs/42-demo_alibaba_4ms_vicinity_proscale.yaml
-```
-
-### B10) Alibaba eight-MS vicinity (campaign 14)
-
-Same physics, eight traces, 32-core home + 32-core neighbor. Persistence
-(no TCN). Do this after campaigns 12 and 13, not as the next step after 11.
-Details: [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md).
-
-```bash
-export PYTHONPATH="$PWD/src:$PWD/examples"
-export MPLCONFIGDIR=$PWD/.mplconfig
-.venv/bin/python examples/run_with_autoscaler.py configs/31-demo_alibaba_8ms_vicinity_reactive.yaml
-.venv/bin/python examples/run_with_autoscaler.py configs/32-demo_alibaba_8ms_vicinity_persistence.yaml
 ```
 
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller

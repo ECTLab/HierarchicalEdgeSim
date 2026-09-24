@@ -7,7 +7,8 @@ Files are numbered by when the scenario **first appeared**. **Higher number = la
 |---|---|
 | Current triangle (post paper-match) | `16`–`19` reactive, `22`–`25` proactive |
 | Alibaba 2-MS vicinity (campaign 12) | `33` reactive, `34` persistence, `35` HPA, `36` ProScale |
-| Alibaba 8-MS vicinity (campaign 14) | `31` reactive, `32` persistence |
+| Alibaba 4-MS vicinity (campaign 13) | `38` reactive, `39` persistence, `40` TCN, `41` HPA, `42` ProScale |
+| Alibaba 8-MS vicinity (campaign 14) | `43` reactive, `44` persistence, `45` HPA, `46` ProScale, `47` TCN |
 | Alibaba MS_588 eval (campaign 11) | `26`–`30` |
 | Alibaba MS_588 (original S7 pair) | `12` reactive, `13` TCN |
 | Alibaba MS_150 | `14` reactive, `15` TCN |
@@ -54,8 +55,8 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 28 | `28-demo_alibaba_ms588_horizontal_tcn.yaml` | MS_588 4×8, TCN |
 | 29 | `29-demo_alibaba_ms588_vicinity_reactive.yaml` | MS_588 home+fat neighbor, reactive |
 | 30 | `30-demo_alibaba_ms588_vicinity_tcn.yaml` | MS_588 home+fat neighbor, TCN |
-| 31 | `31-demo_alibaba_8ms_vicinity_reactive.yaml` | Eight Alibaba MS, 32+32 vicinity, reactive (campaign 14) |
-| 32 | `32-demo_alibaba_8ms_vicinity_persistence.yaml` | Same world, persistence (campaign 14) |
+| 31 | *(removed)* | 32+32 eight-MS reactive. Superseded by 43 |
+| 32 | *(removed)* | 32+32 eight-MS persistence. Superseded by 44 |
 | 33 | `33-demo_alibaba_2ms_vicinity_reactive.yaml` | MS_588 + MS_150, 16+32 vicinity, reactive (campaign 12) |
 | 34 | `34-demo_alibaba_2ms_vicinity_persistence.yaml` | Same world, persistence (campaign 12) |
 | 35 | `35-demo_alibaba_2ms_vicinity_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 12) |
@@ -66,6 +67,11 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 | 40 | `40-demo_alibaba_4ms_vicinity_tcn.yaml` | Same world, per-MS residual TCN (campaign 13) |
 | 41 | `41-demo_alibaba_4ms_vicinity_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 13) |
 | 42 | `42-demo_alibaba_4ms_vicinity_proscale.yaml` | Same world, ProScale-style SMA + greedy neighbor (campaign 13) |
+| 43 | `43-demo_alibaba_8ms_sized_reactive.yaml` | Eight Alibaba MS, 40+40 vicinity, reactive (campaign 14) |
+| 44 | `44-demo_alibaba_8ms_sized_persistence.yaml` | Same world, persistence (campaign 14) |
+| 45 | `45-demo_alibaba_8ms_sized_hpa.yaml` | Same world, Kubernetes HPA home-only (campaign 14) |
+| 46 | `46-demo_alibaba_8ms_sized_proscale.yaml` | Same world, ProScale-style SMA + greedy neighbor (campaign 14) |
+| 47 | `47-demo_alibaba_8ms_sized_tcn.yaml` | Same world, one residual TCN per microservice (campaign 14) |
 
 ---
 
@@ -73,11 +79,11 @@ Deleted historical names (`demo_400_triangle_beg.yaml`, `demo_60_global_help.yam
 
 - **Env only:** 00–02, 04–05, 20–21
 - **Vertical / local ladder:** 03, 06–10
-- **Alibaba:** 12–15, **26–42**
-- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **32**, **34**, **37**, **39–40**
+- **Alibaba:** 12–15, **26–30**, **33–47**
+- **Proactive:** 11, 13, 15, **22–25**, **27–28**, **30**, **34**, **37**, **39–40**, **44**, **47**
 - **Current triangle:** **16–19** reactive, **22–25** proactive
 
-A new scenario gets the next number (`43-…`). Do not renumber existing files when you edit them.
+A new scenario gets the next number (`48-…`). Do not renumber existing files when you edit them.
 
 ```bash
 .venv/bin/python examples/run_with_autoscaler.py configs/16-demo_400_triangle.yaml

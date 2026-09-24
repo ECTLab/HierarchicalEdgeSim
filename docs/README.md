@@ -56,7 +56,7 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 | 31 | [31-alibaba-story-plots.md](./31-alibaba-story-plots.md) | Overlay story plots |
 | 32 | [32-tex-followups.md](./32-tex-followups.md) | **Latest** paper-match punch list |
 | 33 | [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md) | MS_588 horizontal vs vicinity eval |
-| 34 | [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) | Eight Alibaba MS, vicinity, persistence (campaign 14) |
+| 34 | [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) | Eight Alibaba MS, 40+40 vicinity, reactive, persistence, HPA, ProScale, per-MS TCN (campaign 14) |
 | 35 | [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) | Two Alibaba MS (588+150), HPA, ProScale, ladder, persistence, per-MS TCN (campaign 12) |
 | 36 | [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md) | Four Alibaba MS (150, 588, 215, 693), reactive, persistence, per-MS TCN (campaign 13) |
 

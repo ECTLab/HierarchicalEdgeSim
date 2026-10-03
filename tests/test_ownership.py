@@ -264,3 +264,20 @@ def test_apply_actions_terminate_uses_owner_path(tmp_path):
     )
     assert results[0].ok
     assert results[0].code == TerminateResultCode.OK
+
+
+def test_split_owner_yaml_stamps_each_microservice_on_its_seed_cluster(project_root: Path):
+    env = Env.from_config(project_root / "configs" / "50-demo_alibaba_2ms_split_owner_reactive.yaml")
+    assert env.get_app_owner_cluster_id("ms588") == "c1"
+    assert env.get_app_owner_cluster_id("ms150") == "c2"
+    assert env.get_microservice("ms588").app_id == "app_ms588"
+    assert env.get_microservice("ms150").app_id == "app_ms150"
+    assert env.vicinity_of("c1") == env.vicinity_of("c2") == env.vicinity_of("c3") == "v1"
+    assert env.list_vicinity_members("v1") == ["c3", "c1", "c2"]
+    caps = {
+        cid: sum(env.world.servers[sid].cpu_cap_cores for sid in env.world.clusters[cid].server_ids)
+        for cid in ("c1", "c2", "c3")
+    }
+    assert caps == {"c1": 8.0, "c2": 8.0, "c3": 32.0}
+    assert {edge.ms for edge in env.world_spec.latency_ms} == {5.0}
+    assert len(env.world_spec.latency_ms) == 3

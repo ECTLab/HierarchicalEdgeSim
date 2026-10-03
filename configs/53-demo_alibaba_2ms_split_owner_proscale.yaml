@@ -1,0 +1,69 @@
+# Campaign 15. Same world as 50. ProScale-style SMA N=2, seed-sized pods, greedy home then c3 then the other home.
+sim:
+  tick_sec: 60.0
+  results_dir: results/15-alibaba-2ms-split-owner/vicinity_proscale/
+  seed: 42
+  theta_route: 0.80
+
+traces_dir: traces/alibaba/
+
+x-worker: &w8
+  cpu_cap_cores: 8.0
+  ram_cap_mb: 16384
+
+x-ms: &alibaba_ms
+  cpu_min_cores: 0.5
+  cpu_max_cores: 4.0
+  ram_min_mb: 256
+  ram_max_mb: 4096
+  cpu_per_request_cores: 0.0004
+  ram_per_request_mb: 0.02
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - {id: c1-w1, <<: *w8}
+    - id: c2
+      servers:
+        - {id: c2-w1, <<: *w8}
+    - id: c3
+      servers:
+        - {id: c3-w1, <<: *w8}
+        - {id: c3-w2, <<: *w8}
+        - {id: c3-w3, <<: *w8}
+        - {id: c3-w4, <<: *w8}
+
+  vicinities:
+    - id: v1
+      members: [c3, c1, c2]
+      leader: c1
+
+  latency_ms:
+    - {from: c1, to: c2, ms: 5.0}
+    - {from: c1, to: c3, ms: 5.0}
+    - {from: c2, to: c3, ms: 5.0}
+
+apps:
+  - id: app_ms588
+    microservices:
+      - <<: *alibaba_ms
+        id: ms588
+        trace_file: MS_588.csv
+        containers:
+          - {id: c-ms588-1, server_id: c1-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+  - id: app_ms150
+    microservices:
+      - <<: *alibaba_ms
+        id: ms150
+        trace_file: MS_150.csv
+        containers:
+          - {id: c-ms150-1, server_id: c2-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+autoscaler:
+  enabled: true
+  name: proscale
+  decision_every_k_ticks: 1
+  params:
+    sma_window: 2
+    min_replicas: 1
+    max_replicas: 100

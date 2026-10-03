@@ -13,6 +13,7 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 | Two-MS Alibaba vicinity | [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) |
 | Four-MS Alibaba vicinity | [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md) |
 | Eight-MS Alibaba vicinity | [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) |
+| Two-MS split owner | [37-alibaba-2ms-split-owner.md](./37-alibaba-2ms-split-owner.md) |
 | YAML scenarios | [../configs/README.md](../configs/README.md) |
 | Run folders on disk | [../results/README.md](../results/README.md) |
 
@@ -59,6 +60,7 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 | 34 | [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) | Eight Alibaba MS, 40+40 vicinity, reactive, persistence, HPA, ProScale, per-MS TCN (campaign 14) |
 | 35 | [35-alibaba-2ms-eval.md](./35-alibaba-2ms-eval.md) | Two Alibaba MS (588+150), HPA, ProScale, ladder, persistence, per-MS TCN (campaign 12) |
 | 36 | [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md) | Four Alibaba MS (150, 588, 215, 693), reactive, persistence, per-MS TCN (campaign 13) |
+| 37 | [37-alibaba-2ms-split-owner.md](./37-alibaba-2ms-split-owner.md) | Two apps, 8+8 homes plus a 32-core spare, five scalers (campaign 15) |
 
 ---
 
@@ -69,8 +71,8 @@ Files are numbered by when the note **first appeared**. **Higher number = later.
 - **Ladder stages:** 11–16
 - **Serving-model fixes:** 17, 18
 - **Algorithms 1–4:** 21, 22, 24, 25
-- **Proactive / Alibaba:** 26–31, **33**, **34**, **35**, **36**
+- **Proactive / Alibaba:** 26–31, **33**, **34**, **35**, **36**, **37**
 - **Paper match:** 20 (historical), **32** (current)
-- **Experiments:** 00 (how to run), 19 (triangle), **33** (MS_588 eval), **35** (2-MS Alibaba), **36** (4-MS Alibaba), **34** (8-MS Alibaba)
+- **Experiments:** 00 (how to run), 19 (triangle), **33** (MS_588 eval), **35** (2-MS Alibaba), **36** (4-MS Alibaba), **34** (8-MS Alibaba), **37** (2-MS split owner)
 
-New notes get the next number (`37-…`). Do not renumber existing files when you edit them.
+New notes get the next number (`38-…`). Do not renumber existing files when you edit them.

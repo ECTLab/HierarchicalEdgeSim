@@ -5,7 +5,7 @@
 **Pool:** 48 cores — home `c1` 2×8, neighbor `c2` 4×8, vicinity `v1`  
 **Campaign:** `results/12-alibaba-2ms-eval/`  
 **Configs:** `33` reactive, `34` persistence \(\theta=0.60\), `35` Kubernetes HPA, `36` ProScale-style, `37` per-MS TCN \(\theta=0.60\), `48` persistence \(\theta=0.75\), `49` per-MS TCN \(\theta=0.75\)  
-**Related:** [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md) (single MS_588), [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) (eight-MS, campaign 14)
+**Related:** [33-alibaba-ms588-eval.md](./33-alibaba-ms588-eval.md) (single MS_588), [34-alibaba-8ms-eval.md](./34-alibaba-8ms-eval.md) (eight-MS, campaign 14), [37-alibaba-2ms-split-owner.md](./37-alibaba-2ms-split-owner.md) (same traces, one owner per cluster, campaign 15)
 
 One app, two microservices. Persistence PredictAndDecide vs the reactive ladder vs Kubernetes HPA (home only) vs a reduced ProScale clone (fixed-size replicas, two-point moving average, greedy home then neighbor) vs one residual TCN per microservice. This is the first multi-MS step after campaign 11. Four-MS results are in [36-alibaba-4ms-eval.md](./36-alibaba-4ms-eval.md). Do not jump to campaign 14.
 

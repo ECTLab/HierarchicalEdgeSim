@@ -197,6 +197,24 @@ export MPLCONFIGDIR=$PWD/.mplconfig
 .venv/bin/python examples/run_with_autoscaler.py configs/42-demo_alibaba_4ms_vicinity_proscale.yaml
 ```
 
+### B12) Alibaba two-MS split owner (campaign 15)
+
+Same traces and 48-core budget as campaign 12. Each microservice is its own
+app: `ms588` owns `c1` (1×8), `ms150` owns `c2` (1×8), and `c3` (4×8) is an
+empty spare both homes borrow. Reactive, persistence, Kubernetes HPA (home
+only), ProScale-style, and per-MS TCN. Config 54 needs torch on `PYTHONPATH`.
+Details: [37-alibaba-2ms-split-owner.md](./37-alibaba-2ms-split-owner.md).
+
+```bash
+export PYTHONPATH="/home/sky/alibaba-trace/.venv/lib/python3.12/site-packages:$PWD/src:$PWD/examples"
+export MPLCONFIGDIR=$PWD/.mplconfig
+.venv/bin/python examples/run_with_autoscaler.py configs/50-demo_alibaba_2ms_split_owner_reactive.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/51-demo_alibaba_2ms_split_owner_persistence.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/52-demo_alibaba_2ms_split_owner_hpa.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/53-demo_alibaba_2ms_split_owner_proscale.yaml
+.venv/bin/python examples/run_with_autoscaler.py configs/54-demo_alibaba_2ms_split_owner_tcn.yaml
+```
+
 ### B7) Alibaba MS_150 — same world, transfer of the MS_588 controller
 
 Same 4×8-core cluster, same initial `2.0 / 1024`. MS_150 still loads the original

@@ -17,6 +17,7 @@ This file is the map. Run data itself is gitignored.
 | **Latest** 4-MS Alibaba vicinity (Sep 2026) | `13-alibaba-4ms-eval/` |
 | **Latest** MS_588 eval (Sep 2026) | `11-alibaba-ms588-eval/` |
 | **Latest** 8-MS Alibaba vicinity (Sep 2026) | `14-alibaba-8ms-eval/` |
+| **Latest** 2-MS split owner (Oct 2026) | `15-alibaba-2ms-split-owner/` |
 | Alibaba MS_588 (original S7 pair) | `04-alibaba-ms588/` |
 | Alibaba MS_150 | `05-alibaba-ms150/` |
 | Old global-rung triangle (BEG/BEH names) | `06-triangle-beg-era/` |
@@ -43,6 +44,7 @@ This file is the map. Run data itself is gitignored.
 | 12 | `12-alibaba-2ms-eval/` | **Sep 20** | MS_588 + MS_150, 16+32 vicinity, reactive vs persistence |
 | 13 | `13-alibaba-4ms-eval/` | **Sep 23** | MS_150 + MS_588 + MS_215 + MS_693, 24+32 vicinity |
 | 14 | `14-alibaba-8ms-eval/` | **Sep 24** | Eight Alibaba MS, 40+40 vicinity |
+| 15 | `15-alibaba-2ms-split-owner/` | **Oct 3** | MS_588 owns c1, MS_150 owns c2, spare c3 |
 
 ### 09 — current triangle, reactive (look here first)
 
@@ -126,6 +128,20 @@ Same physics as 11. Home 5×8, neighbor 5×8. Reactive, persistence, Kubernetes 
 
 What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-eval.md).
 
+### 15 — two Alibaba MS, split owners
+
+Same physics and 48-core budget as campaign 12. Two apps: `c1` (8 cores) owns MS_588, `c2` (8 cores) owns MS_150, `c3` (32 cores) is the spare both borrow.
+
+| Slice | Config | Latest run |
+|---|---|---|
+| Vicinity reactive | `50-demo_alibaba_2ms_split_owner_reactive.yaml` | `vicinity_reactive/42_20261003T133644Z` |
+| Vicinity persistence | `51-demo_alibaba_2ms_split_owner_persistence.yaml` | `vicinity_persistence/42_20261003T133644Z` |
+| Vicinity HPA | `52-demo_alibaba_2ms_split_owner_hpa.yaml` | `vicinity_hpa/42_20261003T133644Z` |
+| Vicinity ProScale | `53-demo_alibaba_2ms_split_owner_proscale.yaml` | `vicinity_proscale/42_20261003T133646Z` |
+| Vicinity TCN | `54-demo_alibaba_2ms_split_owner_tcn.yaml` | `vicinity_tcn/42_20261003T133657Z` |
+
+What the numbers mean: [../docs/37-alibaba-2ms-split-owner.md](../docs/37-alibaba-2ms-split-owner.md).
+
 ---
 
 ## Where a new run goes
@@ -133,5 +149,5 @@ What the numbers mean: [../docs/34-alibaba-8ms-eval.md](../docs/34-alibaba-8ms-e
 Each YAML sets `sim.results_dir` to a numbered campaign. The engine then
 creates `{seed}_{UTC}` under that folder.
 
-The next unused campaign number is **15**. The next config number is `50-…`.
+The next unused campaign number is **16**. The next config number is `55-…`.
 Do not dump new work into `01-tiny-smoke/` or `06-triangle-beg-era/`.

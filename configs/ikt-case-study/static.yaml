@@ -1,0 +1,38 @@
+# IKT case study. One cluster, MS_588, no autoscaler.
+# Four workers of 8 cores. Seed replica 2.0 cores / 1024 MB.
+# Floor 0.5 cores / 256 MB does not serve. Cap 4.0 cores / 4096 MB.
+
+sim:
+  tick_sec: 60.0
+  results_dir: ../results/ikt-case-study/static/
+  seed: 42
+  sla_timeout_sec: 1.0
+  theta_route: 1.0
+
+traces_dir: ../../traces/alibaba/
+
+topology:
+  clusters:
+    - id: c1
+      servers:
+        - {id: c1-w1, cpu_cap_cores: 8.0, ram_cap_mb: 16384}
+        - {id: c1-w2, cpu_cap_cores: 8.0, ram_cap_mb: 16384}
+        - {id: c1-w3, cpu_cap_cores: 8.0, ram_cap_mb: 16384}
+        - {id: c1-w4, cpu_cap_cores: 8.0, ram_cap_mb: 16384}
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: ms588
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.0004
+        ram_per_request_mb: 0.02
+        trace_file: MS_588.csv
+        containers:
+          - {id: c-ms588-1, server_id: c1-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+
+autoscaler:
+  enabled: false

@@ -56,4 +56,8 @@ def build_from_wrapper(wrapper: AutoscalerWrapper | None) -> Any | None:
         from hierarchical_edge_sim.autoscaler.proscale import build
 
         return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
+    if wrapper.name == "cloud_spill":
+        from hierarchical_edge_sim.autoscaler.cloud_spill import build
+
+        return build(wrapper.params, decision_every_k_ticks=wrapper.decision_every_k_ticks)
     raise AutoscalerLoadError(f"no builder registered for '{wrapper.name}'")

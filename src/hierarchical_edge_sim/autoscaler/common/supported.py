@@ -6,4 +6,5 @@ SUPPORTED_AUTOSCALERS: list[str] = [
     "proactive_auto_scaler",
     "kubernetes_hpa",
     "proscale",
+    "cloud_spill",
 ]

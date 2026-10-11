@@ -1,0 +1,62 @@
+# Hierarchy check, edge plus cloud.
+# Same edge and same formula as edge-only.yaml. Replicas that do not fit
+# on the edge are placed on the cloud cluster. The two site entries exist
+# so the 50 ms delay is stored without running cluster grouping.
+# Requests are still offered at the edge.
+
+sim:
+  tick_sec: 60.0
+  results_dir: ../results/ikt-hierarchy/edge-cloud/
+  seed: 42
+  sla_timeout_sec: 1.0
+  theta_route: 1.0
+
+traces_dir: ../../traces/alibaba/
+
+topology:
+  clusters:
+    - id: edge
+      servers:
+        - {id: edge-w1, cpu_cap_cores: 2.0, ram_cap_mb: 1024}
+    - id: cloud
+      servers:
+        - {id: cloud-w1, cpu_cap_cores: 32.0, ram_cap_mb: 32768}
+
+  vicinities:
+    - id: edge-site
+      members: [edge]
+      leader: edge
+    - id: cloud-site
+      members: [cloud]
+      leader: cloud
+
+  latency_ms:
+    - {from: edge, to: cloud, ms: 50.0}
+
+apps:
+  - id: demo_app
+    microservices:
+      - id: ms588
+        cpu_min_cores: 0.5
+        cpu_max_cores: 4.0
+        ram_min_mb: 256
+        ram_max_mb: 4096
+        cpu_per_request_cores: 0.0004
+        ram_per_request_mb: 0.02
+        trace_file: MS_588.csv
+        containers:
+          - {id: c-ms588-1, server_id: edge-w1, cpu_alloc_cores: 2.0, ram_alloc_mb: 1024}
+
+autoscaler:
+  enabled: true
+  name: cloud_spill
+  decision_every_k_ticks: 1
+  params:
+    target_util: 0.80
+    tolerance: 0.10
+    min_replicas: 1
+    max_replicas: 100
+    scale_down_window: 5
+    scale_up_pods: 4
+    scale_up_percent: 100.0
+    cloud_cluster_id: cloud

@@ -92,14 +92,14 @@ def validate(config: RawConfig) -> list[ValidationError]:
             # Keep the first occurrence on duplicate ids, matching server_lookup above.
             ms_trace_files.setdefault(ms.id, ms.trace_file)
 
-            if ms.cpu_min_cores <= 0:
-                errors.append(ValidationError(path=f"{mpath}.cpu_min_cores", message="must be > 0"))
+            if ms.cpu_min_cores < 0:
+                errors.append(ValidationError(path=f"{mpath}.cpu_min_cores", message="must be >= 0"))
             if ms.cpu_max_cores + EPS < ms.cpu_min_cores:
                 errors.append(
                     ValidationError(path=f"{mpath}.cpu_max_cores", message="must be >= cpu_min_cores (with EPS)")
                 )
-            if ms.ram_min_mb <= 0:
-                errors.append(ValidationError(path=f"{mpath}.ram_min_mb", message="must be > 0"))
+            if ms.ram_min_mb < 0:
+                errors.append(ValidationError(path=f"{mpath}.ram_min_mb", message="must be >= 0"))
             if ms.ram_max_mb + EPS < ms.ram_min_mb:
                 errors.append(
                     ValidationError(path=f"{mpath}.ram_max_mb", message="must be >= ram_min_mb (with EPS)")
